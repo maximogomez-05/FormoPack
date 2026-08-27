@@ -1,0 +1,30 @@
+﻿# Entorno virtual
+venv/
+.venv/
+env/
+
+# Variables de entorno (NUNCA al repo)
+.env
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Logs
+*.log
+logs/
+
+# Base de datos local
+*.sql.bak
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
