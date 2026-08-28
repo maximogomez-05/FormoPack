@@ -62,3 +62,38 @@ class ValidationError(FormopackBaseError):
     def __init__(self, field: str = "", reason: str = ""):
         msg = f"Validacion fallida en '{field}': {reason}." if field else "Error de validacion."
         super().__init__(msg, code="VALIDATION_ERROR")
+
+
+# --- Dominio de Negocio (Sprint 2) ---
+
+class ClienteNotFoundError(FormopackBaseError):
+    """Cliente no encontrado por DNI."""
+    def __init__(self, identifier: str = ""):
+        msg = f"Cliente no encontrado: '{identifier}'." if identifier else "Cliente no encontrado."
+        super().__init__(msg, code="CLIENTE_NOT_FOUND")
+
+
+class EnvioNotFoundError(FormopackBaseError):
+    """Envío no encontrado por número de guía."""
+    def __init__(self, nro_guia: str = ""):
+        msg = f"Envio no encontrado con guia: '{nro_guia}'." if nro_guia else "Envio no encontrado."
+        super().__init__(msg, code="ENVIO_NOT_FOUND")
+
+
+class TurnoCajaError(FormopackBaseError):
+    """Error en operaciones de turno de caja."""
+    def __init__(self, message: str = "Error en la operacion de caja."):
+        super().__init__(message, code="TURNO_CAJA_ERROR")
+
+
+class CotizacionError(FormopackBaseError):
+    """Error en el cálculo de tarifa o cotización."""
+    def __init__(self, message: str = "Error al calcular la cotizacion."):
+        super().__init__(message, code="COTIZACION_ERROR")
+
+
+class DuplicateError(FormopackBaseError):
+    """Registro duplicado (DNI, número de guía, etc.)."""
+    def __init__(self, entity: str = "", identifier: str = ""):
+        msg = f"{entity} duplicado: '{identifier}'." if entity else "Registro duplicado."
+        super().__init__(msg, code="DUPLICATE_ERROR")
