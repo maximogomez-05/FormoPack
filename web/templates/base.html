@@ -45,6 +45,9 @@
       <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
         <i class="fa-solid fa-chart-line nav-icon"></i> Panel de Control
       </a>
+      <a href="{{ url_for('admin.logistica') }}" class="nav-link {% if request.endpoint == 'admin.logistica' %}active{% endif %}">
+        <i class="fa-solid fa-truck-fast nav-icon"></i> Logística
+      </a>
       {% endif %}
 
       <!-- Tracking público -->

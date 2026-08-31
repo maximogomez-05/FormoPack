@@ -14,6 +14,9 @@ from app.models.pago import Pago, PagoEfectivo, PagoDigital
 from app.models.turno_caja import TurnoCaja
 from app.models.comprobante_interno import ComprobanteInterno
 from app.models.historial_estado import HistorialEstado
+from app.models.vehiculo import Vehiculo
+from app.models.hoja_ruta import HojaRuta
+from app.services.ruteo import ServicioRuteo
 from app.utils.exceptions import ValidationError, TurnoCajaError
 from config.settings import EstadosEnvio
 
@@ -233,6 +236,74 @@ def test_historial_estado():
     print("  [OK] HistorialEstado: Creación y serialización")
 
 
+def test_vehiculo_validacion():
+    """Prueba validación de patente y capacidad vehicular."""
+    Vehiculo.validar_datos("ABC123", 1200.0)
+    Vehiculo.validar_datos("AB-123-CD", 2000.0)
+    try:
+        Vehiculo.validar_datos("", 1000.0)
+        assert False, "Debe fallar con patente vacía"
+    except ValidationError:
+        pass
+    try:
+        Vehiculo.validar_datos("ABC123", 0)
+        assert False, "Debe fallar con capacidad no válida"
+    except ValidationError:
+        pass
+    print("  [OK] Vehiculo: Validación de patente y capacidad")
+
+
+def test_ruteo_por_kilometraje():
+    """Prueba ordenamiento de entregas por distancia."""
+    envios = [
+        {"nro_guia": "FPA-003", "id_localidad_destino": 2, "distancia_km": 180.0},
+        {"nro_guia": "FPA-001", "id_localidad_destino": 1, "distancia_km": 40.0},
+        {"nro_guia": "FPA-002", "id_localidad_destino": 3, "distancia_km": 120.0},
+    ]
+    orden = ServicioRuteo.ordenar_envios_por_distancia(envios)
+    assert [e["nro_guia"] for e in orden] == ["FPA-001", "FPA-002", "FPA-003"]
+
+    hoja = HojaRuta(id_hoja_ruta=1, nro_despacho="DES-001", id_chofer=8, id_vehiculo=4)
+    hoja.agregar_envio(envios[0])
+    hoja.agregar_envio(envios[1])
+    hoja.agregar_envio(envios[2])
+    assert len(hoja.envios) == 3
+    assert [e["nro_guia"] for e in hoja.ordenar_envios_por_distancia()] == ["FPA-001", "FPA-002", "FPA-003"]
+    print("  [OK] Ruteo: ordenamiento por kilometraje")
+
+
+def test_logistica_flujo_completo():
+    """Prueba el flujo completo de logística: vehículos → hojas → ruteo."""
+    # RF 3.1: Crear vehículos
+    v1 = Vehiculo(1, "FPX-001", 1200.0, "disponible")
+    v2 = Vehiculo(2, "FPX-002", 800.0, "disponible")
+    assert v1.esta_disponible() is True
+    assert v2.esta_disponible() is True
+    print("  [OK] RF 3.1: Gestión de flota (vehículos registrados)")
+
+    # RF 3.3: Ordenar entregas por distancia
+    entregas = [
+        {"id_envio": 1, "nro_guia": "FPX-001", "localidad_destino": "Clorinda", "distancia_km": 120.0, "peso_total_kg": 45.0},
+        {"id_envio": 2, "nro_guia": "FPX-002", "localidad_destino": "Herradura", "distancia_km": 40.0, "peso_total_kg": 12.0},
+        {"id_envio": 3, "nro_guia": "FPX-003", "localidad_destino": "Pirané", "distancia_km": 180.0, "peso_total_kg": 88.0},
+    ]
+    ruta_optima = ServicioRuteo.ordenar_envios_por_distancia(entregas)
+    assert [e["nro_guia"] for e in ruta_optima] == ["FPX-002", "FPX-001", "FPX-003"]
+    print("  [OK] RF 3.3: Ruteo por kilometraje (entregas ordenadas)")
+
+    # RF 3.2: Crear hoja de ruta
+    hoja = HojaRuta(
+        id_hoja_ruta=1,
+        nro_despacho="DES-2025-001",
+        id_chofer=8,
+        id_vehiculo=1,
+        envios=entregas,
+    )
+    assert len(hoja.envios) == 3
+    assert hoja.total_km() == 340.0
+    print("  [OK] RF 3.2: Armado de despachos (hoja de ruta creada con envíos)")
+
+
 def test_serialization():
     """Prueba serialización to_dict de todos los modelos."""
     cliente = Cliente(id_cliente=1, dni="12345678", nombre_completo="Test", telefono="123")
@@ -265,6 +336,9 @@ def main():
     test_pago_digital()
     test_turno_caja()
     test_historial_estado()
+    test_vehiculo_validacion()
+    test_ruteo_por_kilometraje()
+    test_logistica_flujo_completo()
     test_serialization()
     print("--- Todas las pruebas de modelos pasaron ---\n")
 
