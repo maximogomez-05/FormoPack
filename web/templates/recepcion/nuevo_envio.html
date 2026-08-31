@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Nuevo Registro — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-file-invoice"></i> Registro de Envío{% endblock %}
+
+{% block content %}
+<form method="POST" id="form-envio">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+  <!-- Columna izquierda -->
+  <div>
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-user"></i> Datos del Remitente</span></div>
+      <div class="form-group">
+        <label class="form-label">Documento (DNI/CUIT) (*)</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" name="rem_dni" id="rem_dni" class="form-control"
+                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+          <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Razón Social / Nombre Completo (*)</label>
+        <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teléfono de Contacto (*)</label>
+        <input type="text" name="rem_telefono" id="rem_telefono" class="form-control" required>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-location-dot"></i> Datos del Destinatario</span></div>
+      <div class="form-group">
+        <label class="form-label">Documento (DNI/CUIT) (*)</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" name="dest_dni" id="dest_dni" class="form-control"
+                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+          <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Razón Social / Nombre Completo (*)</label>
+        <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teléfono de Contacto (*)</label>
+        <input type="text" name="dest_telefono" id="dest_telefono" class="form-control" required>
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna derecha -->
+  <div>
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-truck-fast"></i> Logística y Facturación</span></div>
+      <div class="form-group">
+        <label class="form-label">Localidad de Destino (*)</label>
+        <select name="id_localidad_destino" class="form-control" required>
+          <option value="">Seleccione destino...</option>
+          {% for loc in localidades %}
+          <option value="{{ loc.id_localidad }}">{{ loc.nombre }} ({{ loc.distancia_km }} km)</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Dirección Exacta de Entrega (*)</label>
+        <input type="text" name="direccion_destino" class="form-control" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Modalidad de Pago</label>
+          <select name="modalidad_pago" class="form-control">
+            <option value="efectivo">Efectivo (Mostrador)</option>
+            <option value="digital">Digital (Transferencia/QR)</option>
+            <option value="cuenta_corriente">Cuenta Corriente</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cobertura (Seguro)</label>
+          <select name="id_seguro" class="form-control">
+            <option value="">Sin seguro adicional</option>
+            {% for seg in seguros %}
+            <option value="{{ seg.id_seguro }}">
+              Base: ${{ "%.0f"|format(seg.cobertura_estandar) }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valor Declarado de la Mercadería ($)</label>
+        <input type="number" name="valor_declarado" class="form-control" min="0" step="0.01">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="fa-solid fa-boxes-stacked"></i> Detalle de Bultos</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="agregarBulto()"><i class="fa-solid fa-plus"></i></button>
+      </div>
+
+      <div id="bultos-form">
+        <div class="bulto-item" id="b-1">
+          <div class="bulto-header">
+            <span class="bulto-numero">Bulto 01</span>
+            <span style="font-size:11px;color:var(--text-muted);">Tarifa Base</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Peso Real (kg) (*)</label>
+              <input type="number" name="peso_real[]" class="form-control" min="0.01" step="0.01" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Peso Vol. (kg)</label>
+              <input type="number" name="peso_volumetrico[]" class="form-control" min="0" step="0.01" value="0">
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
+            <input type="checkbox" name="es_fragil[]" value="0">
+            <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px;">
+  <a href="{{ url_for('recepcion.cotizador') }}" class="btn btn-secondary">Cancelar</a>
+  <button type="submit" class="btn btn-primary btn-lg">
+    <i class="fa-solid fa-check"></i> Confirmar y Generar Guía
+  </button>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let nb = 1;
+function agregarBulto() {
+  nb++;
+  const c = document.getElementById('bultos-form');
+  const d = document.createElement('div');
+  d.className = 'bulto-item';
+  d.id = `b-${nb}`;
+  d.innerHTML = `
+    <div class="bulto-header">
+      <span class="bulto-numero">Bulto ${nb < 10 ? '0'+nb : nb}</span>
+      <div>
+        <span style="font-size:11px;color:var(--primary);font-weight:600;">Desc. Multibulto 50%</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.bulto-item').remove()" style="margin-left:8px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Peso Real (kg) (*)</label>
+        <input type="number" name="peso_real[]" class="form-control" min="0.01" step="0.01" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Peso Vol. (kg)</label>
+        <input type="number" name="peso_volumetrico[]" class="form-control" min="0" step="0.01" value="0">
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
+      <input type="checkbox" name="es_fragil[]" value="${nb-1}">
+      <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
+    </label>`;
+  c.appendChild(d);
+}
+
+async function buscarCliente(prefix) {
+  const dni = document.getElementById(`${prefix}_dni`).value.trim();
+  if (!dni) return;
+  try {
+    const resp = await fetch(`/recepcion/clientes/buscar?dni=${encodeURIComponent(dni)}`);
+    const data = await resp.json();
+    if (data.encontrado) {
+      document.getElementById(`${prefix}_nombre`).value = data.cliente.nombre_completo;
+      document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
+    } else {
+      alert('Cliente no registrado en la base de datos. Los datos ingresados generarán un nuevo registro al confirmar.');
+    }
+  } catch(e) { console.error(e); }
+}
+</script>
+{% endblock %}

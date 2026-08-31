@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Clientes — FormoPack Express{% endblock %}
+{% block page_title %}👥 Clientes Registrados{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+  <a href="{{ url_for('recepcion.nuevo_cliente') }}" class="btn btn-primary">+ Nuevo Cliente</a>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr><th>#</th><th>DNI</th><th>Nombre</th><th>Teléfono</th></tr>
+      </thead>
+      <tbody>
+        {% for c in clientes %}
+        <tr>
+          <td style="color:var(--text-muted);">{{ c.id_cliente }}</td>
+          <td><strong>{{ c.dni }}</strong></td>
+          <td>{{ c.nombre_completo }}</td>
+          <td>{{ c.telefono }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:32px;">
+          No hay clientes registrados.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

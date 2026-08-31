@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso al Sistema — FormoPack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-body);
+    }
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    }
+    .login-logo { text-align: center; margin-bottom: 32px; }
+    .login-logo-icon { font-size: 40px; color: var(--primary); }
+    .login-logo-name { font-size: 20px; font-weight: 700; margin-top: 12px; color: var(--text-main); }
+    .login-logo-sub { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <i class="fa-solid fa-cube login-logo-icon"></i>
+      <div class="login-logo-name">FormoPack</div>
+      <div class="login-logo-sub">Plataforma Logística</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}" style="font-size:13px; padding:10px;">
+            <i class="fa-solid {% if cat == 'success' %}fa-check-circle{% elif cat == 'danger' %}fa-circle-xmark{% else %}fa-info-circle{% endif %}"></i>
+            <span>{{ msg }}</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('auth.login') }}" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label">Correo Institucional</label>
+        <input type="email" name="email" class="form-control" required autofocus>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100 mt-2">
+        Ingresar al Sistema <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i>
+      </button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

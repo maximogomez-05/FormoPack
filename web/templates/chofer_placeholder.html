@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Módulo Chofer — FormoPack{% endblock %}
+{% block page_title %}🚛 Módulo Chofer{% endblock %}
+{% block content %}
+<div style="text-align:center;padding:60px 20px;">
+  <div style="font-size:64px;">🚛</div>
+  <div style="font-size:20px;font-weight:600;margin:16px 0;">Módulo Chofer</div>
+  <div style="color:var(--text-muted);max-width:400px;margin:0 auto;">
+    La app móvil para choferes está programada para el Sprint 4.
+    Por ahora podés usar el sistema de tracking desde cualquier dispositivo.
+  </div>
+  <a href="{{ url_for('admin.tracking_publico') }}" class="btn btn-primary" style="margin-top:24px;">
+    🔍 Ver Tracking
+  </a>
+</div>
+{% endblock %}

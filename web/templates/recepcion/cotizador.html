@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Cotizador — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-calculator"></i> Módulo de Cotización{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;">
+
+  <!-- Formulario -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Parámetros del Servicio</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Localidad de Destino (*)</label>
+      <select id="id_localidad" class="form-control" onchange="calcularCotizacion()">
+        <option value="">Seleccione destino...</option>
+        {% for loc in localidades %}
+        <option value="{{ loc.id_localidad }}" data-km="{{ loc.distancia_km }}">
+          {{ loc.nombre }} ({{ loc.distancia_km }} km)
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Valor Declarado ($)</label>
+        <input type="number" id="valor_declarado" class="form-control"
+               placeholder="0.00" min="0" step="0.01" oninput="calcularCotizacion()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cobertura (Seguro)</label>
+        <select id="id_seguro" class="form-control" onchange="calcularCotizacion()">
+          <option value="">Sin seguro adicional</option>
+          {% for seg in seguros %}
+          <option value="{{ seg.id_seguro }}">
+            Base: ${{ "%.0f"|format(seg.cobertura_estandar) }} (Exc. {{ seg.porcentaje_excedente }}%)
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="form-section-title"><i class="fa-solid fa-boxes-stacked"></i> Detalle de Bultos</div>
+    <div id="bultos-container">
+      <div class="bulto-item" id="bulto-1">
+        <div class="bulto-header">
+          <span class="bulto-numero">Bulto 01</span>
+          <span style="font-size:11px;color:var(--text-muted);">Tarifa Base 100%</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Peso Real (kg)</label>
+            <input type="number" class="form-control peso-real" placeholder="0.0"
+                   min="0.01" step="0.01" oninput="calcularCotizacion()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Peso Vol. (kg)</label>
+            <input type="number" class="form-control peso-vol" placeholder="0.0"
+                   min="0" step="0.01" oninput="calcularCotizacion()">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" class="es-fragil" onchange="calcularCotizacion()">
+              <span style="font-size:13px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Frágil</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-secondary btn-sm" onclick="agregarBulto()">
+      <i class="fa-solid fa-plus"></i> Agregar Bulto
+    </button>
+
+    <div class="mt-3">
+      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-lg w-100">
+        Proceder a Registro <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Resultado -->
+  <div>
+    <div class="card" id="resultado-panel" style="display:none;">
+      <div class="card-header">
+        <span class="card-title">Resumen de Cotización</span>
+        <span id="loc-badge" style="font-size:11px;color:var(--text-muted);"></span>
+      </div>
+      <div class="cotizacion-total" id="total-display">$0.00</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;text-transform:uppercase;">Total Estimado</div>
+      <div id="desglose-container"></div>
+    </div>
+
+    <div class="card" id="placeholder-panel">
+      <div style="text-align:center;padding:32px 16px;color:var(--text-muted);">
+        <i class="fa-solid fa-calculator fa-3x" style="margin-bottom:16px;color:#dee2e6;"></i>
+        <div style="font-size:13px;">Ingrese los parámetros del servicio<br>para visualizar la tarifa.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let numBultos = 1;
+
+function agregarBulto() {
+  numBultos++;
+  const container = document.getElementById('bultos-container');
+  const div = document.createElement('div');
+  div.className = 'bulto-item';
+  div.id = `bulto-${numBultos}`;
+  div.innerHTML = `
+    <div class="bulto-header">
+      <span class="bulto-numero">Bulto ${numBultos < 10 ? '0'+numBultos : numBultos}</span>
+      <div>
+        <span style="font-size:11px;color:var(--primary);font-weight:600;margin-right:8px;">Desc. Multibulto 50%</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="eliminarBulto(${numBultos})"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Peso Real (kg)</label>
+        <input type="number" class="form-control peso-real" placeholder="0.0" min="0.01" step="0.01" oninput="calcularCotizacion()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Peso Vol. (kg)</label>
+        <input type="number" class="form-control peso-vol" placeholder="0.0" min="0" step="0.01" oninput="calcularCotizacion()">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" class="es-fragil" onchange="calcularCotizacion()">
+          <span style="font-size:13px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Frágil</span>
+        </label>
+      </div>
+    </div>
+  `;
+  container.appendChild(div);
+  calcularCotizacion();
+}
+
+function eliminarBulto(n) {
+  const el = document.getElementById(`bulto-${n}`);
+  if (el) el.remove();
+  calcularCotizacion();
+}
+
+async function calcularCotizacion() {
+  const idLocalidad = parseInt(document.getElementById('id_localidad').value);
+  const valorDeclarado = parseFloat(document.getElementById('valor_declarado').value) || 0;
+  const idSeguro = document.getElementById('id_seguro').value || null;
+
+  const items = document.querySelectorAll('.bulto-item');
+  const bultos = [];
+  items.forEach(item => {
+    const pr = parseFloat(item.querySelector('.peso-real').value) || 0;
+    const pv = parseFloat(item.querySelector('.peso-vol').value) || 0;
+    const fr = item.querySelector('.es-fragil').checked;
+    if (pr > 0 || pv > 0) {
+      bultos.push({ peso_real: pr, peso_volumetrico: pv, es_fragil: fr });
+    }
+  });
+
+  if (!idLocalidad || bultos.length === 0) {
+    document.getElementById('resultado-panel').style.display = 'none';
+    document.getElementById('placeholder-panel').style.display = 'block';
+    return;
+  }
+
+  try {
+    const resp = await fetch('{{ url_for("recepcion.calcular_cotizacion") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bultos, id_localidad: idLocalidad, valor_declarado: valorDeclarado, id_seguro: idSeguro }),
+    });
+    const data = await resp.json();
+    if (data.error) return;
+
+    document.getElementById('resultado-panel').style.display = 'block';
+    document.getElementById('placeholder-panel').style.display = 'none';
+    document.getElementById('total-display').textContent = `$${data.costo_total.toFixed(2)}`;
+    document.getElementById('loc-badge').textContent = `Destino: ${data.localidad_destino}`;
+
+    let html = '';
+    data.detalle_bultos.forEach(b => {
+      html += `
+        <div class="desglose-row">
+          <span>Bulto ${b.bulto_nro < 10 ? '0'+b.bulto_nro : b.bulto_nro} (Aforo: ${b.peso_aforo}kg) ${b.descuento_multibulto !== '0%' ? `<span style="color:var(--primary);font-size:11px;margin-left:4px;">[-${b.descuento_multibulto}]</span>` : ''}</span>
+          <span>$${b.tarifa_final.toFixed(2)}</span>
+        </div>`;
+    });
+    if (data.costo_seguro > 0) {
+      html += `<div class="desglose-row"><span><i class="fa-solid fa-shield-halved"></i> Cobertura Seguro</span><span>$${data.costo_seguro.toFixed(2)}</span></div>`;
+    }
+    html += `<div class="desglose-row"><span>TOTAL SERVICIO</span><span>$${data.costo_total.toFixed(2)}</span></div>`;
+    document.getElementById('desglose-container').innerHTML = html;
+  } catch (e) {
+    console.error(e);
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Comprobante {{ nro_guia }} — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-file-pdf"></i> Comprobante de Servicio{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;margin:0 auto;">
+  <div class="card" style="padding:40px;">
+    <!-- Encabezado -->
+    <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid var(--primary);margin-bottom:24px;">
+      <i class="fa-solid fa-cube fa-2x" style="color:var(--primary);"></i>
+      <div style="font-size:22px;font-weight:700;margin-top:8px;color:var(--text-main);">FormoPack</div>
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Soluciones Logísticas</div>
+      <div style="margin-top:12px;padding:6px 16px;background:rgba(220,53,69,0.05);
+                  border:1px solid rgba(220,53,69,0.3);border-radius:4px;display:inline-block;
+                  color:var(--danger);font-size:10px;font-weight:700;letter-spacing:0.5px;">
+        COMPROBANTE DE CONTROL INTERNO — DOCUMENTO NO VÁLIDO COMO FACTURA
+      </div>
+    </div>
+
+    <!-- Nro de Guía -->
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Guía de Seguimiento</div>
+      <div style="font-size:32px;font-weight:700;color:var(--primary);letter-spacing:1px;">{{ nro_guia }}</div>
+    </div>
+
+    {% if envio %}
+    <!-- Datos del envío -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+      <div style="background:#f8f9fa;padding:16px;border-radius:4px;border:1px solid var(--border);">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;"><i class="fa-solid fa-user"></i> Datos del Remitente</div>
+        <div style="font-weight:600;font-size:14px;">{{ envio.remitente }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Documento: {{ envio.rem_dni }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">Contacto: {{ envio.rem_tel }}</div>
+      </div>
+      <div style="background:#f8f9fa;padding:16px;border-radius:4px;border:1px solid var(--border);">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;"><i class="fa-solid fa-location-dot"></i> Datos del Destinatario</div>
+        <div style="font-weight:600;font-size:14px;">{{ envio.destinatario }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Documento: {{ envio.dest_dni }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">Contacto: {{ envio.dest_tel }}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Dirección de Entrega</div>
+      <div style="font-weight:600;font-size:14px;">{{ envio.localidad_destino }}</div>
+      <div style="font-size:13px;color:var(--text-main);">{{ envio.direccion_destino }}</div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Bultos -->
+    {% if detalle.bultos %}
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Detalle de Paquetería ({{ detalle.bultos|length }} Bultos)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Ítem</th><th>Peso Físico</th><th>Volumétrico</th><th>Peso Aforado</th><th>Manejo Especial</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in detalle.bultos %}
+          <tr>
+            <td>0{{ loop.index }}</td>
+            <td>{{ b.peso_real }} kg</td>
+            <td>{{ b.peso_volumetrico }} kg</td>
+            <td><strong style="color:var(--primary);">{{ [b.peso_real, b.peso_volumetrico]|max }} kg</strong></td>
+            <td>{% if b.es_fragil %}<span style="color:var(--warning);font-weight:600;">FRÁGIL</span>{% else %}<span style="color:var(--text-muted);">Estándar</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <hr class="divider">
+
+    <!-- Totales -->
+    <div class="desglose-row">
+      <span>Estado Operativo</span>
+      <span><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual }}</span></span>
+    </div>
+    <div class="desglose-row">
+      <span>Modalidad de Abono</span>
+      <span><span class="badge badge-{{ envio.modalidad_pago }}">{{ envio.modalidad_pago }}</span></span>
+    </div>
+    {% if detalle.pago %}
+    <div class="desglose-row">
+      <span>Importe Abonado</span>
+      <span>${{ "%.2f"|format(detalle.pago.monto) }}</span>
+    </div>
+    {% endif %}
+    <div class="desglose-row" style="margin-top:16px;">
+      <span style="font-size:14px;font-weight:700;text-transform:uppercase;">Costo Total del Servicio</span>
+      <span style="font-size:20px;font-weight:700;color:var(--primary);">${{ "%.2f"|format(envio.costo_total) }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Acciones -->
+  <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;">
+    <a href="{{ url_for('recepcion.descargar_pdf', nro_guia=nro_guia) }}" class="btn btn-primary btn-lg">
+      <i class="fa-solid fa-file-arrow-down"></i> Exportar Documento PDF
+    </a>
+    <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-secondary">
+      <i class="fa-solid fa-plus"></i> Ingresar Nuevo Envío
+    </a>
+  </div>
+</div>
+{% endblock %}

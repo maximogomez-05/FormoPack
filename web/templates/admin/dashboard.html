@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Panel de Control — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-chart-line"></i> Panel de Control{% endblock %}
+
+{% block content %}
+<div class="metrics-grid">
+  <div class="metric-card">
+    <i class="fa-solid fa-boxes-stacked metric-icon"></i>
+    <div class="metric-value">{{ metricas.total_envios }}</div>
+    <div class="metric-label">Envíos Registrados (Hoy)</div>
+  </div>
+  <div class="metric-card green">
+    <i class="fa-solid fa-check-double metric-icon"></i>
+    <div class="metric-value">{{ metricas.entregados }}</div>
+    <div class="metric-label">Envíos Entregados (Hoy)</div>
+  </div>
+  <div class="metric-card">
+    <i class="fa-solid fa-file-invoice-dollar metric-icon"></i>
+    <div class="metric-value">${{ "%.0f"|format(metricas.facturado_total) }}</div>
+    <div class="metric-label">Total Facturado (Hoy)</div>
+  </div>
+  <div class="metric-card yellow">
+    <i class="fa-solid fa-money-bill-wave metric-icon"></i>
+    <div class="metric-value">${{ "%.0f"|format(metricas.efectivo_hoy) }}</div>
+    <div class="metric-label">Ingresos Efectivo</div>
+  </div>
+  <div class="metric-card blue">
+    <i class="fa-solid fa-mobile-screen-button metric-icon"></i>
+    <div class="metric-value">${{ "%.0f"|format(metricas.digital_hoy) }}</div>
+    <div class="metric-label">Ingresos Digitales</div>
+  </div>
+  <div class="metric-card">
+    <i class="fa-solid fa-receipt metric-icon"></i>
+    <div class="metric-value">{{ metricas.pagos_hoy }}</div>
+    <div class="metric-label">Transacciones (Hoy)</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-list"></i> Últimos Registros</span>
+    <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus"></i> Nuevo Registro
+    </a>
+  </div>
+  {% if ultimos_envios %}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>N° Guía</th>
+          <th>Remitente</th>
+          <th>Destinatario</th>
+          <th>Localidad Destino</th>
+          <th>Estado</th>
+          <th>Modalidad</th>
+          <th>Monto</th>
+          <th>Fecha/Hora</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in ultimos_envios %}
+        <tr>
+          <td><strong style="color:var(--primary);">{{ e.nro_guia }}</strong></td>
+          <td>{{ e.remitente }}</td>
+          <td>{{ e.destinatario }}</td>
+          <td>{{ e.localidad_destino }}</td>
+          <td><span class="badge badge-{{ e.estado_actual }}">{{ e.estado_actual }}</span></td>
+          <td><span class="badge badge-{{ e.modalidad_pago }}">{{ e.modalidad_pago }}</span></td>
+          <td><strong>${{ "%.2f"|format(e.costo_total) }}</strong></td>
+          <td style="color:var(--text-muted);font-size:12px;">
+            {{ e.fecha_creacion.strftime('%d/%m %H:%M') if e.fecha_creacion else '—' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:40px;color:var(--text-muted);">
+    <i class="fa-solid fa-inbox fa-3x" style="margin-bottom:12px;color:#dee2e6;"></i>
+    <div>No se encontraron registros en el sistema para la fecha actual.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

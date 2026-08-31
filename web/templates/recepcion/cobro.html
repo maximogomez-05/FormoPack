@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Gestión de Cobro — {{ envio.nro_guia }}{% endblock %}
+{% block page_title %}<i class="fa-solid fa-credit-card"></i> Gestión de Cobro{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+
+  <!-- Info del envío -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="fa-solid fa-receipt"></i> Detalle del Servicio</span>
+        <span class="badge badge-recibido">{{ envio.estado_actual }}</span>
+      </div>
+      <div style="font-size:24px;font-weight:700;color:var(--primary);margin-bottom:4px;letter-spacing:1px;">
+        {{ envio.nro_guia }}
+      </div>
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:20px;text-transform:uppercase;">Identificador de Guía</div>
+
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-user text-muted"></i> Cliente Remitente</span><span>{{ envio._id_remitente }}</span>
+      </div>
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-location-dot text-muted"></i> Destino</span><span>{{ envio.direccion_destino }}</span>
+      </div>
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-boxes-stacked text-muted"></i> Cantidad de Bultos</span><span>{{ envio.cantidad_bultos }}</span>
+      </div>
+      <div class="desglose-row" style="margin-top:16px;">
+        <span style="font-size:14px;font-weight:700;text-transform:uppercase;">Total a Facturar</span>
+        <span style="font-size:22px;font-weight:700;color:var(--primary);">${{ "%.2f"|format(envio.costo_total) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de cobro -->
+  <div>
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-cash-register"></i> Procesamiento de Pago</span></div>
+
+      <div style="display:flex;gap:12px;margin-bottom:24px;">
+        <button type="button" class="btn btn-primary" id="btn-efectivo" onclick="mostrarPago('efectivo')">
+          <i class="fa-solid fa-money-bill-wave"></i> Efectivo
+        </button>
+        <button type="button" class="btn btn-secondary" id="btn-digital" onclick="mostrarPago('digital')">
+          <i class="fa-solid fa-qrcode"></i> QR / Digital
+        </button>
+      </div>
+
+      <!-- Pago Efectivo -->
+      <form method="POST" id="form-efectivo">
+        <input type="hidden" name="tipo_pago" value="efectivo">
+        <input type="hidden" name="monto" value="{{ envio.costo_total }}">
+        <div class="form-group">
+          <label class="form-label">Monto Recibido ($)</label>
+          <input type="number" name="monto_entregado" id="monto-entregado" class="form-control"
+                 min="{{ envio.costo_total }}" step="0.01" oninput="calcularVuelto({{ envio.costo_total }})">
+        </div>
+        <div id="vuelto-display" style="display:none;" class="alert alert-info">
+          <i class="fa-solid fa-circle-info"></i> Cambio a entregar: <strong id="vuelto-valor" style="margin-left:8px;">$0.00</strong>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 btn-lg mt-2">
+          Confirmar Pago en Efectivo <i class="fa-solid fa-check" style="margin-left:8px;"></i>
+        </button>
+      </form>
+
+      <!-- Pago Digital -->
+      <form method="POST" id="form-digital" style="display:none;">
+        <input type="hidden" name="tipo_pago" value="digital">
+        <input type="hidden" name="monto" value="{{ envio.costo_total }}">
+        <input type="hidden" name="monto_entregado" value="0">
+
+        <div class="form-group">
+          <label class="form-label">Plataforma / Billetera Virtual</label>
+          <select name="billetera_virtual" class="form-control">
+            <option>MercadoPago</option>
+            <option>Naranja X</option>
+            <option>MODO</option>
+            <option>Uala</option>
+            <option>Transferencia Bancaria</option>
+          </select>
+        </div>
+
+        {% if qr_base64 %}
+        <div style="text-align:center;margin:24px 0;padding:16px;border:1px solid var(--border);border-radius:6px;background:#f8f9fa;">
+          <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR Pago" style="max-width:180px;">
+          <div style="font-size:12px;color:var(--text-muted);margin-top:12px;text-transform:uppercase;font-weight:600;">
+            Escanee para abonar ${{ "%.2f"|format(envio.costo_total) }}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="alert alert-warning mt-2" style="font-size:12px;">
+          Instrucciones: Aguarde la confirmación de la transacción en su terminal comercial antes de asentar el pago en el sistema.
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 btn-lg mt-2">
+          Confirmar Transacción Digital <i class="fa-solid fa-check" style="margin-left:8px;"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function mostrarPago(tipo) {
+  document.getElementById('form-efectivo').style.display = tipo === 'efectivo' ? 'block' : 'none';
+  document.getElementById('form-digital').style.display = tipo === 'digital' ? 'block' : 'none';
+  document.getElementById('btn-efectivo').className = `btn ${tipo === 'efectivo' ? 'btn-primary' : 'btn-secondary'}`;
+  document.getElementById('btn-digital').className = `btn ${tipo === 'digital' ? 'btn-primary' : 'btn-secondary'}`;
+}
+
+function calcularVuelto(total) {
+  const entregado = parseFloat(document.getElementById('monto-entregado').value) || 0;
+  const vuelto = Math.max(0, entregado - total);
+  const div = document.getElementById('vuelto-display');
+  if (entregado > 0) {
+    div.style.display = 'flex';
+    document.getElementById('vuelto-valor').textContent = `$${vuelto.toFixed(2)}`;
+  } else {
+    div.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}

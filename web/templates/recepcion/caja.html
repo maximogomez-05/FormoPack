@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Caja Operativa — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-cash-register"></i> Control de Caja Operativa{% endblock %}
+
+{% block content %}
+{% if turno %}
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
+  <div class="metric-card green">
+    <i class="fa-solid fa-money-bill-wave metric-icon"></i>
+    <div class="metric-value">${{ "%.2f"|format(turno.ef_real) }}</div>
+    <div class="metric-label">Recaudación Efectivo</div>
+  </div>
+  <div class="metric-card blue">
+    <i class="fa-solid fa-mobile-screen-button metric-icon"></i>
+    <div class="metric-value">${{ "%.2f"|format(turno.dig_real) }}</div>
+    <div class="metric-label">Recaudación Digital</div>
+  </div>
+  <div class="metric-card">
+    <i class="fa-solid fa-receipt metric-icon"></i>
+    <div class="metric-value">{{ turno.cant_pagos }}</div>
+    <div class="metric-label">Volumen Operaciones</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Turno Operativo N° {{ turno.id_turno }}</span>
+    <span class="badge badge-entregado" style="font-size:11px;">ACTIVO</span>
+  </div>
+
+  <div class="desglose-row">
+    <span>Fondo Fijo Inicial</span>
+    <span>${{ "%.2f"|format(turno.saldo_inicial) }}</span>
+  </div>
+  <div class="desglose-row">
+    <span>Ingresos por Mostrador (Efectivo)</span>
+    <span style="color:var(--success);">+${{ "%.2f"|format(turno.ef_real) }}</span>
+  </div>
+  <div class="desglose-row">
+    <span>Ingresos Electrónicos</span>
+    <span style="color:var(--info);">+${{ "%.2f"|format(turno.dig_real) }}</span>
+  </div>
+  <div class="desglose-row" style="margin-top:16px;">
+    <span style="font-weight:600;">Efectivo en Caja Físico (Fondo + Ingresos)</span>
+    <span style="font-size:16px;font-weight:700;color:var(--primary);">
+      ${{ "%.2f"|format(turno.saldo_inicial + turno.ef_real) }}
+    </span>
+  </div>
+  <div class="desglose-row">
+    <span style="font-weight:600;">Recaudación Total del Turno</span>
+    <span style="font-size:16px;font-weight:700;color:var(--success);">
+      ${{ "%.2f"|format(turno.ef_real + turno.dig_real) }}
+    </span>
+  </div>
+
+  <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px;">
+    <form method="POST" action="{{ url_for('recepcion.cerrar_caja', id_turno=turno.id_turno) }}"
+          onsubmit="return confirm('ATENCIÓN: Procederá al cierre definitivo del turno operativo. Verifique el arqueo de caja físico antes de continuar. ¿Desea proceder?')">
+      <button type="submit" class="btn btn-danger">
+        <i class="fa-solid fa-lock"></i> Ejecutar Cierre de Caja (Arqueo)
+      </button>
+    </form>
+  </div>
+</div>
+
+{% else %}
+<div class="card" style="max-width:500px;margin:0 auto;text-align:center;padding:40px 20px;">
+  <i class="fa-solid fa-lock-open fa-3x" style="color:var(--text-muted);margin-bottom:20px;"></i>
+  <div style="font-size:18px;font-weight:600;color:var(--primary);margin-bottom:8px;">Turno de Caja Inactivo</div>
+  <div style="color:var(--text-muted);font-size:13px;margin-bottom:32px;">
+    Para procesar cobros y emitir guías, es indispensable habilitar el turno operativo ingresando el fondo fijo de apertura.
+  </div>
+
+  <form method="POST" action="{{ url_for('recepcion.abrir_caja') }}">
+    <div class="form-group" style="text-align:left;">
+      <label class="form-label">Fondo Fijo Inicial / Saldo de Apertura ($)</label>
+      <input type="number" name="saldo_inicial" class="form-control"
+             placeholder="0.00" min="0" step="0.01" value="0">
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg w-100">
+      <i class="fa-solid fa-key"></i> Habilitar Turno
+    </button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

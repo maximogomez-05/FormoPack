@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FormoPack Express{% endblock %}</title>
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <a href="{{ url_for('auth.dashboard') }}" class="sidebar-brand">
+      <i class="fa-solid fa-cube brand-icon"></i>
+      <div>
+        <div class="brand-name">FormoPack</div>
+        <div class="brand-sub">Sistema Logístico</div>
+      </div>
+    </a>
+
+    <nav class="sidebar-nav">
+      <!-- Recepción -->
+      {% if session.rol in ['recepcionista', 'administrador'] %}
+      <div class="nav-section">Operaciones</div>
+      <a href="{{ url_for('recepcion.cotizador') }}" class="nav-link {% if request.endpoint == 'recepcion.cotizador' %}active{% endif %}">
+        <i class="fa-solid fa-calculator nav-icon"></i> Cotizador
+      </a>
+      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="nav-link {% if request.endpoint == 'recepcion.nuevo_envio' %}active{% endif %}">
+        <i class="fa-solid fa-file-invoice nav-icon"></i> Nuevo Envío
+      </a>
+      <a href="{{ url_for('recepcion.listar_clientes') }}" class="nav-link {% if request.endpoint == 'recepcion.listar_clientes' %}active{% endif %}">
+        <i class="fa-solid fa-users nav-icon"></i> Clientes
+      </a>
+      <a href="{{ url_for('recepcion.caja') }}" class="nav-link {% if request.endpoint == 'recepcion.caja' %}active{% endif %}">
+        <i class="fa-solid fa-cash-register nav-icon"></i> Turno de Caja
+      </a>
+      {% endif %}
+
+      <!-- Administración -->
+      {% if session.rol == 'administrador' %}
+      <div class="nav-section" style="margin-top:12px;">Administración</div>
+      <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+        <i class="fa-solid fa-chart-line nav-icon"></i> Panel de Control
+      </a>
+      {% endif %}
+
+      <!-- Tracking público -->
+      <div class="nav-section" style="margin-top:12px;">Consultas</div>
+      <a href="{{ url_for('admin.tracking_publico') }}" class="nav-link {% if request.endpoint == 'admin.tracking_publico' %}active{% endif %}">
+        <i class="fa-solid fa-route nav-icon"></i> Seguimiento
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-name">{{ session.nombre }}</div>
+      <div class="user-role">{{ session.rol | capitalize }}</div>
+      <a href="{{ url_for('auth.logout') }}" style="color:#8892b0;font-size:12px;text-decoration:none;display:block;margin-top:8px;">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Cerrar Sesión
+      </a>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">{% block page_title %}Sistema Logístico{% endblock %}</div>
+      <div class="topbar-actions">
+        <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus"></i> Nuevo Envío
+        </a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Mensajes del Sistema -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for cat, msg in messages %}
+            <div class="alert alert-{{ cat }}">
+              <i class="fa-solid {% if cat == 'success' %}fa-check-circle{% elif cat == 'danger' %}fa-exclamation-circle{% elif cat == 'warning' %}fa-triangle-exclamation{% else %}fa-info-circle{% endif %}"></i>
+              <span>{{ msg }}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

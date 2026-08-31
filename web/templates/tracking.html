@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguimiento de Envíos — FormoPack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background: var(--bg-body); padding: 40px 20px; }
+    .tracking-container { max-width: 600px; margin: 0 auto; }
+    .tracking-header { text-align: center; margin-bottom: 32px; }
+    .tracking-logo { font-size: 32px; color: var(--primary); }
+    .tracking-title { font-size: 20px; font-weight: 700; margin-top: 12px; color: var(--text-main); }
+    .tracking-sub { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+<div class="tracking-container">
+  <div class="tracking-header">
+    <i class="fa-solid fa-route tracking-logo"></i>
+    <div class="tracking-title">FormoPack - Consultas Públicas</div>
+    <div class="tracking-sub">Seguimiento de Envíos Logísticos</div>
+  </div>
+
+  <!-- Buscador -->
+  <div class="card" style="margin-bottom:24px;">
+    <form method="GET" action="{{ url_for('admin.tracking_publico') }}">
+      <div style="display:flex;gap:12px;">
+        <input type="text" name="guia" class="form-control"
+               placeholder="Ingrese identificador de guía (Ej: FPX-2026...)"
+               value="{{ nro_guia or '' }}" required>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-magnifying-glass"></i> Consultar
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger"><i class="fa-solid fa-circle-xmark"></i> {{ error }}</div>
+  {% endif %}
+
+  {% if envio %}
+  <div class="card">
+    <div style="text-align:center;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:16px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Guía Localizada</div>
+      <div style="font-size:24px;font-weight:700;color:var(--primary);">{{ envio.nro_guia }}</div>
+      <div class="mt-2">
+        <span class="badge badge-{{ envio.estado_actual }}" style="font-size:11px;padding:6px 12px;">
+          ESTADO: {{ envio.estado_actual | upper }}
+        </span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> Origen (Remitente)</div>
+        <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.remitente }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-right-to-bracket"></i> Destino (Receptor)</div>
+        <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.destinatario }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">{{ envio.localidad_destino }}</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    {% if timeline %}
+    <div style="font-size:11px;color:var(--primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;">
+      <i class="fa-solid fa-clock-rotate-left"></i> Historial de Movimientos
+    </div>
+    <div class="timeline">
+      {% for t in timeline %}
+      <div class="timeline-item">
+        <div class="timeline-dot {% if loop.last %}done{% endif %}"></div>
+        <div class="timeline-date">
+          {{ t.fecha_hora.strftime('%d/%m/%Y %H:%M') if t.fecha_hora and t.fecha_hora.strftime is defined else t.fecha_hora }}
+          {% if t.ubicacion %} | Sucursal/Punto: {{ t.ubicacion }}{% endif %}
+        </div>
+        <div class="timeline-estado">
+          {{ t.estado | upper }}
+        </div>
+        {% if t.observacion %}
+        <div class="timeline-obs">{{ t.observacion }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="color:var(--text-muted);text-align:center;padding:20px;font-size:13px;">
+      El envío ha sido registrado pero aún no presenta movimientos logísticos.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div style="text-align:center;margin-top:32px;">
+    <a href="{{ url_for('auth.login') }}" style="color:var(--text-muted);font-size:12px;text-decoration:none;">
+      <i class="fa-solid fa-lock"></i> Acceso Personal Operativo
+    </a>
+  </div>
+</div>
+</body>
+</html>
