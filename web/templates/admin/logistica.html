@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Logística y Despacho — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-truck-fast"></i> Logística y Despacho{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger">
+  <i class="fa-solid fa-exclamation-circle"></i>
+  <span>{{ error }}</span>
+</div>
+{% endif %}
+
+<!-- Métricas de Flota y Ruteo -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-gauge-high"></i> Resumen de Logística</span>
+  </div>
+  <div class="metrics-grid">
+    <div class="metric-card blue">
+      <i class="fa-solid fa-route metric-icon"></i>
+      <div class="metric-value">{{ total_km|round(1) }} km</div>
+      <div class="metric-label">Recorrido total estimado</div>
+    </div>
+    <div class="metric-card green">
+      <i class="fa-solid fa-boxes-stacked metric-icon"></i>
+      <div class="metric-value">{{ entregas|length }}</div>
+      <div class="metric-label">Entregas pendientes</div>
+    </div>
+    <div class="metric-card">
+      <i class="fa-solid fa-truck metric-icon"></i>
+      <div class="metric-value">{{ vehiculos|length }}</div>
+      <div class="metric-label">Vehículos totales</div>
+    </div>
+    <div class="metric-card yellow">
+      <i class="fa-solid fa-list-check metric-icon"></i>
+      <div class="metric-value">{{ hojas_activas|length }}</div>
+      <div class="metric-label">Despachos activos</div>
+    </div>
+  </div>
+</div>
+
+<!-- Entregas ordenadas por distancia (Ruteo Óptimo - RF 3.3) -->
+<div class="card" style="margin-top: 22px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-route"></i> Entregas ordenadas por distancia (RF 3.3)</span>
+    <small style="color: var(--text-muted); font-weight: normal;">Ruteo óptimo desde la más cercana a la más lejana</small>
+  </div>
+  {% if entregas %}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Orden</th>
+          <th>N° Guía</th>
+          <th>Localidad Destino</th>
+          <th>Distancia desde centro</th>
+          <th>Peso Total</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for envio in entregas %}
+        <tr>
+          <td><strong style="color: var(--primary);">{{ loop.index }}</strong></td>
+          <td>{{ envio.nro_guia }}</td>
+          <td>{{ envio.localidad_destino }}</td>
+          <td>{{ envio.distancia_km|round(1) }} km</td>
+          <td>{{ envio.peso_total_kg|round(2) }} kg</td>
+          <td><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+    <i class="fa-solid fa-inbox fa-3x" style="margin-bottom: 12px; color: #dee2e6;"></i>
+    <div>No hay entregas pendientes para despachar.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Flota disponible (RF 3.1) -->
+<div class="card" style="margin-top: 22px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-van-shuttle"></i> Flota disponible (RF 3.1)</span>
+  </div>
+  {% if vehiculos %}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Patente</th>
+          <th>Capacidad</th>
+          <th>Estado</th>
+          <th>Disponibilidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehiculo in vehiculos %}
+        <tr>
+          <td><strong>{{ vehiculo.patente }}</strong></td>
+          <td>{{ vehiculo.capacidad_kg }} kg</td>
+          <td><span class="badge badge-{{ vehiculo.estado }}">{{ vehiculo.estado }}</span></td>
+          <td>
+            {% if vehiculo.disponible %}
+            <span style="color: green;"><i class="fa-solid fa-check-circle"></i> Disponible</span>
+            {% else %}
+            <span style="color: orange;"><i class="fa-solid fa-clock"></i> Ocupado</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+    <i class="fa-solid fa-triangle-exclamation fa-3x" style="margin-bottom: 12px; color: #ffc107;"></i>
+    <div>No hay vehículos registrados en la flota.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Despachos activos (RF 3.2) -->
+<div class="card" style="margin-top: 22px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-clipboard-list"></i> Hojas de ruta activas (RF 3.2)</span>
+  </div>
+  {% if hojas_activas %}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>N° Despacho</th>
+          <th>Chofer</th>
+          <th>Vehículo</th>
+          <th>Entregas</th>
+          <th>Distancia Máx.</th>
+          <th>Fecha de Emisión</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for hoja in hojas_activas %}
+        <tr>
+          <td><strong style="color: var(--primary);">{{ hoja.nro_despacho }}</strong></td>
+          <td>{{ hoja.chofer_nombre }}</td>
+          <td>{{ hoja.patente }}</td>
+          <td>{{ hoja.cantidad_envios }}</td>
+          <td>{{ hoja.max_distancia|round(1) }} km</td>
+          <td style="font-size: 12px; color: var(--text-muted);">{{ hoja.fecha_emision.strftime('%d/%m %H:%M') if hoja.fecha_emision else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+    <i class="fa-solid fa-inbox fa-3x" style="margin-bottom: 12px; color: #dee2e6;"></i>
+    <div>No hay hojas de ruta activas. Crea una nueva para comenzar a despachar.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
