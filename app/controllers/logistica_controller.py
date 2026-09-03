@@ -94,9 +94,43 @@ class LogisticaController:
         envios_ids: List[int],
     ) -> HojaRuta:
         """Crea una nueva hoja de ruta y asigna envíos."""
+        if not nro_despacho.strip() or not envios_ids:
+            raise ValidationError(field="hoja_ruta", reason="El despacho y al menos un envío son obligatorios")
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
+
+            cursor.execute(
+                "SELECT capacidad_kg, estado FROM vehiculos WHERE id_vehiculo = %s FOR UPDATE",
+                (id_vehiculo,),
+            )
+            vehiculo = cursor.fetchone()
+            if not vehiculo or vehiculo["estado"] != "disponible":
+                raise ValidationError(field="vehiculo", reason="El vehículo no existe o no está disponible")
+
+            cursor.execute(
+                "SELECT id_usuario FROM usuarios WHERE id_usuario = %s AND tipo_usuario = 'chofer' AND activo = 1",
+                (id_chofer,),
+            )
+            if not cursor.fetchone():
+                raise ValidationError(field="chofer", reason="El chofer no existe o no está activo")
+
+            placeholders = ",".join(["%s"] * len(envios_ids))
+            cursor.execute(
+                f"""SELECT COUNT(DISTINCT e.id_envio) AS cantidad,
+                           COALESCE(SUM(b.peso_real), 0) AS peso_total
+                    FROM envios e
+                    LEFT JOIN bultos b ON b.id_envio = e.id_envio
+                    WHERE e.id_envio IN ({placeholders})
+                      AND e.estado_actual = 'recibido'
+                      AND e.id_hoja_ruta IS NULL""",
+                envios_ids,
+            )
+            carga = cursor.fetchone()
+            if carga["cantidad"] != len(set(envios_ids)):
+                raise ValidationError(field="envios", reason="Solo se pueden asignar envíos recibidos y sin despacho")
+            if float(carga["peso_total"]) > float(vehiculo["capacidad_kg"]):
+                raise ValidationError(field="vehiculo", reason="La carga supera la capacidad del vehículo")
 
             # Crear hoja de ruta
             cursor.execute(
@@ -112,6 +146,10 @@ class LogisticaController:
                     "UPDATE envios SET id_hoja_ruta = %s, estado_actual = 'en_planta' WHERE id_envio = %s",
                     (id_hoja_ruta, id_envio)
                 )
+            cursor.execute(
+                "UPDATE vehiculos SET estado = 'en_ruta' WHERE id_vehiculo = %s",
+                (id_vehiculo,),
+            )
 
             conn.commit()
             cursor.close()
@@ -119,7 +157,15 @@ class LogisticaController:
             # Recuperar la hoja completa
             return self.obtener_hoja_ruta(id_hoja_ruta)
 
+        except ValidationError:
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            raise
         except Exception as e:
+            conn.rollback()
+            cursor.close()
+            conn.close()
             logger.error("Error al crear hoja de ruta: %s", e)
             raise DatabaseQueryError(f"Error al crear hoja de ruta: {e}")
 
