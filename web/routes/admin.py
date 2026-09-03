@@ -4,7 +4,7 @@ Blueprint: admin_bp
 """
 
 import logging
-from flask import Blueprint, render_template, session, request, jsonify
+from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
 from web.routes.auth import login_required, rol_requerido
 from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
@@ -70,9 +70,70 @@ def logistica():
         entregas=entregas_pendientes,
         vehiculos=vehiculos,
         hojas_activas=hojas_activas,
+        choferes=_obtener_choferes_disponibles(),
         total_km=total_km,
         error=error,
     )
+
+
+@admin_bp.route("/logistica/vehiculos/nuevo", methods=["POST"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def registrar_vehiculo():
+    """Registra un vehículo disponible desde la pantalla de logística."""
+    try:
+        LogisticaController().registrar_vehiculo(
+            request.form.get("patente", ""),
+            float(request.form.get("capacidad_kg", 0)),
+        )
+        flash("Vehículo registrado correctamente.", "success")
+    except ValueError:
+        flash("La capacidad debe ser un número válido.", "danger")
+    except Exception as e:
+        logger.error("Error al registrar vehículo: %s", e)
+        flash(str(e), "danger")
+    return redirect(url_for("admin.logistica"))
+
+
+@admin_bp.route("/logistica/hojas/nueva", methods=["POST"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def crear_hoja_ruta():
+    """Crea una hoja de ruta con envíos recibidos."""
+    try:
+        envios_ids = [int(value) for value in request.form.getlist("envios_ids")]
+        LogisticaController().crear_hoja_ruta(
+            request.form.get("nro_despacho", "").strip(),
+            int(request.form.get("id_chofer", 0)),
+            int(request.form.get("id_vehiculo", 0)),
+            envios_ids,
+        )
+        flash("Hoja de ruta creada y envíos asignados correctamente.", "success")
+    except (ValueError, TypeError):
+        flash("Completá correctamente los datos de la hoja de ruta.", "danger")
+    except Exception as e:
+        logger.error("Error al crear hoja de ruta: %s", e)
+        flash(str(e), "danger")
+    return redirect(url_for("admin.logistica"))
+
+
+def _obtener_choferes_disponibles() -> list:
+    """Obtiene choferes activos para asignar un despacho."""
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT id_usuario, nombre FROM usuarios
+               WHERE tipo_usuario = 'chofer' AND activo = 1 ORDER BY nombre"""
+        )
+        choferes = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return choferes
+    except Exception as e:
+        logger.error("Error al obtener choferes: %s", e)
+        return []
 
 
 @admin_bp.route("/tracking", methods=["GET"])

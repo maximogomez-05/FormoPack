@@ -10,6 +10,62 @@
 </div>
 {% endif %}
 
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus"></i> Registrar vehículo</span></div>
+    <form method="POST" action="{{ url_for('admin.registrar_vehiculo') }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Patente</label>
+          <input name="patente" class="form-control" maxlength="10" required placeholder="AB123CD">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Capacidad (kg)</label>
+          <input name="capacidad_kg" type="number" min="1" step="0.01" class="form-control" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar vehículo</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-clipboard-list"></i> Crear hoja de ruta</span></div>
+    {% if entregas and vehiculos and choferes %}
+    <form method="POST" action="{{ url_for('admin.crear_hoja_ruta') }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">N° de despacho</label>
+          <input name="nro_despacho" class="form-control" maxlength="20" required placeholder="DESP-001">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chofer</label>
+          <select name="id_chofer" class="form-control" required>
+            <option value="">Seleccionar...</option>
+            {% for chofer in choferes %}<option value="{{ chofer.id_usuario }}">{{ chofer.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vehículo disponible</label>
+        <select name="id_vehiculo" class="form-control" required>
+          <option value="">Seleccionar...</option>
+          {% for vehiculo in vehiculos if vehiculo.disponible %}<option value="{{ vehiculo.id_vehiculo }}">{{ vehiculo.patente }} ({{ vehiculo.capacidad_kg }} kg)</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Envíos a despachar</label>
+        {% for envio in entregas %}
+        <label style="display:block;margin:6px 0;"><input type="checkbox" name="envios_ids" value="{{ envio.id_envio }}"> {{ envio.nro_guia }} - {{ envio.localidad_destino }} ({{ envio.peso_total_kg|round(2) }} kg)</label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-route"></i> Crear despacho</button>
+    </form>
+    {% else %}
+    <div style="color:var(--text-muted);">Registrá un vehículo y asegurate de tener un chofer y envíos pendientes.</div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Métricas de Flota y Ruteo -->
 <div class="card">
   <div class="card-header">
