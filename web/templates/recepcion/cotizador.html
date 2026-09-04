@@ -77,9 +77,9 @@
     </button>
 
     <div class="mt-3">
-      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-lg w-100">
+      <button type="button" class="btn btn-primary btn-lg w-100" onclick="procederARegistro()">
         Proceder a Registro <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i>
-      </a>
+      </button>
     </div>
   </div>
 
@@ -202,6 +202,34 @@ async function calcularCotizacion() {
   } catch (e) {
     console.error(e);
   }
+}
+
+// Recoge los datos del cotizador y navega a nuevo_envio con esos datos pre-cargados
+function procederARegistro() {
+  const idLocalidad = document.getElementById('id_localidad').value;
+  const valorDeclarado = document.getElementById('valor_declarado').value || '0';
+  const idSeguro = document.getElementById('id_seguro').value || '';
+
+  const bultoItems = document.querySelectorAll('.bulto-item');
+  const pesosReales = [];
+  const pesosVol = [];
+  const fragiles = [];
+
+  bultoItems.forEach((item, idx) => {
+    pesosReales.push(item.querySelector('.peso-real').value || '0');
+    pesosVol.push(item.querySelector('.peso-vol').value || '0');
+    fragiles.push(item.querySelector('.es-fragil').checked ? idx : '');
+  });
+
+  const params = new URLSearchParams();
+  params.set('id_localidad', idLocalidad);
+  params.set('valor_declarado', valorDeclarado);
+  params.set('id_seguro', idSeguro);
+  pesosReales.forEach(v => params.append('peso_real', v));
+  pesosVol.forEach(v => params.append('peso_vol', v));
+  fragiles.forEach(v => params.append('es_fragil', v));
+
+  window.location.href = '{{ url_for("recepcion.nuevo_envio") }}?' + params.toString();
 }
 </script>
 {% endblock %}

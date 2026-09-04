@@ -194,5 +194,48 @@ async function buscarCliente(prefix) {
     }
   } catch(e) { console.error(e); }
 }
+
+// Pre-llenar campos desde los parámetros enviados por el cotizador
+(function preCargarDesdeCotizador() {
+  const p = new URLSearchParams(window.location.search);
+  if (!p.has('id_localidad') && !p.has('peso_real')) return; // Nada que pre-cargar
+
+  // Localidad y campos simples
+  const sel = document.querySelector('[name="id_localidad_destino"]');
+  if (sel && p.get('id_localidad')) sel.value = p.get('id_localidad');
+
+  const vd = document.querySelector('[name="valor_declarado"]');
+  if (vd && p.get('valor_declarado') && p.get('valor_declarado') !== '0') vd.value = p.get('valor_declarado');
+
+  const seg = document.querySelector('[name="id_seguro"]');
+  if (seg && p.get('id_seguro')) seg.value = p.get('id_seguro');
+
+  // Bultos (pueden ser varios)
+  const pesosReales = p.getAll('peso_real');
+  const pesosVol = p.getAll('peso_vol');
+  const fragiles = p.getAll('es_fragil').filter(v => v !== '').map(Number);
+
+  if (pesosReales.length === 0) return;
+
+  // Pre-llenar el primer bulto que ya existe en el DOM
+  const primerBulto = document.querySelector('#b-1');
+  if (primerBulto && pesosReales[0] && pesosReales[0] !== '0') {
+    primerBulto.querySelector('[name="peso_real[]"]').value = pesosReales[0];
+    primerBulto.querySelector('[name="peso_volumetrico[]"]').value = pesosVol[0] || '0';
+    primerBulto.querySelector('[name="es_fragil[]"]').checked = fragiles.includes(0);
+  }
+
+  // Crear bultos adicionales si hay más de uno
+  for (let i = 1; i < pesosReales.length; i++) {
+    agregarBulto();
+    const nuevosBultos = document.querySelectorAll('.bulto-item');
+    const b = nuevosBultos[i];
+    if (b && pesosReales[i] && pesosReales[i] !== '0') {
+      b.querySelector('[name="peso_real[]"]').value = pesosReales[i];
+      b.querySelector('[name="peso_volumetrico[]"]').value = pesosVol[i] || '0';
+      b.querySelector('[name="es_fragil[]"]').checked = fragiles.includes(i);
+    }
+  }
+})();
 </script>
 {% endblock %}
