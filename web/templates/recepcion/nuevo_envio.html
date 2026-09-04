@@ -14,17 +14,23 @@
         <label class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="rem_dni" id="rem_dni" class="form-control"
-                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+                 placeholder="Solo números, sin puntos" required
+                 maxlength="15" minlength="7"
+                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
-        <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required>
+        <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required
+               maxlength="100" minlength="3"
+               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
-        <input type="text" name="rem_telefono" id="rem_telefono" class="form-control" required>
+        <input type="tel" name="rem_telefono" id="rem_telefono" class="form-control" required
+               maxlength="20" minlength="6"
+               placeholder="Ej: 3704 123456">
       </div>
     </div>
 
@@ -34,17 +40,23 @@
         <label class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="dest_dni" id="dest_dni" class="form-control"
-                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+                 placeholder="Solo números, sin puntos" required
+                 maxlength="15" minlength="7"
+                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
-        <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required>
+        <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required
+               maxlength="100" minlength="3"
+               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
-        <input type="text" name="dest_telefono" id="dest_telefono" class="form-control" required>
+        <input type="tel" name="dest_telefono" id="dest_telefono" class="form-control" required
+               maxlength="20" minlength="6"
+               placeholder="Ej: 3704 123456">
       </div>
     </div>
   </div>

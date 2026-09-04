@@ -237,8 +237,14 @@ def cobrar_envio(nro_guia: str):
 
     if request.method == "POST":
         tipo_pago = request.form.get("tipo_pago", "efectivo")
-        monto = float(request.form.get("monto", envio.costo_total))
-        monto_entregado = float(request.form.get("monto_entregado", 0) or 0)
+        try:
+            monto = float(request.form.get("monto", envio.costo_total))
+        except (ValueError, TypeError):
+            monto = envio.costo_total
+        try:
+            monto_entregado = float(request.form.get("monto_entregado", 0) or 0)
+        except (ValueError, TypeError):
+            monto_entregado = 0.0
         billetera = request.form.get("billetera_virtual", "MercadoPago")
 
         try:
@@ -323,7 +329,10 @@ def caja():
 @rol_requerido("administrador", "recepcionista")
 def abrir_caja():
     """Abre un nuevo turno de caja."""
-    saldo_inicial = float(request.form.get("saldo_inicial", 0) or 0)
+    try:
+        saldo_inicial = float(request.form.get("saldo_inicial", 0) or 0)
+    except (ValueError, TypeError):
+        saldo_inicial = 0.0
     try:
         ctrl = CajaController()
         turno = ctrl.abrir_turno(
