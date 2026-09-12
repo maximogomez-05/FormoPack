@@ -11,7 +11,7 @@ import logging
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-from flask import Flask, redirect, url_for, request
+from flask import Flask, redirect, url_for, request, send_from_directory
 from flask_session import Session
 from config.settings import AppConfig
 
@@ -34,6 +34,8 @@ def create_app() -> Flask:
     app.config["SESSION_FILE_DIR"] = os.path.join(ROOT, ".flask_session")
     app.config["SESSION_PERMANENT"] = False
     app.config["SESSION_USE_SIGNER"] = True
+    app.config["POD_UPLOAD_DIR"] = os.path.join(ROOT, "web", "static", "uploads", "pod")
+    app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
     Session(app)
 
@@ -41,15 +43,22 @@ def create_app() -> Flask:
     from web.routes.auth import auth_bp
     from web.routes.recepcion import recepcion_bp
     from web.routes.admin import admin_bp
+    from web.routes.chofer import chofer_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(recepcion_bp, url_prefix="/recepcion")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(chofer_bp)
 
     # Ruta raíz → redirige según contexto
     @app.route("/")
     def index():
         return redirect(url_for("auth.login"))
+
+    @app.route("/service-worker.js")
+    def service_worker():
+        """Sirve el worker desde la raíz para que controle /chofer."""
+        return send_from_directory(os.path.join(ROOT, "web", "static"), "service-worker.js")
 
     # ──────────────────────────────────────────
     # Filtros de Seguridad (Anti-Caché y Headers)

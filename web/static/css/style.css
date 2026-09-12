@@ -138,6 +138,51 @@ body {
 
 .page-content { padding: 28px; }
 
+/* ──────────────── MÓDULO CHOFER ──────────────── */
+.driver-intro { display:flex; justify-content:space-between; gap:20px; align-items:flex-end; margin-bottom:22px; }
+.driver-intro h1 { margin:6px 0; font-size:28px; color:var(--text-main); }
+.driver-intro p, .driver-route p { color:var(--text-muted); font-size:13px; }
+.eyebrow { color:var(--primary); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.driver-status { color:var(--success); font-size:13px; font-weight:600; }
+.offline-banner, .queue-banner { padding:12px 16px; margin-bottom:16px; border-radius:5px; font-size:13px; display:flex; gap:9px; align-items:center; }
+.offline-banner { color:#7a5200; background:#fff5d6; border:1px solid #f0d47b; }
+.queue-banner { color:#174d72; background:#eaf5ff; border:1px solid #b8daf2; }
+.driver-route-head { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; }
+.driver-route-head h2 { margin:7px 0 4px; font-size:20px; }
+.route-code { color:var(--primary); font-size:12px; font-weight:700; }
+.driver-deliveries { display:grid; gap:10px; }
+.delivery-item { display:flex; align-items:center; gap:14px; border:1px solid var(--border); border-radius:5px; padding:14px; }
+.delivery-order { width:30px; height:30px; display:grid; place-items:center; border-radius:50%; background:#e8f2fb; color:var(--primary); font-weight:700; }
+.delivery-main { flex:1; min-width:0; }
+.delivery-meta { display:flex; align-items:center; gap:8px; font-size:13px; }
+.delivery-main h3 { margin:5px 0 2px; font-size:15px; }
+.delivery-main small { color:var(--text-muted); }
+.delivery-done { border-color:#a9dfb5; background:#f5fff7; }
+.delivery-failed { border-color:#f0b5b5; background:#fff8f8; }
+.delivery-result { color:var(--success); font-size:13px; font-weight:600; }
+.empty-driver { text-align:center; padding:70px 20px; }
+.empty-driver > i { color:var(--primary); font-size:44px; margin-bottom:16px; }
+.empty-driver h2 { margin-bottom:8px; }
+.empty-driver p { color:var(--text-muted); }
+.modal-backdrop { position:fixed; inset:0; z-index:200; display:grid; place-items:center; padding:20px; background:rgba(10,25,47,.58); }
+.modal-backdrop[hidden] { display:none; }
+.modal-card { width:min(620px,100%); max-height:92vh; overflow:auto; background:#fff; border-radius:7px; padding:24px; box-shadow:0 18px 60px rgba(0,0,0,.24); }
+.modal-header, .modal-actions { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.modal-header { border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:18px; }
+.modal-header h2 { margin-top:5px; font-size:20px; }
+.icon-button { border:0; background:transparent; color:var(--text-muted); font-size:20px; cursor:pointer; }
+.signature-pad { width:100%; height:auto; display:block; border:1px dashed var(--border); border-radius:4px; background:#fcfdff; margin-bottom:8px; touch-action:none; }
+.modal-actions { justify-content:flex-end; margin-top:20px; }
+
+@media (max-width: 700px) {
+  .page-content { padding:16px; }
+  .driver-intro, .driver-route-head { display:block; }
+  .driver-status { margin-top:12px; }
+  .driver-route-head form { margin:16px 0; }
+  .delivery-item { align-items:flex-start; flex-wrap:wrap; }
+  .delivery-item .btn { width:100%; }
+}
+
 /* ──────────────── CARDS ──────────────── */
 .card {
   background: var(--bg-card);

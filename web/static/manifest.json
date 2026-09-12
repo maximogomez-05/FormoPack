@@ -1,0 +1,11 @@
+{
+  "name": "FormoPack Operacion del Chofer",
+  "short_name": "FormoPack",
+  "start_url": "/chofer",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#004481",
+  "lang": "es",
+  "description": "Operación móvil para choferes de FormoPack",
+  "icons": []
+}

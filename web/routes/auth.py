@@ -103,8 +103,7 @@ def dashboard():
     elif rol == "recepcionista":
         return redirect(url_for("recepcion.inicio"))
     elif rol == "chofer":
-        # Por ahora, chofer ve un mensaje simple hasta tener su módulo
-        return render_template("chofer_placeholder.html")
+        return redirect(url_for("chofer.panel"))
     return redirect(url_for("auth.login"))
 
 

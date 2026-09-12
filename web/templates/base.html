@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <title>{% block title %}FormoPack Express{% endblock %}</title>
   <!-- CSS Principal -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -55,6 +56,11 @@
       <a href="{{ url_for('admin.tracking_publico') }}" class="nav-link {% if request.endpoint == 'admin.tracking_publico' %}active{% endif %}">
         <i class="fa-solid fa-route nav-icon"></i> Seguimiento
       </a>
+      {% if session.rol == 'chofer' %}
+      <a href="{{ url_for('chofer.panel') }}" class="nav-link {% if request.endpoint == 'chofer.panel' %}active{% endif %}">
+        <i class="fa-solid fa-truck-fast nav-icon"></i> Mi operación
+      </a>
+      {% endif %}
     </nav>
 
     <div class="sidebar-footer">
@@ -71,9 +77,11 @@
     <div class="topbar">
       <div class="topbar-title">{% block page_title %}Sistema Logístico{% endblock %}</div>
       <div class="topbar-actions">
+        {% if session.rol in ['recepcionista', 'administrador'] %}
         <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-plus"></i> Nuevo Envío
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -96,5 +104,12 @@
 </div>
 
 {% block scripts %}{% endblock %}
+{% if session.rol == 'chofer' %}
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+}
+</script>
+{% endif %}
 </body>
 </html>

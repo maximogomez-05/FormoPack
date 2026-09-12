@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Operación del chofer — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-route"></i> Mi operación{% endblock %}
+
+{% block content %}
+<div class="driver-intro">
+  <div>
+    <span class="eyebrow">RF 4.1 / RF 4.2</span>
+    <h1>Entregas asignadas</h1>
+    <p>Iniciá tu ruta y registrá cada resultado con la evidencia correspondiente.</p>
+  </div>
+  <div class="driver-status" id="connection-status"><i class="fa-solid fa-wifi"></i> Conectado</div>
+</div>
+<div class="offline-banner" id="offline-banner" hidden>
+  <i class="fa-solid fa-cloud-arrow-down"></i>
+  <span>Sin conexión. Las entregas se guardarán en este dispositivo y se enviarán al recuperar Internet.</span>
+</div>
+<div class="queue-banner" id="queue-banner" hidden></div>
+
+{% if hojas %}
+  {% for hoja in hojas %}
+  <section class="driver-route card">
+    <div class="driver-route-head">
+      <div>
+        <span class="route-code">{{ hoja.nro_despacho }}</span>
+        <h2><i class="fa-solid fa-truck"></i> {{ hoja.patente }}</h2>
+        <p>Capacidad {{ hoja.capacidad_kg }} kg · Emitida {{ hoja.fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
+      </div>
+      {% if hoja.envios|selectattr('estado_actual', 'equalto', 'en_ruta')|list|length == 0 and hoja.envios|selectattr('estado_actual', 'equalto', 'en_planta')|list|length > 0 %}
+      <form method="POST" action="{{ url_for('chofer.iniciar_hoja', id_hoja_ruta=hoja.id_hoja_ruta) }}">
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i> Iniciar ruta</button>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="driver-deliveries">
+      {% for envio in hoja.envios %}
+      <article class="delivery-item {% if envio.estado_actual == 'entregado' %}delivery-done{% elif envio.estado_actual == 'fallido' %}delivery-failed{% endif %}">
+        <div class="delivery-order">{{ loop.index }}</div>
+        <div class="delivery-main">
+          <div class="delivery-meta"><strong>{{ envio.nro_guia }}</strong><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual|replace('_', ' ') }}</span></div>
+          <h3>{{ envio.localidad_destino }}</h3>
+          <p>{{ envio.direccion_destino }} · {{ envio.distancia_km|round(1) }} km</p>
+          {% if envio.tipo_intento %}<small>Último intento: {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}</small>{% endif %}
+        </div>
+        {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
+        <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
+        {% else %}
+        <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+{% else %}
+<section class="card empty-driver">
+  <i class="fa-solid fa-road"></i>
+  <h2>No tenés rutas asignadas</h2>
+  <p>Cuando administración cree una hoja de ruta con tu usuario, aparecerá aquí.</p>
+</section>
+{% endif %}
+
+<div class="modal-backdrop" id="entrega-modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="entrega-title">
+    <div class="modal-header"><div><span class="eyebrow">Prueba de entrega</span><h2 id="entrega-title">Resultado</h2></div><button type="button" class="icon-button" onclick="cerrarEntrega()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <form id="entrega-form" method="POST" enctype="multipart/form-data">
+      <div class="form-group">
+        <label class="form-label">Resultado</label>
+        <select name="tipo_intento" id="tipo-intento" class="form-control" required onchange="alternarCampos()">
+          <option value="entregado">Entrega exitosa</option>
+          <option value="fallido">Entrega fallida</option>
+        </select>
+      </div>
+      <div id="exito-fields">
+        <div class="form-group"><label class="form-label">DNI del receptor</label><input name="dni_receptor" class="form-control" inputmode="numeric" maxlength="15" placeholder="DNI de quien recibe"></div>
+        <div class="form-group"><label class="form-label">Firma del receptor</label><canvas id="firma-canvas" class="signature-pad" width="560" height="170"></canvas><input type="hidden" name="firma_receptor" id="firma-receptor"><button type="button" class="btn btn-secondary btn-sm" onclick="limpiarFirma()"><i class="fa-solid fa-eraser"></i> Limpiar firma</button></div>
+        <div class="form-group"><label class="form-label">Foto del remito</label><input type="file" name="foto_remito" class="form-control" accept="image/jpeg,image/png,image/webp" capture="environment"></div>
+      </div>
+      <div id="fallo-fields" hidden><div class="form-group"><label class="form-label">Motivo del fallo</label><select name="motivo_fallo" class="form-control"><option value="destinatario_ausente">Destinatario ausente</option><option value="domicilio_incorrecto">Domicilio incorrecto</option><option value="rechazo">Rechazo del envío</option><option value="otro">Otro</option></select></div></div>
+      <input type="hidden" name="coordenadas_gps" id="coordenadas-gps">
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="cerrarEntrega()">Cancelar</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entrega</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const modal = document.getElementById('entrega-modal');
+const canvas = document.getElementById('firma-canvas');
+const ctx = canvas.getContext('2d');
+let dibujando = false;
+const DB_NAME = 'formopack-offline';
+const STORE_NAME = 'entregas-pendientes';
+let dbPromise;
+
+function abrirBase() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return dbPromise;
+}
+function guardarPendiente(item) {
+  return abrirBase().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).add(item);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+function leerPendientes() {
+  return abrirBase().then(db => new Promise((resolve, reject) => {
+    const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  }));
+}
+function borrarPendiente(id) {
+  return abrirBase().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+function actualizarEstadoConexion() {
+  const offline = !navigator.onLine;
+  document.getElementById('offline-banner').hidden = !offline;
+  document.getElementById('connection-status').innerHTML = offline
+    ? '<i class="fa-solid fa-cloud-arrow-down"></i> Sin conexión'
+    : '<i class="fa-solid fa-wifi"></i> Conectado';
+  actualizarContador();
+}
+function actualizarContador() {
+  leerPendientes().then(items => {
+    const banner = document.getElementById('queue-banner');
+    banner.hidden = items.length === 0;
+    banner.innerHTML = `<i class="fa-solid fa-clock"></i> ${items.length} entrega(s) pendiente(s) de sincronización`;
+  }).catch(() => {});
+}
+async function sincronizarPendientes() {
+  if (!navigator.onLine) return;
+  const items = await leerPendientes();
+  for (const item of items) {
+    const form = new FormData();
+    Object.entries(item.fields).forEach(([key, value]) => form.append(key, value || ''));
+    if (item.photo) form.append('foto_remito', item.photo, item.photoName || 'remito.jpg');
+    try {
+      const response = await fetch(item.action, { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-Offline-Sync': '1' } });
+      if (response.ok) await borrarPendiente(item.id);
+    } catch (error) {
+      break;
+    }
+  }
+  actualizarContador();
+}
+async function enviarEntrega(form) {
+  const data = new FormData(form);
+  const fields = {};
+  for (const [key, value] of data.entries()) {
+    if (key !== 'foto_remito') fields[key] = value;
+  }
+  const photo = data.get('foto_remito');
+  const item = { action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString() };
+  try {
+    if (!navigator.onLine) throw new Error('offline');
+    const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin' });
+    if (!response.ok) throw new Error('server');
+    window.location.reload();
+  } catch (error) {
+    await guardarPendiente(item);
+    cerrarEntrega();
+    actualizarContador();
+    alert('Sin conexión: la entrega quedó guardada y se enviará automáticamente al volver Internet.');
+  }
+}
+function abrirEntrega(hoja, envio, guia) { document.getElementById('entrega-title').textContent = `Resultado · ${guia}`; document.getElementById('entrega-form').action = `/chofer/hojas/${hoja}/envios/${envio}/entrega`; modal.hidden = false; obtenerUbicacion(); }
+function cerrarEntrega() { modal.hidden = true; }
+function alternarCampos() { const ok = document.getElementById('tipo-intento').value === 'entregado'; document.getElementById('exito-fields').hidden = !ok; document.getElementById('fallo-fields').hidden = ok; }
+function obtenerUbicacion() { if (!navigator.geolocation) return; navigator.geolocation.getCurrentPosition(p => { document.getElementById('coordenadas-gps').value = `${p.coords.latitude},${p.coords.longitude}`; }, () => {}); }
+function limpiarFirma() { ctx.clearRect(0, 0, canvas.width, canvas.height); document.getElementById('firma-receptor').value = ''; }
+function posicion(e) { const r = canvas.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return {x: (t.clientX-r.left) * canvas.width/r.width, y: (t.clientY-r.top) * canvas.height/r.height}; }
+function comenzar(e) { dibujando = true; const p = posicion(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+function dibujar(e) { if (!dibujando) return; const p = posicion(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+function terminar() { if (!dibujando) return; dibujando = false; document.getElementById('firma-receptor').value = canvas.toDataURL('image/png'); }
+ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#123b61';
+canvas.addEventListener('pointerdown', comenzar); canvas.addEventListener('pointermove', dibujar); canvas.addEventListener('pointerup', terminar); canvas.addEventListener('pointerleave', terminar);
+document.getElementById('entrega-form').addEventListener('submit', event => { event.preventDefault(); enviarEntrega(event.currentTarget); });
+window.addEventListener('online', sincronizarPendientes);
+window.addEventListener('offline', actualizarEstadoConexion);
+actualizarEstadoConexion();
+sincronizarPendientes();
+</script>
+{% endblock %}
