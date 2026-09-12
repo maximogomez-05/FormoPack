@@ -1,25 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Nuevo Cliente{% endblock %}
-{% block page_title %}➕ Registrar Cliente{% endblock %}
+{% block page_title %}<i class="fa-solid fa-user-plus"></i> Registrar Cliente{% endblock %}
 {% block content %}
 <div style="max-width:500px;">
   <div class="card">
-    <form method="POST">
+    <form method="POST" novalidate>
       <div class="form-group">
-        <label class="form-label">DNI *</label>
-        <input type="text" name="dni" class="form-control" placeholder="Ej: 30123456" required maxlength="15">
+        <label class="form-label">Documento (DNI / CUIT) *</label>
+        <input type="text" name="dni" class="form-control"
+               placeholder="Solo números, sin puntos ni guiones"
+               required maxlength="15" minlength="7"
+               pattern="\d{7,15}"
+               title="Solo dígitos, entre 7 y 15 caracteres, sin puntos ni guiones">
+        <small style="color:var(--text-muted);font-size:11px;">DNI (7-8 dígitos) o CUIT (11 dígitos).</small>
       </div>
       <div class="form-group">
-        <label class="form-label">Nombre Completo *</label>
-        <input type="text" name="nombre_completo" class="form-control" placeholder="Nombre y Apellido" required>
+        <label class="form-label">Nombre Completo / Razón Social *</label>
+        <input type="text" name="nombre_completo" class="form-control"
+               placeholder="Apellido y Nombre"
+               required maxlength="100" minlength="3"
+               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+"
+               title="Solo letras, espacios y guiones. Sin números ni símbolos.">
       </div>
       <div class="form-group">
-        <label class="form-label">Teléfono *</label>
-        <input type="text" name="telefono" class="form-control" placeholder="3704 XXXXXX" required>
+        <label class="form-label">Teléfono de Contacto *</label>
+        <input type="tel" name="telefono" class="form-control"
+               placeholder="Ej: 3704 123456"
+               required maxlength="20" minlength="6">
+        <small style="color:var(--text-muted);font-size:11px;">Sin guiones ni paréntesis. Solo números.</small>
       </div>
-      <div style="display:flex;gap:12px;margin-top:8px;">
-        <a href="{{ url_for('recepcion.listar_clientes') }}" class="btn btn-secondary">← Volver</a>
-        <button type="submit" class="btn btn-primary">✅ Registrar</button>
+      <div style="display:flex;gap:12px;margin-top:16px;">
+        <a href="{{ url_for('recepcion.listar_clientes') }}" class="btn btn-secondary">
+          <i class="fa-solid fa-arrow-left"></i> Volver
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-check"></i> Registrar Cliente
+        </button>
       </div>
     </form>
   </div>

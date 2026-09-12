@@ -14,17 +14,23 @@
         <label class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="rem_dni" id="rem_dni" class="form-control"
-                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+                 placeholder="Solo números, sin puntos" required
+                 maxlength="15" minlength="7"
+                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
-        <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required>
+        <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required
+               maxlength="100" minlength="3"
+               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
-        <input type="text" name="rem_telefono" id="rem_telefono" class="form-control" required>
+        <input type="tel" name="rem_telefono" id="rem_telefono" class="form-control" required
+               maxlength="20" minlength="6"
+               placeholder="Ej: 3704 123456">
       </div>
     </div>
 
@@ -34,17 +40,23 @@
         <label class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="dest_dni" id="dest_dni" class="form-control"
-                 placeholder="Ingrese documento sin puntos" required maxlength="15">
+                 placeholder="Solo números, sin puntos" required
+                 maxlength="15" minlength="7"
+                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
-        <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required>
+        <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required
+               maxlength="100" minlength="3"
+               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
-        <input type="text" name="dest_telefono" id="dest_telefono" class="form-control" required>
+        <input type="tel" name="dest_telefono" id="dest_telefono" class="form-control" required
+               maxlength="20" minlength="6"
+               placeholder="Ej: 3704 123456">
       </div>
     </div>
   </div>
@@ -182,5 +194,48 @@ async function buscarCliente(prefix) {
     }
   } catch(e) { console.error(e); }
 }
+
+// Pre-llenar campos desde los parámetros enviados por el cotizador
+(function preCargarDesdeCotizador() {
+  const p = new URLSearchParams(window.location.search);
+  if (!p.has('id_localidad') && !p.has('peso_real')) return; // Nada que pre-cargar
+
+  // Localidad y campos simples
+  const sel = document.querySelector('[name="id_localidad_destino"]');
+  if (sel && p.get('id_localidad')) sel.value = p.get('id_localidad');
+
+  const vd = document.querySelector('[name="valor_declarado"]');
+  if (vd && p.get('valor_declarado') && p.get('valor_declarado') !== '0') vd.value = p.get('valor_declarado');
+
+  const seg = document.querySelector('[name="id_seguro"]');
+  if (seg && p.get('id_seguro')) seg.value = p.get('id_seguro');
+
+  // Bultos (pueden ser varios)
+  const pesosReales = p.getAll('peso_real');
+  const pesosVol = p.getAll('peso_vol');
+  const fragiles = p.getAll('es_fragil').filter(v => v !== '').map(Number);
+
+  if (pesosReales.length === 0) return;
+
+  // Pre-llenar el primer bulto que ya existe en el DOM
+  const primerBulto = document.querySelector('#b-1');
+  if (primerBulto && pesosReales[0] && pesosReales[0] !== '0') {
+    primerBulto.querySelector('[name="peso_real[]"]').value = pesosReales[0];
+    primerBulto.querySelector('[name="peso_volumetrico[]"]').value = pesosVol[0] || '0';
+    primerBulto.querySelector('[name="es_fragil[]"]').checked = fragiles.includes(0);
+  }
+
+  // Crear bultos adicionales si hay más de uno
+  for (let i = 1; i < pesosReales.length; i++) {
+    agregarBulto();
+    const nuevosBultos = document.querySelectorAll('.bulto-item');
+    const b = nuevosBultos[i];
+    if (b && pesosReales[i] && pesosReales[i] !== '0') {
+      b.querySelector('[name="peso_real[]"]').value = pesosReales[i];
+      b.querySelector('[name="peso_volumetrico[]"]').value = pesosVol[i] || '0';
+      b.querySelector('[name="es_fragil[]"]').checked = fragiles.includes(i);
+    }
+  }
+})();
 </script>
 {% endblock %}
