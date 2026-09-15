@@ -13,6 +13,60 @@
     .tracking-logo { font-size: 32px; color: var(--primary); }
     .tracking-title { font-size: 20px; font-weight: 700; margin-top: 12px; color: var(--text-main); }
     .tracking-sub { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+    
+    .search-input {
+        padding: 15px 20px;
+        font-size: 16px;
+        border-radius: 8px;
+        border: 2px solid var(--border);
+    }
+    .search-input:focus {
+        border-color: var(--primary);
+        outline: none;
+    }
+    .btn-search {
+        padding: 15px 25px;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
+    .timeline {
+        border-left: 2px solid var(--border);
+        margin-left: 20px;
+        padding-left: 25px;
+        position: relative;
+    }
+    .timeline-item {
+        position: relative;
+        margin-bottom: 25px;
+    }
+    .timeline-item:last-child {
+        margin-bottom: 0;
+    }
+    .timeline-icon {
+        position: absolute;
+        left: -42px;
+        top: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: white;
+        border: 2px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        z-index: 1;
+        font-size: 14px;
+    }
+    .timeline-item.current .timeline-icon {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: #e9ecef;
+    }
+    .icon-entregado { color: #198754 !important; border-color: #198754 !important; background: #e8f5e9 !important; }
+    .icon-fallido { color: #dc3545 !important; border-color: #dc3545 !important; background: #ffebee !important; }
+    
   </style>
 </head>
 <body>
@@ -25,14 +79,15 @@
   </div>
 
   <!-- Buscador -->
-  <div class="card" style="margin-bottom:24px;">
+  <div class="card" style="margin-bottom:24px; padding: 20px;">
     <form method="GET" action="{{ url_for('admin.tracking_publico') }}">
-      <div style="display:flex;gap:12px;">
-        <input type="text" name="guia" class="form-control"
-               placeholder="Ingrese identificador de guía (Ej: FPX-2026...)"
+      <div style="display:flex;gap:12px; align-items: stretch; flex-wrap: wrap;">
+        <input type="text" name="guia" class="form-control search-input"
+               placeholder="🔍 Ingrese su número de seguimiento (Ej: FPX-2026...)"
+               style="flex: 1; min-width: 250px;"
                value="{{ nro_guia or '' }}" required>
-        <button type="submit" class="btn btn-primary">
-          <i class="fa-solid fa-magnifying-glass"></i> Consultar
+        <button type="submit" class="btn btn-primary btn-search">
+          Consultar Envío
         </button>
       </div>
     </form>
@@ -47,12 +102,23 @@
     <div style="text-align:center;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:16px;">
       <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Guía Localizada</div>
       <div style="font-size:24px;font-weight:700;color:var(--primary);">{{ envio.nro_guia }}</div>
-      <div class="mt-2">
-        <span class="badge badge-{{ envio.estado_actual }}" style="font-size:11px;padding:6px 12px;">
-          ESTADO: {{ envio.estado_actual | upper }}
-        </span>
-      </div>
     </div>
+
+    {% if envio.estado_actual == 'entregado' %}
+    <div class="alert alert-success" style="background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; padding: 15px; border-radius: 8px; margin-bottom: 24px;">
+        <i class="fa-solid fa-circle-check"></i> <strong>Entregado exitosamente</strong>
+        {% if timeline %}
+            el {{ timeline[-1].fecha_hora.strftime('%d/%m/%Y %H:%M') if timeline[-1].fecha_hora and timeline[-1].fecha_hora.strftime is defined else timeline[-1].fecha_hora }}
+        {% endif %}
+    </div>
+    {% elif envio.estado_actual == 'fallido' %}
+    <div class="alert alert-danger" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; padding: 15px; border-radius: 8px; margin-bottom: 24px;">
+        <i class="fa-solid fa-circle-xmark"></i> <strong>Intento de entrega fallido:</strong>
+        {% if timeline %}
+            {{ timeline[-1].observacion or 'Sin observaciones registradas.' }}
+        {% endif %}
+    </div>
+    {% endif %}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
       <div>
@@ -62,6 +128,7 @@
       <div>
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-right-to-bracket"></i> Destino (Receptor)</div>
         <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.destinatario }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">{{ envio.direccion_destino or '' }}</div>
         <div style="font-size:12px;color:var(--text-muted);">{{ envio.localidad_destino }}</div>
       </div>
     </div>
@@ -74,17 +141,37 @@
     </div>
     <div class="timeline">
       {% for t in timeline %}
-      <div class="timeline-item">
-        <div class="timeline-dot {% if loop.last %}done{% endif %}"></div>
+      {% set is_last = loop.last %}
+      <div class="timeline-item {% if is_last %}current{% endif %}">
+        <div class="timeline-icon 
+            {% if t.estado == 'entregado' %}icon-entregado
+            {% elif t.estado == 'fallido' %}icon-fallido
+            {% endif %}">
+            {% if t.estado == 'recibido' %}
+                <i class="fa-solid fa-box"></i>
+            {% elif t.estado == 'en_planta' %}
+                <i class="fa-solid fa-warehouse"></i>
+            {% elif t.estado == 'en_ruta' %}
+                <i class="fa-solid fa-truck"></i>
+            {% elif t.estado == 'entregado' %}
+                <i class="fa-solid fa-circle-check"></i>
+            {% elif t.estado == 'fallido' %}
+                <i class="fa-solid fa-circle-xmark"></i>
+            {% else %}
+                <i class="fa-solid fa-circle"></i>
+            {% endif %}
+        </div>
         <div class="timeline-date">
           {{ t.fecha_hora.strftime('%d/%m/%Y %H:%M') if t.fecha_hora and t.fecha_hora.strftime is defined else t.fecha_hora }}
           {% if t.ubicacion %} | Sucursal/Punto: {{ t.ubicacion }}{% endif %}
         </div>
-        <div class="timeline-estado">
-          {{ t.estado | upper }}
+        <div class="timeline-estado" style="font-weight: bold;">
+          {{ t.estado | replace('_', ' ') | upper }}
         </div>
         {% if t.observacion %}
-        <div class="timeline-obs">{{ t.observacion }}</div>
+        <div class="timeline-obs" style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">
+            {{ t.observacion }}
+        </div>
         {% endif %}
       </div>
       {% endfor %}

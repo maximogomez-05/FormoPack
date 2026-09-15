@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Gestión de Usuarios — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-users"></i> Gestión de Usuarios{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card-title">Listado de Usuarios</span>
+        <button class="btn btn-primary" onclick="document.getElementById('modalNuevoUsuario').style.display='block'">
+            <i class="fa-solid fa-user-plus"></i> Nuevo Usuario
+        </button>
+    </div>
+</div>
+
+<!-- Modal para Nuevo Usuario -->
+<div id="modalNuevoUsuario" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+    <div class="modal-content card" style="background-color: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="card-title">Crear Nuevo Usuario</span>
+            <span style="cursor: pointer; font-size: 1.5rem;" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">&times;</span>
+        </div>
+        <form method="POST" action="{{ url_for('admin.crear_usuario') }}" style="margin-top: 15px;">
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" name="nombre" class="form-control" required>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Email</label>
+                <input type="email" name="email" class="form-control" required>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Rol / Tipo de Usuario</label>
+                <select name="tipo_usuario" class="form-control" required>
+                    <option value="administrador">Administrador</option>
+                    <option value="recepcionista">Recepcionista</option>
+                    <option value="chofer">Chofer</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Contraseña</label>
+                <input type="password" name="password" class="form-control" minlength="8" placeholder="Mín. 8 caracteres" required>
+            </div>
+            <div style="margin-top: 20px; text-align: right;">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">Cancelar</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="usuarios-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+    {% for u in usuarios %}
+    <div class="card" style="display: flex; flex-direction: column; align-items: center; padding: 20px; text-align: center;">
+        <div class="avatar-circle" style="width: 60px; height: 60px; border-radius: 50%; background-color: var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">
+            {{ u.nombre[0]|upper }}
+        </div>
+        <h3 style="margin: 0; font-size: 1.2rem;">{{ u.nombre }}</h3>
+        <p style="color: var(--text-muted); margin: 5px 0 15px 0;">{{ u.email }}</p>
+        
+        <div style="margin-bottom: 10px;">
+            {% if u.tipo_usuario == 'administrador' %}
+            <span class="badge" style="background-color: #dc3545; color: white;">Administrador</span>
+            {% elif u.tipo_usuario == 'recepcionista' %}
+            <span class="badge" style="background-color: #0d6efd; color: white;">Recepcionista</span>
+            {% elif u.tipo_usuario == 'chofer' %}
+            <span class="badge" style="background-color: #198754; color: white;">Chofer</span>
+            {% else %}
+            <span class="badge" style="background-color: #6c757d; color: white;">{{ u.tipo_usuario }}</span>
+            {% endif %}
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            {% if u.activo %}
+            <span class="badge" style="background-color: #198754; color: white;">Activo</span>
+            {% else %}
+            <span class="badge" style="background-color: #dc3545; color: white;">Inactivo</span>
+            {% endif %}
+        </div>
+        
+        <form method="POST" action="{{ url_for('admin.toggle_usuario', id_usuario=u.id_usuario) }}" style="margin-top: auto; width: 100%;">
+            {% if u.id_usuario == session.usuario_id %}
+            <button type="submit" class="btn btn-secondary" style="width: 100%;" disabled>
+                {{ 'Desactivar' if u.activo else 'Activar' }}
+            </button>
+            {% else %}
+            <button type="submit" class="btn {{ 'btn-danger' if u.activo else 'btn-success' }}" style="width: 100%;">
+                {{ 'Desactivar' if u.activo else 'Activar' }}
+            </button>
+            {% endif %}
+        </form>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Cerrar modal al hacer click fuera -->
+<script>
+window.onclick = function(event) {
+    var modal = document.getElementById('modalNuevoUsuario');
+    if (event.target == modal) {
+        modal.style.display = "none";
+    }
+}
+</script>
+{% endblock %}
