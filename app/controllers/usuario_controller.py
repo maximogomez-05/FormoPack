@@ -12,8 +12,8 @@ class UsuarioController:
             conn = db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT id_usuario, nombre, email, tipo_usuario, activo, fecha_creacion 
-                FROM usuarios 
+                SELECT id_usuario, nombre, email, tipo_usuario, activo
+                FROM usuarios
                 ORDER BY tipo_usuario, nombre
             """)
             usuarios = cursor.fetchall()
@@ -48,7 +48,7 @@ class UsuarioController:
             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
             cursor.execute("""
-                INSERT INTO usuarios (nombre, email, tipo_usuario, password, activo)
+                INSERT INTO usuarios (nombre, email, tipo_usuario, credenciales_hash, activo)
                 VALUES (%s, %s, %s, %s, 1)
             """, (nombre.strip(), email.strip(), tipo_usuario, hashed_password))
             conn.commit()
