@@ -94,11 +94,32 @@
 
 <!-- Cerrar modal al hacer click fuera -->
 <script>
+// Cerrar modal al hacer click en el fondo
 window.onclick = function(event) {
-    var modal = document.getElementById('modalNuevoUsuario');
-    if (event.target == modal) {
-        modal.style.display = "none";
-    }
+  var modal = document.getElementById('modalNuevoUsuario');
+  if (event.target == modal) modal.style.display = 'none';
 }
+
+// Si la página se cargó con errores (flash danger), reabrir el modal automáticamente
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      {% if cat == 'danger' %}
+        document.addEventListener('DOMContentLoaded', function() {
+          document.getElementById('modalNuevoUsuario').style.display = 'block';
+        });
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+// Confirmación antes de desactivar un usuario activo
+document.querySelectorAll('.btn-danger[type=submit]').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    if (!confirm('¿Seguro que querés desactivar este usuario? No podrá iniciar sesión hasta que lo actives nuevamente.')) {
+      e.preventDefault();
+    }
+  });
+});
 </script>
 {% endblock %}

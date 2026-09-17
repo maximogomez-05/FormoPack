@@ -12,21 +12,24 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--bg-body);
+      background: linear-gradient(135deg, #0a192f 0%, #004481 60%, #0a2a4a 100%);
     }
     .login-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      background: #fff;
+      border-radius: 12px;
       padding: 48px 40px;
       width: 100%;
       max-width: 400px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
     }
     .login-logo { text-align: center; margin-bottom: 32px; }
-    .login-logo-icon { font-size: 40px; color: var(--primary); }
-    .login-logo-name { font-size: 20px; font-weight: 700; margin-top: 12px; color: var(--text-main); }
-    .login-logo-sub { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+    .login-logo-icon { font-size: 44px; color: var(--primary); }
+    .login-logo-name { font-size: 22px; font-weight: 800; margin-top: 12px; color: var(--text-main); letter-spacing: 0.5px; }
+    .login-logo-sub { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+    .login-divider { border:none; border-top:1px solid var(--border); margin: 24px 0; }
+    .login-footer { text-align:center; margin-top:24px; font-size:12px; color:var(--text-muted); }
+    .login-footer a { color: var(--primary); text-decoration:none; }
+    .login-footer a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -60,11 +63,20 @@
         <input type="password" name="password" class="form-control" required>
       </div>
 
-      <button type="submit" class="btn btn-primary w-100 mt-2">
+      <button type="submit" class="btn btn-primary w-100 mt-2" style="padding:12px;">
         Ingresar al Sistema <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i>
       </button>
     </form>
+
+    <hr class="login-divider">
+    <div class="login-footer">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <a href="{{ url_for('admin.tracking_publico') }}">Consultar estado de un envío</a>
+      <br><br>
+      <span>FormoPack Express &copy; <span id="yr"></span></span>
+    </div>
   </div>
 </div>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
 </body>
 </html>
