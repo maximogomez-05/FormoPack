@@ -4,6 +4,8 @@
 **Proyecto:** FormoPack Express  
 **Alcance:** analisis del codigo, puesta en marcha, cambios de RF 3.0 a RF 3.3 y comparacion con diagramas.
 
+Para una explicacion completa de los tipos de diagramas UML, sus elementos, relaciones y criterios de uso, consultar [INFORME_UML.md](INFORME_UML.md).
+
 ## 1. Resumen ejecutivo
 
 FormoPack Express es una aplicacion web Flask para gestionar recepcion, cotizacion, clientes, envios, pagos, caja, tracking y logistica. Utiliza MySQL como base de datos y una organizacion modular cercana al patron MVC:
@@ -304,81 +306,167 @@ La forma correcta de explicarlo es:
 
 Con esa aclaracion, el codigo y los diagramas quedan alineados como arquitectura por etapas y se evita afirmar que una funcionalidad futura ya esta operativa.
 
-## 10. Implementacion de RF 4.1 y RF 4.2
+## 10.
 
-Se incorporo un modulo responsive para el chofer en `/chofer`:
 
-- Solo muestra hojas de ruta asignadas al usuario autenticado.
-- Ordena las entregas por distancia.
-- Permite iniciar una ruta y pasar sus envios a `en_ruta`.
-- Registra cada cambio en `historial_estados`.
-- Permite informar una entrega exitosa o fallida.
-- Para una entrega exitosa solicita DNI y firma del receptor.
-- Permite adjuntar foto del remito desde el celular.
-- Solicita coordenadas GPS usando la API de geolocalizacion del navegador.
-- Guarda la evidencia en `intentos_entrega` dentro de una transaccion.
-- Verifica que el envio pertenezca a una hoja asignada al chofer.
-- Permite reintentar una entrega fallida, pero no modificar una entrega exitosa.
-- Valida extensiones de imagen y limita el cuerpo de subida a 5 MB.
 
-RF 4.3 incorpora un service worker, cache del panel del chofer, cola IndexedDB para entregas con firma/foto/GPS y sincronizacion automatica. El inicio de ruta continua requiriendo conexion y la resolucion avanzada de conflictos queda pendiente.
 
-## 11. Implementacion de RF 4.3
 
-- `web/static/service-worker.js` cachea recursos estaticos y la ultima pantalla `/chofer` disponible.
-- Las entregas pendientes se guardan en IndexedDB cuando el dispositivo esta offline o falla la red.
-- La cola conserva campos, firma, coordenadas y foto del remito.
-- Al recuperar Internet, el navegador reintenta cada entrega con `X-Offline-Sync`.
-- El backend responde explicitamente si la sincronizacion fue aceptada o rechazada.
-- Una entrega rechazada permanece en la cola para evitar perdida de datos.
-- La interfaz muestra estado online/offline y cantidad de entregas pendientes.
-- `manifest.json` y el registro desde `/service-worker.js` permiten instalar el panel como PWA.
 
-Limitaciones conocidas: el primer acceso debe hacerse online, el inicio de ruta no se encola, y la cola depende del almacenamiento del navegador/dispositivo.
 
-## 12. Resumen completo de archivos y cambios
 
-### Archivos creados
 
-| Archivo | Que se incorporo |
-|---|---|
-| `app/controllers/chofer_controller.py` | Panel del chofer, inicio de ruta, autorizacion por hoja, registro transaccional de POD, historial y validaciones. |
-| `web/routes/chofer.py` | Endpoints protegidos para panel, iniciar hoja y registrar entrega; subida segura de fotos y respuestas especiales para sincronizacion. |
-| `web/templates/chofer/panel.html` | Interfaz responsive de rutas, entregas, modal de POD, captura de firma, foto y GPS, cola offline y estado de conexion. |
-| `web/static/service-worker.js` | Cache de recursos y ultima vista del chofer mediante estrategia network-first/cache-first. |
-| `web/static/manifest.json` | Configuracion instalable de la PWA. |
 
-### Archivos modificados
 
-| Archivo | Cambio aplicado |
-|---|---|
-| `web/app.py` | Registro del blueprint del chofer, directorio de evidencias, limite de 5 MB y endpoint raiz `/service-worker.js` para controlar `/chofer`. |
-| `web/routes/auth.py` | Redireccion del rol chofer al panel operativo real. |
-| `web/templates/base.html` | Manifest, registro del service worker y navegacion condicionada por rol. |
-| `web/static/css/style.css` | Estilos responsive del panel, entregas, modal, firma, banners offline y estados visuales. |
-| `INFORME_GENERAL_CODIGO_Y_DIAGRAMAS.md` | Documentacion acumulada de arquitectura, requerimientos, diagramas y RF 4.1 a RF 4.3. |
 
-### Funcionalidad aplicada para que funcione
 
-1. El usuario inicia sesion como chofer y Flask guarda su `usuario_id` en la sesion.
-2. El controlador consulta solamente las hojas donde `hojas_de_ruta.id_chofer` coincide con el usuario autenticado.
-3. Al iniciar una hoja, los envios pasan a `en_ruta` y se insertan registros en `historial_estados`.
-4. Al confirmar una entrega, el backend valida que el envio pertenezca a la hoja y al chofer.
-5. La evidencia se guarda en `intentos_entrega`: tipo, DNI, firma, foto, coordenadas y motivo de fallo.
-6. El envio pasa a `entregado` o `fallido` dentro de la misma transaccion.
-7. Una entrega fallida puede reintentarse; una entrega exitosa queda cerrada.
-8. Si no hay internet, JavaScript guarda el formulario y la foto en IndexedDB.
-9. Al recuperar conectividad, la cola reenvia cada entrega al endpoint protegido.
-10. El backend responde `ok: true` solo cuando la evidencia se guardo; si rechaza la operacion, la cola la conserva.
 
-### Validaciones ejecutadas
 
-- `py_compile` sobre los modulos nuevos y modificados: correcto.
-- Carga de Flask y registro de rutas del chofer: correcto.
-- `/service-worker.js` servido desde la raiz: HTTP 200 y JavaScript disponible.
-- `manifest.json`: JSON valido.
-- `main.py`: pruebas existentes de bcrypt, roles, validacion y conexion ejecutadas correctamente.
-- `/chofer` sin sesion: redirige correctamente a `/login`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### Limitaciones que permanecen
 

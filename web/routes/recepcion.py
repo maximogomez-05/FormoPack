@@ -25,6 +25,7 @@ from app.services.cotizador import Cotizador
 from app.models.bulto import Bulto
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
+from app.models.pago import PagoDigital
 
 recepcion_bp = Blueprint("recepcion", __name__)
 logger = logging.getLogger(__name__)
@@ -247,6 +248,26 @@ def cobrar_envio(nro_guia: str):
             monto_entregado = 0.0
         billetera = request.form.get("billetera_virtual", "MercadoPago")
 
+        if tipo_pago == "digital":
+            qr_id = request.form.get("id_transaccion_qr") or request.form.get("qr_id")
+            if not qr_id:
+                flash("Para pagos digitales debe generarse o registrar un identificador QR válido.", "warning")
+                return render_template(
+                    "recepcion/cobro.html",
+                    envio=envio,
+                    qr_base64=qr_base64,
+                )
+
+            try:
+                PagoDigital(id_pago=0, id_envio=envio.id_envio, monto=monto, billetera_virtual=billetera).validar_qr(qr_id)
+            except ValueError as exc:
+                flash(str(exc), "warning")
+                return render_template(
+                    "recepcion/cobro.html",
+                    envio=envio,
+                    qr_base64=qr_base64,
+                )
+
         try:
             envio_ctrl.registrar_pago(
                 id_envio=envio.id_envio,
@@ -254,6 +275,7 @@ def cobrar_envio(nro_guia: str):
                 tipo_pago=tipo_pago,
                 monto_entregado=monto_entregado if tipo_pago == "efectivo" else 0,
                 billetera_virtual=billetera if tipo_pago == "digital" else None,
+                id_transaccion_qr=(request.form.get("id_transaccion_qr") or request.form.get("qr_id")) if tipo_pago == "digital" else None,
             )
             flash(f"✅ Pago registrado correctamente. Guía: {nro_guia}", "success")
             return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))

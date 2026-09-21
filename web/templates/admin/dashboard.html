@@ -9,10 +9,20 @@
     <div class="metric-value">{{ metricas.total_envios }}</div>
     <div class="metric-label">Envíos Registrados (Hoy)</div>
   </div>
+  <div class="metric-card blue">
+    <i class="fa-solid fa-route metric-icon"></i>
+    <div class="metric-value">{{ metricas.en_ruta }}</div>
+    <div class="metric-label">En Ruta</div>
+  </div>
   <div class="metric-card green">
     <i class="fa-solid fa-check-double metric-icon"></i>
     <div class="metric-value">{{ metricas.entregados }}</div>
     <div class="metric-label">Envíos Entregados (Hoy)</div>
+  </div>
+  <div class="metric-card yellow">
+    <i class="fa-solid fa-triangle-exclamation metric-icon"></i>
+    <div class="metric-value">{{ metricas.fallidos }}</div>
+    <div class="metric-label">Entregas Fallidas</div>
   </div>
   <div class="metric-card">
     <i class="fa-solid fa-file-invoice-dollar metric-icon"></i>

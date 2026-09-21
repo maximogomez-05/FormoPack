@@ -147,6 +147,7 @@ def tracking_publico():
     if nro_guia:
         try:
             envio, timeline = _obtener_timeline(nro_guia)
+            timeline = construir_timeline(envio, timeline)
             if not envio:
                 error = f"No se encontró ningún envío con la guía '{nro_guia}'."
         except DatabaseConnectionError:
@@ -180,7 +181,9 @@ def _obtener_metricas() -> dict:
                 COUNT(*) AS total_envios,
                 COALESCE(SUM(costo_total), 0) AS facturado_total,
                 SUM(CASE WHEN estado_actual = 'recibido' THEN 1 ELSE 0 END) AS recibidos,
-                SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END) AS entregados
+                SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END) AS entregados,
+                SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END) AS fallidos,
+                SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END) AS en_ruta
             FROM envios
             WHERE DATE(fecha_creacion) = CURDATE()
         """)
@@ -205,6 +208,8 @@ def _obtener_metricas() -> dict:
             "facturado_total": float(metricas.get("facturado_total", 0)),
             "recibidos": int(metricas.get("recibidos", 0)),
             "entregados": int(metricas.get("entregados", 0)),
+            "fallidos": int(metricas.get("fallidos", 0)),
+            "en_ruta": int(metricas.get("en_ruta", 0)),
             "efectivo_hoy": float(caja.get("efectivo_hoy", 0)),
             "digital_hoy": float(caja.get("digital_hoy", 0)),
             "pagos_hoy": int(caja.get("pagos_hoy", 0)),
@@ -213,7 +218,7 @@ def _obtener_metricas() -> dict:
         logger.error("Error al obtener métricas: %s", e)
         return {
             "total_envios": 0, "facturado_total": 0,
-            "recibidos": 0, "entregados": 0,
+            "recibidos": 0, "entregados": 0, "fallidos": 0, "en_ruta": 0,
             "efectivo_hoy": 0, "digital_hoy": 0, "pagos_hoy": 0,
         }
 
@@ -248,6 +253,35 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
     except Exception as e:
         logger.error("Error al obtener envíos: %s", e)
         return []
+
+
+def construir_timeline(envio: dict | None, historial: list[dict]) -> list[dict]:
+    """Normaliza el historial para mostrar un timeline consistente en tracking público."""
+    if not envio:
+        return []
+
+    eventos = []
+    for item in historial or []:
+        fecha_hora = item.get("fecha_hora") or item.get("fecha")
+        if fecha_hora is None:
+            continue
+        eventos.append({
+            "estado": str(item.get("estado") or envio.get("estado_actual") or "recibido").lower(),
+            "fecha_hora": fecha_hora,
+            "ubicacion": item.get("ubicacion") or "Sucursal Origen",
+            "observacion": item.get("observacion") or "Movimiento registrado en sistema.",
+        })
+
+    if not eventos:
+        eventos.append({
+            "estado": str(envio.get("estado_actual") or "recibido").lower(),
+            "fecha_hora": envio.get("fecha_creacion") or "2000-01-01 00:00:00",
+            "ubicacion": "Sucursal Origen",
+            "observacion": "Envío registrado en sistema.",
+        })
+
+    eventos.sort(key=lambda item: str(item["fecha_hora"]))
+    return eventos
 
 
 def _obtener_timeline(nro_guia: str):

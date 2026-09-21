@@ -168,6 +168,21 @@ class PagoDigital(Pago):
         self._id_transaccion_qr = f"QR-{uuid.uuid4().hex[:12].upper()}"
         return self._id_transaccion_qr
 
+    def validar_qr(self, qr_value: str | None) -> bool:
+        """Valida que un identificador QR tenga el formato esperado."""
+        if not qr_value or not isinstance(qr_value, str):
+            raise ValueError("El identificador de pago digital es obligatorio.")
+
+        normalized = qr_value.strip()
+        if not normalized.startswith("QR-"):
+            raise ValueError("El identificador QR no tiene el formato correcto.")
+
+        suffix = normalized[3:]
+        if len(suffix) < 12 or not all(ch.isalnum() for ch in suffix):
+            raise ValueError("El identificador QR no tiene el formato correcto.")
+
+        return True
+
     def to_dict(self) -> dict:
         """Serializa incluyendo datos de transacción digital."""
         data = super().to_dict()
