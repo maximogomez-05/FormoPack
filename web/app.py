@@ -77,6 +77,56 @@ def create_app() -> Flask:
         response.headers["X-XSS-Protection"] = "1; mode=block"
         return response
 
+    # ──────────────────────────────────────────
+    # Handlers de error — páginas amigables
+    # ──────────────────────────────────────────
+    from flask import render_template_string
+
+    _ERROR_PAGE = """
+    <!DOCTYPE html><html lang="es"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Error {{ code }} — FormoPack</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+      body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-body,#f4f6f9);}
+      .err-card{background:#fff;border-radius:12px;padding:48px 40px;text-align:center;max-width:440px;box-shadow:0 4px 20px rgba(0,0,0,0.08);}
+      .err-code{font-size:72px;font-weight:800;color:#004481;line-height:1;}
+      .err-title{font-size:20px;font-weight:700;margin:12px 0 8px;color:#333;}
+      .err-msg{color:#6c757d;font-size:14px;margin-bottom:24px;}
+      .btn-back{background:#004481;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;}
+    </style></head><body>
+    <div class="err-card">
+      <div class="err-code">{{ code }}</div>
+      <div class="err-title">{{ title }}</div>
+      <div class="err-msg">{{ message }}</div>
+      <a href="/" class="btn-back"><i class="fa-solid fa-house"></i> Volver al inicio</a>
+    </div></body></html>"""
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template_string(_ERROR_PAGE,
+            code=404, title="Página no encontrada",
+            message="La dirección que buscás no existe en el sistema."), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template_string(_ERROR_PAGE,
+            code=403, title="Acceso denegado",
+            message="No tenés permisos para acceder a esta sección."), 403
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return render_template_string(_ERROR_PAGE,
+            code=500, title="Error interno del servidor",
+            message="Algo falló en el sistema. Si el problema persiste, reiniciá la aplicación."), 500
+
+    @app.errorhandler(413)
+    def too_large(e):
+        return render_template_string(_ERROR_PAGE,
+            code=413, title="Archivo demasiado grande",
+            message="El archivo que intentás subir supera el límite de 5 MB permitido."), 413
+
     return app
 
 

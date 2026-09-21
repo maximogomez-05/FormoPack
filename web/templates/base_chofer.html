@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <title>{% block title %}FormoPack Express{% endblock %}</title>
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f4f7f6;
+    }
+    .driver-navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: var(--sidebar-bg, #0a192f);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 15px;
+      z-index: 1000;
+      box-sizing: border-box;
+    }
+    .driver-navbar .brand {
+      font-weight: bold;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .driver-navbar .brand i {
+      color: var(--primary-color, #2ecc71);
+    }
+    .driver-navbar .user-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .driver-navbar .logout {
+      color: #8892b0;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .driver-main {
+      margin-top: 60px;
+      padding: 15px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="driver-navbar">
+  <div class="brand">
+    <i class="fa-solid fa-cube"></i> FormoPack
+  </div>
+  <div class="user-info">
+    <span>{{ session.nombre }}</span>
+    <a href="{{ url_for('auth.logout') }}" class="logout" title="Cerrar Sesión">
+      <i class="fa-solid fa-arrow-right-from-bracket"></i>
+    </a>
+  </div>
+</nav>
+
+<div class="driver-main">
+  <!-- Mensajes del Sistema -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }}">
+          <i class="fa-solid {% if cat == 'success' %}fa-check-circle{% elif cat == 'danger' %}fa-exclamation-circle{% elif cat == 'warning' %}fa-triangle-exclamation{% else %}fa-info-circle{% endif %}"></i>
+          <span>{{ msg }}</span>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</div>
+
+{% block scripts %}{% endblock %}
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+}
+</script>
+</body>
+</html>

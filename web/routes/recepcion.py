@@ -236,7 +236,28 @@ def cobrar_envio(nro_guia: str):
 
     qr_base64 = None
 
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM pagos WHERE id_envio = %s LIMIT 1", (envio.id_envio,))
+        ya_pagado = cursor.fetchone() is not None
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error verificando pago: {e}")
+        ya_pagado = False
+
+    if ya_pagado:
+        if request.method == "POST":
+            flash("Este envío ya fue cobrado.", "warning")
+        return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
+
     if request.method == "POST":
+        if envio.estado_actual != 'recibido':
+            flash("Este envío ya fue cobrado.", "warning")
+            return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
+
         tipo_pago = request.form.get("tipo_pago", "efectivo")
         try:
             monto = float(request.form.get("monto", envio.costo_total))

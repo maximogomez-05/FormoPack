@@ -18,7 +18,7 @@
       <div style="color:var(--text-muted);font-size:12px;margin-bottom:20px;text-transform:uppercase;">Identificador de Guía</div>
 
       <div class="desglose-row">
-        <span><i class="fa-solid fa-user text-muted"></i> Cliente Remitente</span><span>{{ envio._id_remitente }}</span>
+        <span><i class="fa-solid fa-user text-muted"></i> Modalidad de Pago</span><span>{{ envio.modalidad_pago | capitalize }}</span>
       </div>
       <div class="desglose-row">
         <span><i class="fa-solid fa-location-dot text-muted"></i> Destino</span><span>{{ envio.direccion_destino }}</span>

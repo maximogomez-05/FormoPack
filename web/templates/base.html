@@ -10,7 +10,7 @@
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body>
+<body data-page="{{ request.endpoint }}">
 <div class="layout">
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -49,6 +49,9 @@
       <a href="{{ url_for('admin.logistica') }}" class="nav-link {% if request.endpoint == 'admin.logistica' %}active{% endif %}">
         <i class="fa-solid fa-truck-fast nav-icon"></i> Logística
       </a>
+      <a href="{{ url_for('admin.usuarios') }}" class="nav-link {% if request.endpoint == 'admin.usuarios' %}active{% endif %}">
+        <i class="fa-solid fa-user-shield nav-icon"></i> Gestión de Usuarios
+      </a>
       {% endif %}
 
       <!-- Tracking público -->
@@ -64,10 +67,15 @@
     </nav>
 
     <div class="sidebar-footer">
-      <div class="user-name">{{ session.nombre }}</div>
-      <div class="user-role">{{ session.rol | capitalize }}</div>
-      <a href="{{ url_for('auth.logout') }}" style="color:#8892b0;font-size:12px;text-decoration:none;display:block;margin-top:8px;">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i> Cerrar Sesión
+      <div class="avatar-circle role-{{ session.rol }}">
+        {{ session.nombre[0]|upper if session.nombre else 'U' }}
+      </div>
+      <div class="user-info">
+        <div class="user-name">{{ session.nombre }}</div>
+        <div class="user-role">{{ session.rol | capitalize }}</div>
+      </div>
+      <a href="{{ url_for('auth.logout') }}" class="logout-btn" title="Cerrar Sesión">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
       </a>
     </div>
   </aside>
@@ -77,11 +85,12 @@
     <div class="topbar">
       <div class="topbar-title">{% block page_title %}Sistema Logístico{% endblock %}</div>
       <div class="topbar-actions">
-        {% if session.rol in ['recepcionista', 'administrador'] %}
-        <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-plus"></i> Nuevo Envío
-        </a>
-        {% endif %}
+        <div class="topbar-user">
+          <span>{{ session.nombre }} ({{ session.rol | capitalize }})</span>
+          <div class="avatar-circle role-{{ session.rol }}">
+            {{ session.nombre[0]|upper if session.nombre else 'U' }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -104,12 +113,10 @@
 </div>
 
 {% block scripts %}{% endblock %}
-{% if session.rol == 'chofer' %}
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
 }
 </script>
-{% endif %}
 </body>
 </html>

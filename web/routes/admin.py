@@ -10,8 +10,8 @@ from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
 from app.controllers.logistica_controller import LogisticaController
-from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError
-
+from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
+from app.controllers.usuario_controller import UsuarioController
 admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
@@ -164,8 +164,59 @@ def tracking_publico():
         error=error,
     )
 
+@admin_bp.route('/usuarios')
+@login_required  
+@rol_requerido('administrador')
+def usuarios():
+    ctrl = UsuarioController()
+    lista = ctrl.listar_usuarios()
+    return render_template('admin/usuarios.html', usuarios=lista)
+
+@admin_bp.route('/usuarios/nuevo', methods=['POST'])
+@login_required
+@rol_requerido('administrador')
+def crear_usuario():
+    try:
+        ctrl = UsuarioController()
+        nombre = request.form.get('nombre', '')
+        email = request.form.get('email', '')
+        tipo_usuario = request.form.get('tipo_usuario', '')
+        password = request.form.get('password', '')
+        
+        ctrl.crear_usuario(nombre, email, tipo_usuario, password)
+        flash("Usuario creado exitosamente.", "success")
+    except DuplicateError as e:
+        flash(str(e), "danger")
+    except ValidationError as e:
+        flash(str(e), "danger")
+    except Exception as e:
+        logger.error("Error al crear usuario: %s", e)
+        flash("Ocurrió un error al crear el usuario.", "danger")
+        
+    return redirect(url_for('admin.usuarios'))
+
+@admin_bp.route('/usuarios/<int:id_usuario>/toggle', methods=['POST'])
+@login_required
+@rol_requerido('administrador')
+def toggle_usuario(id_usuario: int):
+    try:
+        ctrl = UsuarioController()
+        id_solicitante = session.get('usuario_id')
+        nuevo_estado = ctrl.toggle_activo(id_usuario, id_solicitante)
+        
+        estado_str = "activado" if nuevo_estado else "desactivado"
+        flash(f"Usuario {estado_str} exitosamente.", "success")
+    except ValidationError as e:
+        flash(str(e), "danger")
+    except Exception as e:
+        logger.error("Error al cambiar estado de usuario: %s", e)
+        flash("Ocurrió un error al cambiar el estado del usuario.", "danger")
+        
+    return redirect(url_for('admin.usuarios'))
+
 
 # ──────────────────────────────────────────
+
 # Helpers internos
 # ──────────────────────────────────────────
 def _obtener_metricas() -> dict:
