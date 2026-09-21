@@ -167,6 +167,45 @@ class ChoferController:
             cursor.close()
             conn.close()
 
+    def registrar_devolucion(self, id_chofer: int, id_hoja_ruta: int, id_envio: int, motivo: str) -> None:
+        """Cambia un envío fallido a devolución y deja trazabilidad."""
+        if not motivo or not motivo.strip():
+            raise ValidationError(field="motivo_devolucion", reason="El motivo de devolución es obligatorio")
+
+        conn = self.db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """SELECT e.estado_actual FROM envios e
+                   JOIN hojas_de_ruta hr ON hr.id_hoja_ruta = e.id_hoja_ruta
+                   WHERE e.id_envio = %s AND e.id_hoja_ruta = %s AND hr.id_chofer = %s
+                   FOR UPDATE""",
+                (id_envio, id_hoja_ruta, id_chofer),
+            )
+            envio = cursor.fetchone()
+            if not envio:
+                raise ValidationError(field="envio", reason="El envío no pertenece a una hoja del chofer")
+            if envio["estado_actual"] != "fallido":
+                raise ValidationError(field="envio", reason="Sólo se puede devolver un envío fallido")
+
+            cursor.execute("UPDATE envios SET estado_actual = 'devolucion', es_devolucion = 1 WHERE id_envio = %s", (id_envio,))
+            cursor.execute(
+                """INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
+                   VALUES (%s, 'devolucion', 'Base operativa', %s)""",
+                (id_envio, f"Devolución solicitada por el chofer: {motivo.strip()}"),
+            )
+            conn.commit()
+        except ValidationError:
+            conn.rollback()
+            raise
+        except Exception as exc:
+            conn.rollback()
+            logger.exception("Error al registrar devolución")
+            raise DatabaseQueryError(f"No se pudo registrar la devolución: {exc}") from exc
+        finally:
+            cursor.close()
+            conn.close()
+
     @staticmethod
     def validar_foto(nombre: str | None, permitido: set[str]) -> bool:
         """Valida la extensión de una foto antes de guardarla."""

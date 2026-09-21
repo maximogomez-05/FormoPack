@@ -197,6 +197,15 @@ class EnvioController:
         Returns:
             Diccionario con datos del pago registrado.
         """
+        if tipo_pago not in {"efectivo", "digital"}:
+            raise ValidationError(field="tipo_pago", reason="El medio de pago no es válido")
+        if monto <= 0:
+            raise ValidationError(field="monto", reason="El monto debe ser mayor que cero")
+        if tipo_pago == "efectivo" and monto_entregado < monto:
+            raise ValidationError(field="monto_entregado", reason="El efectivo recibido no alcanza para cubrir el total")
+        if tipo_pago == "digital" and not id_transaccion_qr:
+            raise ValidationError(field="id_transaccion_qr", reason="El pago digital requiere una referencia QR")
+
         sql = """
             INSERT INTO pagos
                 (id_envio, id_turno, monto, tipo_pago, monto_entregado,

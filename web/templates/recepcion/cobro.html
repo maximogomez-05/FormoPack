@@ -3,7 +3,7 @@
 {% block page_title %}<i class="fa-solid fa-credit-card"></i> Gestión de Cobro{% endblock %}
 
 {% block content %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+<div class="cobro-layout">
 
   <!-- Info del envío -->
   <div>
@@ -69,6 +69,7 @@
         <input type="hidden" name="tipo_pago" value="digital">
         <input type="hidden" name="monto" value="{{ envio.costo_total }}">
         <input type="hidden" name="monto_entregado" value="0">
+        <input type="hidden" name="id_transaccion_qr" value="{{ qr_id }}">
 
         <div class="form-group">
           <label class="form-label">Plataforma / Billetera Virtual</label>
@@ -87,6 +88,7 @@
           <div style="font-size:12px;color:var(--text-muted);margin-top:12px;text-transform:uppercase;font-weight:600;">
             Escanee para abonar ${{ "%.2f"|format(envio.costo_total) }}
           </div>
+          <div class="payment-reference">Referencia: {{ qr_id }}</div>
         </div>
         {% endif %}
 

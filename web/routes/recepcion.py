@@ -235,6 +235,7 @@ def cobrar_envio(nro_guia: str):
         return redirect(url_for("recepcion.cotizador"))
 
     qr_base64 = None
+    qr_id = None
 
     try:
         db = DatabaseManager.get_instance()
@@ -268,16 +269,18 @@ def cobrar_envio(nro_guia: str):
         except (ValueError, TypeError):
             monto_entregado = 0.0
         billetera = request.form.get("billetera_virtual", "MercadoPago")
+        if monto < float(envio.costo_total):
+            flash("El importe cobrado no puede ser inferior al total del envío.", "warning")
+            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
+        turno_activo = _obtener_turno_activo(session.get("usuario_id"))
+        if not turno_activo:
+            flash("Debe abrir un turno de caja antes de registrar el cobro.", "warning")
+            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
 
         if tipo_pago == "digital":
             qr_id = request.form.get("id_transaccion_qr") or request.form.get("qr_id")
             if not qr_id:
-                flash("Para pagos digitales debe generarse o registrar un identificador QR válido.", "warning")
-                return render_template(
-                    "recepcion/cobro.html",
-                    envio=envio,
-                    qr_base64=qr_base64,
-                )
+                qr_id = _generar_id_qr(envio.id_envio, monto)
 
             try:
                 PagoDigital(id_pago=0, id_envio=envio.id_envio, monto=monto, billetera_virtual=billetera).validar_qr(qr_id)
@@ -287,6 +290,7 @@ def cobrar_envio(nro_guia: str):
                     "recepcion/cobro.html",
                     envio=envio,
                     qr_base64=qr_base64,
+                    qr_id=qr_id,
                 )
 
         try:
@@ -294,6 +298,7 @@ def cobrar_envio(nro_guia: str):
                 id_envio=envio.id_envio,
                 monto=monto,
                 tipo_pago=tipo_pago,
+                id_turno=turno_activo["id_turno"],
                 monto_entregado=monto_entregado if tipo_pago == "efectivo" else 0,
                 billetera_virtual=billetera if tipo_pago == "digital" else None,
                 id_transaccion_qr=(request.form.get("id_transaccion_qr") or request.form.get("qr_id")) if tipo_pago == "digital" else None,
@@ -305,12 +310,14 @@ def cobrar_envio(nro_guia: str):
             flash(f"Error al registrar pago: {e}", "danger")
 
     # Generar QR estático con datos del cobro
+    qr_id = _generar_id_qr(envio.id_envio, envio.costo_total)
     qr_base64 = _generar_qr_pago(nro_guia, envio.costo_total)
 
     return render_template(
         "recepcion/cobro.html",
         envio=envio,
         qr_base64=qr_base64,
+        qr_id=qr_id,
     )
 
 
@@ -351,6 +358,50 @@ def descargar_pdf(nro_guia: str):
         )
     except Exception as e:
         flash(f"Error al generar PDF: {e}", "danger")
+        return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
+
+
+@recepcion_bp.route("/comprobante/<nro_guia>/documentos")
+@login_required
+def descargar_documentos_despacho(nro_guia: str):
+    """Descarga tres copias del remito y la etiqueta con código Code128."""
+    from web.utils.pdf_generator import generar_documentos_despacho_pdf
+
+    try:
+        envio, detalle = _obtener_detalle_envio(nro_guia)
+        if not envio:
+            raise EnvioNotFoundError(nro_guia=nro_guia)
+        pdf_bytes = generar_documentos_despacho_pdf(envio, detalle)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"documentos_{nro_guia}.pdf",
+        )
+    except Exception as e:
+        flash(f"Error al generar documentos: {e}", "danger")
+        return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
+
+
+@recepcion_bp.route("/comprobante/<nro_guia>/etiqueta")
+@login_required
+def descargar_etiqueta(nro_guia: str):
+    """Descarga una etiqueta térmica con código de barras Code128."""
+    from web.utils.pdf_generator import generar_etiqueta_pdf
+
+    try:
+        envio, _ = _obtener_detalle_envio(nro_guia)
+        if not envio:
+            raise EnvioNotFoundError(nro_guia=nro_guia)
+        pdf_bytes = generar_etiqueta_pdf(envio)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"etiqueta_{nro_guia}.pdf",
+        )
+    except Exception as e:
+        flash(f"Error al generar etiqueta: {e}", "danger")
         return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
 
@@ -458,6 +509,12 @@ def _generar_qr_pago(nro_guia: str, monto: float) -> str:
     img.save(buffer, format="PNG")
     buffer.seek(0)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+def _generar_id_qr(id_envio: int, monto: float) -> str:
+    """Genera la referencia local que identifica el cobro digital."""
+    pago = PagoDigital(id_pago=0, id_envio=id_envio, monto=monto, billetera_virtual="MercadoPago")
+    return pago.generar_qr(monto)
 
 
 def _obtener_turno_activo(id_usuario: int):

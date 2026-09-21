@@ -102,6 +102,12 @@
     <a href="{{ url_for('recepcion.descargar_pdf', nro_guia=nro_guia) }}" class="btn btn-primary btn-lg">
       <i class="fa-solid fa-file-arrow-down"></i> Exportar Documento PDF
     </a>
+    <a href="{{ url_for('recepcion.descargar_documentos_despacho', nro_guia=nro_guia) }}" class="btn btn-secondary">
+      <i class="fa-solid fa-copy"></i> Remito x3
+    </a>
+    <a href="{{ url_for('recepcion.descargar_etiqueta', nro_guia=nro_guia) }}" class="btn btn-secondary">
+      <i class="fa-solid fa-barcode"></i> Etiqueta
+    </a>
     <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-secondary">
       <i class="fa-solid fa-plus"></i> Ingresar Nuevo Envío
     </a>

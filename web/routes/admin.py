@@ -22,10 +22,12 @@ logger = logging.getLogger(__name__)
 def dashboard():
     """Dashboard principal con métricas del día."""
     metricas = _obtener_metricas()
+    historico = _obtener_historico_metricas()
     ultimos_envios = _obtener_ultimos_envios(limite=10)
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
+        historico=historico,
         ultimos_envios=ultimos_envios,
     )
 
@@ -231,10 +233,10 @@ def _obtener_metricas() -> dict:
             SELECT
                 COUNT(*) AS total_envios,
                 COALESCE(SUM(costo_total), 0) AS facturado_total,
-                SUM(CASE WHEN estado_actual = 'recibido' THEN 1 ELSE 0 END) AS recibidos,
-                SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END) AS entregados,
-                SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END) AS fallidos,
-                SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END) AS en_ruta
+                COALESCE(SUM(CASE WHEN estado_actual = 'recibido' THEN 1 ELSE 0 END), 0) AS recibidos,
+                COALESCE(SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
+                COALESCE(SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
+                COALESCE(SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END), 0) AS en_ruta
             FROM envios
             WHERE DATE(fecha_creacion) = CURDATE()
         """)
@@ -303,6 +305,33 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
         return filas
     except Exception as e:
         logger.error("Error al obtener envíos: %s", e)
+        return []
+
+
+def _obtener_historico_metricas() -> list:
+    """Obtiene siete días de actividad para el dashboard gerencial."""
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT
+                DATE(fecha_creacion) AS dia,
+                COUNT(*) AS total_envios,
+                COALESCE(SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
+                COALESCE(SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
+                COALESCE(SUM(costo_total), 0) AS facturado
+            FROM envios
+            WHERE fecha_creacion >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(fecha_creacion)
+            ORDER BY dia ASC
+        """)
+        filas = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return filas
+    except Exception as e:
+        logger.error("Error al obtener histórico del dashboard: %s", e)
         return []
 
 

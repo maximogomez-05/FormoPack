@@ -83,6 +83,9 @@
   <!-- MAIN CONTENT -->
   <div class="main-content">
     <div class="topbar">
+      <button type="button" class="mobile-menu-button" id="mobile-menu-button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+        <i class="fa-solid fa-bars"></i>
+      </button>
       <div class="topbar-title">{% block page_title %}Sistema Logístico{% endblock %}</div>
       <div class="topbar-actions">
         <div class="topbar-user">
@@ -114,6 +117,14 @@
 
 {% block scripts %}{% endblock %}
 <script>
+const mobileMenuButton = document.getElementById('mobile-menu-button');
+const sidebar = document.getElementById('sidebar');
+if (mobileMenuButton && sidebar) {
+  mobileMenuButton.addEventListener('click', () => {
+    const isOpen = sidebar.classList.toggle('active');
+    mobileMenuButton.setAttribute('aria-expanded', String(isOpen));
+  });
+}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
 }

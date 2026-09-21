@@ -14,7 +14,10 @@
   <i class="fa-solid fa-cloud-arrow-down"></i>
   <span>Sin conexión. Las entregas se guardarán en este dispositivo y se enviarán al recuperar Internet.</span>
 </div>
-<div class="queue-banner" id="queue-banner" hidden></div>
+<div class="queue-banner" id="queue-banner" hidden>
+  <span id="queue-message"></span>
+  <button type="button" class="btn btn-secondary btn-sm" id="sync-now">Sincronizar</button>
+</div>
 
 {% if hojas %}
   {% for hoja in hojas %}
@@ -47,6 +50,12 @@
         </div>
         {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
         <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
+        {% if envio.estado_actual == 'fallido' %}
+        <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
+          <input type="hidden" name="motivo_devolucion" value="Entrega fallida sin reintento exitoso">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('¿Marcar este envío para devolución a origen?')"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
+        </form>
+        {% endif %}
         {% else %}
         <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
         {% endif %}
@@ -131,7 +140,7 @@ let dbPromise;
 function abrirBase() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -178,8 +187,18 @@ function actualizarContador() {
   leerPendientes().then(items => {
     const banner = document.getElementById('queue-banner');
     banner.hidden = items.length === 0;
-    banner.innerHTML = `<i class="fa-solid fa-clock"></i> ${items.length} entrega(s) pendiente(s) de sincronización`;
+    const fallidas = items.filter(item => (item.attempts || 0) >= 3).length;
+    document.getElementById('queue-message').innerHTML = `<i class="fa-solid fa-clock"></i> ${items.length} entrega(s) pendiente(s)${fallidas ? `; ${fallidas} requiere(n) revisión` : ''}`;
   }).catch(() => {});
+}
+
+function actualizarPendiente(item) {
+  return abrirBase().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(item);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  }));
 }
 
 async function sincronizarPendientes() {
@@ -190,9 +209,17 @@ async function sincronizarPendientes() {
     Object.entries(item.fields).forEach(([key, value]) => form.append(key, value || ''));
     if (item.photo) form.append('foto_remito', item.photo, item.photoName || 'remito.jpg');
     try {
-      const response = await fetch(item.action, { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-Offline-Sync': '1' } });
-      if (response.ok) await borrarPendiente(item.id);
+      const response = await fetch(item.action, { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-Offline-Sync': '1', 'X-Offline-Key': item.key } });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload && payload.ok === true) await borrarPendiente(item.id);
+      else {
+        item.attempts = (item.attempts || 0) + 1;
+        await actualizarPendiente(item);
+        if (item.attempts >= 3) break;
+      }
     } catch (error) {
+      item.attempts = (item.attempts || 0) + 1;
+      await actualizarPendiente(item);
       break;
     }
   }
@@ -206,7 +233,7 @@ async function enviarEntrega(form) {
     if (key !== 'foto_remito') fields[key] = value;
   }
   const photo = data.get('foto_remito');
-  const item = { action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString() };
+  const item = { action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
   try {
     if (!navigator.onLine) throw new Error('offline');
     const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin' });
@@ -217,6 +244,9 @@ async function enviarEntrega(form) {
     cerrarEntrega();
     actualizarContador();
     alert('Sin conexión: la entrega quedó guardada y se enviará automáticamente al volver Internet.');
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => registration.sync && registration.sync.register('formopack-deliveries')).catch(() => {});
   }
 }
 
@@ -323,6 +353,12 @@ document.getElementById('entrega-form').addEventListener('submit', event => {
 
 window.addEventListener('online', sincronizarPendientes);
 window.addEventListener('offline', actualizarEstadoConexion);
+document.getElementById('sync-now').addEventListener('click', sincronizarPendientes);
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'sync-deliveries') sincronizarPendientes();
+  });
+}
 actualizarEstadoConexion();
 sincronizarPendientes();
 </script>

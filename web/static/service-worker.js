@@ -1,4 +1,4 @@
-const CACHE_NAME = "formopack-chofer-v1";
+const CACHE_NAME = "formopack-chofer-v2";
 const APP_SHELL = [
   "/static/css/style.css",
   "/static/manifest.json",
@@ -33,6 +33,14 @@ self.addEventListener("fetch", (event) => {
 
   if (new URL(request.url).pathname.startsWith("/static/")) {
     event.respondWith(cacheFirst(request));
+  }
+});
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "formopack-deliveries") {
+    event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      clients.forEach((client) => client.postMessage({ type: "sync-deliveries" }));
+    }));
   }
 });
 

@@ -157,6 +157,7 @@ body {
   z-index: 50;
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
+.mobile-menu-button { display: none; border: 0; background: transparent; color: var(--primary); font-size: 20px; cursor: pointer; padding: 4px 8px; }
 .topbar-title { font-size: 18px; font-weight: 600; color: var(--text-main); }
 .topbar-actions { display: flex; gap: 16px; align-items: center; }
 .topbar-user { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
@@ -473,6 +474,17 @@ tbody tr:nth-child(even):hover { background: #f8f9fa; }
 .desglose-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; text-align: left; }
 .desglose-row:last-child { border-bottom: none; font-weight: 700; color: var(--primary); font-size: 16px; margin-top: 8px; }
 
+/* Dashboard e interfaces adaptables */
+.dashboard-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.history-bars { min-height: 190px; display: flex; align-items: flex-end; justify-content: space-around; gap: 12px; padding: 16px 8px 8px; border-bottom: 1px solid var(--border); }
+.history-day { flex: 1; min-width: 34px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; }
+.history-value, .history-label { font-size: 11px; color: var(--text-muted); }
+.history-bar { width: min(42px, 100%); min-height: 4px; background: var(--primary); border-radius: 4px 4px 0 0; }
+.empty-state { color: var(--text-muted); padding: 24px 0; text-align: center; }
+.cobro-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.payment-reference { font-size: 11px; color: var(--text-muted); margin-top: 8px; word-break: break-all; }
+.delivery-return-form { display: inline-flex; }
+
 /* ──────────────── RESPONSIVE ──────────────── */
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
@@ -483,12 +495,32 @@ tbody tr:nth-child(even):hover { background: #f8f9fa; }
   
   .page-content { padding: 16px; }
   .topbar { padding: 16px; }
+  .mobile-menu-button { display: inline-flex; align-items: center; justify-content: center; }
   .driver-intro, .driver-route-head { display:block; }
   .driver-status { margin-top:12px; }
   .driver-route-head form { margin:16px 0; }
   .delivery-item { align-items:flex-start; flex-wrap:wrap; }
   .delivery-item .btn { width:100%; }
   .topbar-user span { display: none; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .metric-card { padding: 14px; }
+  .metric-value { font-size: 25px; }
+  .metric-label { font-size: 10px; }
+  .cobro-layout { grid-template-columns: 1fr; gap: 12px; }
+  .card { padding: 16px; }
+  .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 620px; }
+  .history-bars { gap: 5px; }
+  .delivery-return-form { width: 100%; }
+  .delivery-return-form .btn { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .page-content { padding: 10px; }
+  .metrics-grid { grid-template-columns: 1fr 1fr; }
+  .metric-icon { font-size: 19px; }
+  .btn { white-space: normal; text-align: center; }
+  .modal-card { padding: 18px; }
 }
 
 /* ──────────────── UTILITIES ──────────────── */

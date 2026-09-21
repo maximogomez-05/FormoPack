@@ -4,7 +4,11 @@ Comprobante de Control Interno (NO FISCAL)
 """
 
 from datetime import datetime
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4
+from reportlab.platypus import PageBreak
+from reportlab.lib.pagesizes import portrait
+from reportlab.graphics.barcode import code128
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import (
@@ -247,6 +251,92 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
         pie_estilo,
     ))
 
+    doc.build(elementos)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def _elementos_remito(envio: dict, detalle: dict, copia: int) -> list:
+    """Construye una copia imprimible del remito operativo."""
+    styles = getSampleStyleSheet()
+    titulo = ParagraphStyle("remito_titulo", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=17)
+    normal = ParagraphStyle("remito_normal", parent=styles["Normal"], fontSize=10, leading=14)
+    guia = escape(str(envio.get("nro_guia", "N/A")))
+    remitente = escape(str(envio.get("remitente", "N/A")))
+    destinatario = escape(str(envio.get("destinatario", "N/A")))
+    localidad = escape(str(envio.get("localidad_destino", "N/A")))
+    direccion = escape(str(envio.get("direccion_destino", "N/A")))
+    elementos = [
+        Paragraph("FORMOPACK LOGISTICA", titulo),
+        Paragraph(f"REMITO OPERATIVO - COPIA {copia} DE 3", titulo),
+        Spacer(1, 0.3 * cm),
+        Paragraph(f"<b>Guia:</b> {guia}", normal),
+        Paragraph(f"<b>Remitente:</b> {remitente}", normal),
+        Paragraph(f"<b>Destinatario:</b> {destinatario}", normal),
+        Paragraph(f"<b>Destino:</b> {localidad} - {direccion}", normal),
+        Spacer(1, 0.3 * cm),
+        code128.Code128(guia, barHeight=1.2 * cm, barWidth=0.45),
+        Spacer(1, 0.3 * cm),
+    ]
+    bultos = detalle.get("bultos", [])
+    filas = [["Bulto", "Peso real", "Peso aforado", "Fragil"]]
+    for index, bulto in enumerate(bultos, 1):
+        real = float(bulto.get("peso_real", 0))
+        volumetrico = float(bulto.get("peso_volumetrico", 0))
+        filas.append([str(index), f"{real:.2f} kg", f"{max(real, volumetrico):.2f} kg", "Si" if bulto.get("es_fragil") else "No"])
+    tabla = Table(filas, colWidths=[3 * cm, 4 * cm, 4 * cm, 3 * cm])
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#004481")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+    ]))
+    elementos.append(tabla)
+    elementos.append(Spacer(1, 0.5 * cm))
+    elementos.append(Paragraph("Firma de recepción: ________________________________", normal))
+    elementos.append(Paragraph("Documento operativo no fiscal.", normal))
+    return elementos
+
+
+def generar_documentos_despacho_pdf(envio: dict, detalle: dict) -> bytes:
+    """Genera un PDF con tres copias del remito operativo."""
+    import io
+    from reportlab.platypus import PageBreak
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2 * cm, leftMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm)
+    elementos = []
+    for copia in range(1, 4):
+        if copia > 1:
+            elementos.append(PageBreak())
+        elementos.extend(_elementos_remito(envio, detalle, copia))
+    doc.build(elementos)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def generar_etiqueta_pdf(envio: dict) -> bytes:
+    """Genera una etiqueta de 10x15 cm con código de barras Code128."""
+    import io
+    from reportlab.lib.pagesizes import landscape
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=(10 * cm, 15 * cm), rightMargin=0.6 * cm, leftMargin=0.6 * cm, topMargin=0.8 * cm, bottomMargin=0.8 * cm)
+    styles = getSampleStyleSheet()
+    titulo = ParagraphStyle("etiqueta_titulo", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=16)
+    normal = ParagraphStyle("etiqueta_normal", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10, leading=14)
+    guia = escape(str(envio.get("nro_guia", "N/A")))
+    elementos = [
+        Paragraph("FORMOPACK", titulo),
+        Spacer(1, 0.5 * cm),
+        code128.Code128(guia, barHeight=2 * cm, barWidth=0.55),
+        Spacer(1, 0.5 * cm),
+        Paragraph(f"<b>{guia}</b>", titulo),
+        Paragraph(escape(str(envio.get("destinatario", "N/A"))), normal),
+        Paragraph(escape(str(envio.get("localidad_destino", "N/A"))), normal),
+        Paragraph(escape(str(envio.get("direccion_destino", "N/A"))), normal),
+    ]
     doc.build(elementos)
     buffer.seek(0)
     return buffer.read()

@@ -46,6 +46,44 @@
   </div>
 </div>
 
+<div class="dashboard-columns">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-chart-column"></i> Actividad de los últimos 7 días</span>
+    </div>
+    {% if historico %}
+    <div class="history-bars">
+      {% set max_envios = historico|map(attribute='total_envios')|max or 1 %}
+      {% for dia in historico %}
+      <div class="history-day">
+        <div class="history-value">{{ dia.total_envios }}</div>
+        <div class="history-bar" style="height:{{ ((dia.total_envios / max_envios) * 150)|round|int }}px" title="{{ dia.total_envios }} envíos, {{ dia.entregados }} entregados"></div>
+        <div class="history-label">{{ dia.dia.strftime('%d/%m') if dia.dia else '—' }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="table-responsive">
+      <table>
+        <thead><tr><th>Día</th><th>Envíos</th><th>Entregados</th><th>Fallidos</th><th>Facturado</th></tr></thead>
+        <tbody>
+          {% for dia in historico %}
+          <tr>
+            <td>{{ dia.dia.strftime('%d/%m/%Y') if dia.dia else '—' }}</td>
+            <td>{{ dia.total_envios }}</td>
+            <td>{{ dia.entregados }}</td>
+            <td>{{ dia.fallidos }}</td>
+            <td>${{ "%.2f"|format(dia.facturado) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Todavía no hay actividad histórica para mostrar.</p>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card">
   <div class="card-header">
     <span class="card-title"><i class="fa-solid fa-list"></i> Últimos Registros</span>

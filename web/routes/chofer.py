@@ -91,6 +91,24 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
     return redirect(url_for("chofer.panel"))
 
 
+@chofer_bp.route("/chofer/hojas/<int:id_hoja_ruta>/envios/<int:id_envio>/devolucion", methods=["POST"])
+@login_required
+@rol_requerido("chofer")
+def registrar_devolucion(id_hoja_ruta: int, id_envio: int):
+    """Registra la devolución de un envío cuya entrega fue fallida."""
+    try:
+        ChoferController().registrar_devolucion(
+            session["usuario_id"],
+            id_hoja_ruta,
+            id_envio,
+            request.form.get("motivo_devolucion", ""),
+        )
+        flash("El envío fue marcado para devolución a origen.", "success")
+    except (ValidationError, DatabaseQueryError) as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("chofer.panel"))
+
+
 def _normalizar_firma(firma: str | None) -> str | None:
     """Acepta la firma del canvas como data URL y valida que tenga contenido."""
     if not firma:

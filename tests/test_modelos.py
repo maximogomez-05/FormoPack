@@ -3,8 +3,6 @@
 import sys
 import os
 
-import pytest
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.models.cliente import Cliente
@@ -176,8 +174,11 @@ def test_pago_digital():
     assert qr.startswith("QR-")
     assert pago.id_transaccion_qr == qr
     assert pago.validar_qr(qr) is True
-    with pytest.raises(ValueError):
+    try:
         pago.validar_qr("INVALIDA")
+        assert False, "Debería rechazar un identificador QR inválido"
+    except ValueError:
+        pass
     print("  [OK] PagoDigital: Generación de QR y billetera")
 
 
