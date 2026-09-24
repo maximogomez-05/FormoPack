@@ -22,7 +22,7 @@
         <form method="POST" action="{{ url_for('admin.crear_usuario') }}" style="margin-top: 15px;">
             <div class="form-group">
                 <label>Nombre Completo</label>
-                <input type="text" name="nombre" class="form-control" required>
+                <input type="text" name="nombre" class="form-control" required maxlength="100" minlength="3" pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+ " title="Solo letras, espacios y guiones">
             </div>
             <div class="form-group" style="margin-top: 10px;">
                 <label>Email</label>

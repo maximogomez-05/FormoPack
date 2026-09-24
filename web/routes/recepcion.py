@@ -177,10 +177,18 @@ def nuevo_envio():
 
             bultos_data = []
             for i in range(len(pesos_reales)):
+                try:
+                    peso_real = float(pesos_reales[i] or 0)
+                    peso_vol = float(pesos_vol[i] if i < len(pesos_vol) else 0)
+                except (ValueError, TypeError):
+                    peso_real = 0.0
+                    peso_vol = 0.0
+                # es_fragil se detecta por posición relativa, no por value del checkbox
+                es_fragil = len(es_fragil_list) > i and es_fragil_list[i] in ('on', '1', 'true', str(i))
                 bultos_data.append({
-                    "peso_real": float(pesos_reales[i] or 0),
-                    "peso_volumetrico": float(pesos_vol[i] or 0),
-                    "es_fragil": str(i) in es_fragil_list,
+                    "peso_real": peso_real,
+                    "peso_volumetrico": peso_vol,
+                    "es_fragil": es_fragil,
                 })
 
             # Crear envío
@@ -545,34 +553,33 @@ def _obtener_detalle_envio(nro_guia: str):
     db = DatabaseManager.get_instance()
     conn = db.get_connection()
     cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT
+                e.*,
+                cr.nombre_completo AS remitente, cr.dni AS rem_dni, cr.telefono AS rem_tel,
+                cd.nombre_completo AS destinatario, cd.dni AS dest_dni, cd.telefono AS dest_tel,
+                l.nombre AS localidad_destino
+            FROM envios e
+            JOIN clientes cr ON e.id_remitente = cr.id_cliente
+            JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+            JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            WHERE e.nro_guia = %s
+        """, (nro_guia,))
+        envio = cursor.fetchone()
 
-    cursor.execute("""
-        SELECT
-            e.*,
-            cr.nombre_completo AS remitente, cr.dni AS rem_dni, cr.telefono AS rem_tel,
-            cd.nombre_completo AS destinatario, cd.dni AS dest_dni, cd.telefono AS dest_tel,
-            l.nombre AS localidad_destino
-        FROM envios e
-        JOIN clientes cr ON e.id_remitente = cr.id_cliente
-        JOIN clientes cd ON e.id_destinatario = cd.id_cliente
-        JOIN localidades l ON e.id_localidad_destino = l.id_localidad
-        WHERE e.nro_guia = %s
-    """, (nro_guia,))
-    envio = cursor.fetchone()
+        detalle = {}
+        if envio:
+            cursor.execute("SELECT * FROM bultos WHERE id_envio = %s", (envio["id_envio"],))
+            detalle["bultos"] = cursor.fetchall()
 
-    # Bultos del envío
-    detalle = {}
-    if envio:
-        cursor.execute("SELECT * FROM bultos WHERE id_envio = %s", (envio["id_envio"],))
-        detalle["bultos"] = cursor.fetchall()
+            cursor.execute(
+                "SELECT * FROM pagos WHERE id_envio = %s ORDER BY fecha DESC LIMIT 1",
+                (envio["id_envio"],)
+            )
+            detalle["pago"] = cursor.fetchone()
 
-        # Pago registrado
-        cursor.execute(
-            "SELECT * FROM pagos WHERE id_envio = %s ORDER BY fecha DESC LIMIT 1",
-            (envio["id_envio"],)
-        )
-        detalle["pago"] = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-    return envio, detalle
+        return envio, detalle
+    finally:
+        cursor.close()
+        conn.close()
