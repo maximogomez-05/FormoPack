@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.database import DatabaseManager
+from app.models.prueba_entrega import EntregaFallida, PruebaDeEntrega
 from app.utils.exceptions import DatabaseQueryError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -110,12 +111,34 @@ class ChoferController:
         motivo_fallo: str | None,
     ) -> None:
         """Guarda un POD solo si el envio pertenece a una hoja del chofer."""
-        if tipo_intento not in {"entregado", "fallido"}:
-            raise ValidationError(field="tipo_intento", reason="El tipo de entrega no es válido")
-        if tipo_intento == "entregado" and (not dni_receptor or not firma_receptor):
-            raise ValidationError(field="evidencia", reason="Una entrega exitosa requiere DNI y firma")
-        if tipo_intento == "fallido" and not motivo_fallo:
-            raise ValidationError(field="motivo_fallo", reason="Una entrega fallida requiere un motivo")
+        # Construir el objeto de dominio correcto según el tipo de intento
+        # y delegar la validación al modelo (POO — RF 4.2 / RF 4.5)
+        if tipo_intento == "fallido":
+            prueba = EntregaFallida(
+                id_intento=None,
+                id_envio=id_envio,
+                id_hoja_ruta=id_hoja_ruta,
+                motivo_fallo=motivo_fallo or "",
+                dni_receptor=dni_receptor,
+                firma_receptor=firma_receptor,
+                foto_remito=foto_remito,
+                coordenadas_gps=coordenadas_gps,
+            )
+        else:
+            prueba = PruebaDeEntrega(
+                id_intento=None,
+                id_envio=id_envio,
+                id_hoja_ruta=id_hoja_ruta,
+                tipo_intento=tipo_intento,
+                dni_receptor=dni_receptor,
+                firma_receptor=firma_receptor,
+                foto_remito=foto_remito,
+                coordenadas_gps=coordenadas_gps,
+                motivo_fallo=motivo_fallo,
+            )
+
+        # La validación de negocio la hace el objeto (método del diagrama de clases)
+        prueba.validar_entrega()
 
         conn = self.db.get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -169,8 +192,15 @@ class ChoferController:
 
     def registrar_devolucion(self, id_chofer: int, id_hoja_ruta: int, id_envio: int, motivo: str) -> None:
         """Cambia un envío fallido a devolución y deja trazabilidad."""
-        if not motivo or not motivo.strip():
-            raise ValidationError(field="motivo_devolucion", reason="El motivo de devolución es obligatorio")
+        # Usar EntregaFallida para validar el motivo y generar la observación del historial
+        entrega_fallida = EntregaFallida(
+            id_intento=None,
+            id_envio=id_envio,
+            id_hoja_ruta=id_hoja_ruta,
+            motivo_fallo=motivo,
+        )
+        # procesar_retorno_devolucion() valida y retorna el texto para el historial
+        observacion_historial = entrega_fallida.procesar_retorno_devolucion()
 
         conn = self.db.get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -192,7 +222,7 @@ class ChoferController:
             cursor.execute(
                 """INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
                    VALUES (%s, 'devolucion', 'Base operativa', %s)""",
-                (id_envio, f"Devolución solicitada por el chofer: {motivo.strip()}"),
+                (id_envio, observacion_historial),
             )
             conn.commit()
         except ValidationError:
