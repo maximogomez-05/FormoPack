@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 class ChoferController:
     """Consulta rutas propias y registra evidencias de entrega."""
 
-    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido"}
+    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido", "devolucion"}
+
+    @staticmethod
+    def calcular_estado_post_intento(tipo_intento: str) -> str:
+        """Devuelve el estado resultante del intento de entrega."""
+        return "entregado" if tipo_intento == "entregado" else "fallido"
+
+    @staticmethod
+    def es_estado_terminal(estado: str | None) -> bool:
+        """Indica si un envío ya no acepta más intentos de entrega."""
+        return bool(estado) and estado in {"entregado", "fallido", "devolucion"}
 
     def __init__(self) -> None:
         self.db = DatabaseManager.get_instance()
@@ -133,7 +143,7 @@ class ChoferController:
             if envio["estado_actual"] not in self.ESTADOS_ENTREGA:
                 raise ValidationError(field="envio", reason="El envío ya no admite un intento de entrega")
 
-            nuevo_estado = "entregado" if tipo_intento == "entregado" else "fallido"
+            nuevo_estado = self.calcular_estado_post_intento(tipo_intento)
             cursor.execute(
                 """INSERT INTO intentos_entrega
                    (id_envio, id_hoja_ruta, coordenadas_gps, tipo_intento,

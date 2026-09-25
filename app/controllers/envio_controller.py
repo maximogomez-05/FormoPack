@@ -10,6 +10,7 @@ from app.models.bulto import Bulto
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from app.models.pago import Pago, PagoEfectivo, PagoDigital
+from app.models.comprobante_interno import ComprobanteInterno
 from app.models.historial_estado import HistorialEstado
 from app.services.cotizador import Cotizador
 from app.services.generador_guia import GeneradorGuia
@@ -226,6 +227,26 @@ class EnvioController:
 
             vuelto = round(max(0, monto_entregado - monto), 2) if tipo_pago == "efectivo" else 0.0
 
+            cursor.execute(
+                """
+                SELECT id_comprobante FROM comprobantes_internos
+                WHERE id_envio = %s AND tipo_comprobante = 'recepcion'
+                LIMIT 1
+                """,
+                (id_envio,),
+            )
+            comprobante_existente = cursor.fetchone()
+            if not comprobante_existente:
+                nro_comprobante = ComprobanteInterno.generar_nro_comprobante(id_envio, "recepcion")
+                cursor.execute(
+                    """
+                    INSERT INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (id_envio, nro_comprobante, "recepcion"),
+                )
+
+            conn.commit()
             logger.info("Pago #%d registrado: $%.2f (%s) para envio #%d", id_pago, monto, tipo_pago, id_envio)
 
             return {

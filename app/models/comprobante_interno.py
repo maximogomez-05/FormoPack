@@ -15,6 +15,12 @@ class ComprobanteInterno:
     Genera un documento PDF de recepción o entrega para control administrativo.
     """
 
+    @staticmethod
+    def generar_nro_comprobante(id_envio: int, tipo: str = "recepcion") -> str:
+        """Genera un número único para comprobantes internos."""
+        prefijo = "REC" if tipo == "recepcion" else "ENT"
+        return f"{prefijo}-{id_envio:06d}-{datetime.now().strftime('%Y%m%d')}"
+
     def __init__(
         self,
         id_comprobante: int,
@@ -78,4 +84,15 @@ class ComprobanteInterno:
         return (
             f"<ComprobanteInterno id={self._id_comprobante} "
             f"nro='{self._nro_comprobante}' tipo='{self._tipo_comprobante}'>"
+        )
+
+    @classmethod
+    def crear_desde_envio(cls, id_comprobante: int, id_envio: int, tipo: str = "recepcion") -> "ComprobanteInterno":
+        """Crea una instancia con número automático."""
+        nro = cls.generar_nro_comprobante(id_envio, tipo)
+        return cls(
+            id_comprobante=id_comprobante,
+            id_envio=id_envio,
+            nro_comprobante=nro,
+            tipo_comprobante=tipo,
         )

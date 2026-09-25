@@ -29,6 +29,15 @@ class AppConfig:
     BCRYPT_ROUNDS: int = 12
 
 
+class EmailConfig:
+    """Configuración SMTP de Gmail para alertas operativas."""
+    HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
+    PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "465"))
+    USER: str = os.getenv("GMAIL_USER", "")
+    PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
+    RECIPIENT: str = os.getenv("ALERTAS_EMAIL", "")
+
+
 class RoleConfig:
     """Roles del sistema."""
     ADMINISTRADOR: str = "administrador"

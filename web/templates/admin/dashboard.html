@@ -46,6 +46,37 @@
   </div>
 </div>
 
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-bell"></i> Alertas operativas</span>
+    <div>
+      <a href="{{ url_for('admin.descargar_reporte_envios') }}" class="btn btn-secondary btn-sm">
+        <i class="fa-solid fa-file-csv"></i> Descargar reporte CSV
+      </a>
+      {% if alertas %}
+      <form method="post" action="{{ url_for('admin.enviar_alertas_email') }}" style="display:inline;">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-envelope"></i> Enviar por Gmail
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if alertas %}
+  <div>
+    {% for alerta in alertas %}
+    <div class="alert alert-{{ alerta.tipo }}" style="margin-bottom:8px;">
+      <i class="fa-solid {% if alerta.tipo == 'danger' %}fa-circle-exclamation{% else %}fa-clock{% endif %}"></i>
+      <strong>{{ alerta.guia }}</strong>: {{ alerta.mensaje }}
+      <a href="{{ url_for('admin.tracking_publico', guia=alerta.guia) }}" style="margin-left:8px;">Ver seguimiento</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-state">No hay alertas operativas pendientes.</p>
+  {% endif %}
+</div>
+
 <div class="dashboard-columns">
   <div class="card">
     <div class="card-header">

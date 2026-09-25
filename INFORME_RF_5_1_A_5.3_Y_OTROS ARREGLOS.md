@@ -11,6 +11,7 @@ Se verificaron y completaron los requisitos que estaban parcialmente implementad
 - RF 3.4 - Documentos y etiquetas de despacho.
 - RF 4.3 - Operacion offline del chofer.
 - RF 4.5 - Entregas fallidas y devoluciones.
+- RF 5.1 - Tracking publico del envio.
 - RF 5.3 - Dashboard gerencial.
 - RNF 2.1 - Interfaz adaptable a dispositivos moviles.
 
@@ -109,7 +110,30 @@ La operacion offline requiere que el chofer haya abierto previamente el panel co
 - `web/templates/chofer/panel.html`
 - `config/settings.py`
 
-## 6. RF 5.3 - Dashboard gerencial
+## 6. RF 5.1 - Tracking publico del envio
+
+### Implementado
+
+- Consulta publica mediante numero de guia, sin iniciar sesion.
+- Busqueda del envio junto con remitente, destinatario y localidad de destino.
+- Visualizacion del estado actual del envio.
+- Timeline completo basado en la tabla `historial_estados`.
+- Orden cronologico de los movimientos registrados.
+- Ubicacion y observacion asociadas a cada cambio de estado.
+- Estado actual mostrado como fallback cuando el envio no tiene historial.
+- Mensaje claro cuando la guia no existe.
+
+### Archivos principales
+
+- `web/routes/admin.py`
+- `web/templates/tracking.html`
+- `app/models/historial_estado.py`
+
+### Validacion
+
+El tracking fue probado con una guia existente y con una guia inexistente. La consulta existente muestra el timeline y la consulta inexistente muestra un mensaje de error sin romper la aplicacion.
+
+## 7. RF 5.3 - Dashboard gerencial
 
 ### Implementado
 
@@ -133,7 +157,7 @@ La operacion offline requiere que el chofer haya abierto previamente el panel co
 - `web/routes/admin.py`
 - `web/templates/admin/dashboard.html`
 
-## 7. RNF 2.1 - Interfaz adaptable
+## 8. RNF 2.1 - Interfaz adaptable
 
 ### Implementado
 
@@ -152,7 +176,7 @@ La operacion offline requiere que el chofer haya abierto previamente el panel co
 - `web/templates/base_chofer.html`
 - `web/static/css/style.css`
 
-## 8. Trabajo anterior verificado
+## 9. Trabajo anterior verificado
 
 Antes de estos cambios ya estaban implementados y se conservaron:
 
@@ -175,7 +199,7 @@ Antes de estos cambios ya estaban implementados y se conservaron:
 - Tracking publico con timeline.
 - Dashboard basico.
 
-## 9. Validaciones ejecutadas
+## 10. Validaciones ejecutadas
 
 ### Diagnosticos del editor
 
@@ -215,14 +239,15 @@ El script `tests/test_modelos.py` completo finalizo correctamente:
 
 El entorno virtual no tiene instalado `pytest`, por lo que no se pudo ejecutar `pytest -q tests`. Las pruebas standalone y las validaciones directas de codigo si fueron ejecutadas correctamente.
 
-## 10. Estado final
+## 11. Estado final
 
-Los seis requisitos solicitados tienen ahora una implementacion funcional dentro del alcance local del proyecto:
+Los siete requisitos solicitados tienen ahora una implementacion funcional dentro del alcance local del proyecto:
 
 - RF 2.5: funcional para cobro local efectivo y digital con referencia QR.
 - RF 3.4: funcional para remitos triplicados y etiquetas Code128.
 - RF 4.3: funcional para cola offline de entregas con reintentos.
 - RF 4.5: funcional para fallos, reintentos y devolucion a origen.
+- RF 5.1: funcional para tracking publico con timeline cronologico.
 - RF 5.3: funcional con metricas del dia e historico semanal.
 - RNF 2.1: interfaz adaptable con navegacion movil.
 

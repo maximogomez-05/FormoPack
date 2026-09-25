@@ -16,6 +16,7 @@ from app.models.comprobante_interno import ComprobanteInterno
 from app.models.historial_estado import HistorialEstado
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
+from app.controllers.chofer_controller import ChoferController
 from app.services.ruteo import ServicioRuteo
 from app.utils.exceptions import ValidationError, TurnoCajaError
 from config.settings import EstadosEnvio
@@ -310,6 +311,31 @@ def test_logistica_flujo_completo():
     print("  [OK] RF 3.2: Armado de despachos (hoja de ruta creada con envíos)")
 
 
+def test_comprobante_interno_generacion():
+    """Prueba generación de número para comprobantes internos."""
+    nro = ComprobanteInterno.generar_nro_comprobante(17, "recepcion")
+    assert nro.startswith("REC-")
+    assert len(nro) >= 8
+
+    comprobante = ComprobanteInterno(
+        id_comprobante=1,
+        id_envio=17,
+        nro_comprobante=nro,
+        tipo_comprobante="recepcion",
+    )
+    assert comprobante.nro_comprobante == nro
+    print("  [OK] ComprobanteInterno: generación de número y serialización")
+
+
+def test_registro_devolucion_fallida():
+    """Prueba que un intento fallido puede derivar en devolución a origen."""
+    estado = ChoferController.calcular_estado_post_intento("fallido")
+    assert estado == "fallido"
+    assert ChoferController.es_estado_terminal("fallido") is True
+    assert ChoferController.es_estado_terminal("devolucion") is True
+    print("  [OK] RF 4.5: fallo + devolución a origen")
+
+
 def test_serialization():
     """Prueba serialización to_dict de todos los modelos."""
     cliente = Cliente(id_cliente=1, dni="12345678", nombre_completo="Test", telefono="123")
@@ -345,6 +371,8 @@ def main():
     test_vehiculo_validacion()
     test_ruteo_por_kilometraje()
     test_logistica_flujo_completo()
+    test_comprobante_interno_generacion()
+    test_registro_devolucion_fallida()
     test_serialization()
     print("--- Todas las pruebas de modelos pasaron ---\n")
 

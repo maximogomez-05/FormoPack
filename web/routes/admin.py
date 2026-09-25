@@ -4,7 +4,12 @@ Blueprint: admin_bp
 """
 
 import logging
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
+import csv
+import io
+import smtplib
+from datetime import datetime, timedelta
+from email.message import EmailMessage
+from flask import Blueprint, Response, render_template, session, request, jsonify, redirect, url_for, flash
 from web.routes.auth import login_required, rol_requerido
 from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
@@ -12,6 +17,7 @@ from app.models.hoja_ruta import HojaRuta
 from app.controllers.logistica_controller import LogisticaController
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
 from app.controllers.usuario_controller import UsuarioController
+from config.settings import EmailConfig
 admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
@@ -24,12 +30,65 @@ def dashboard():
     metricas = _obtener_metricas()
     historico = _obtener_historico_metricas()
     ultimos_envios = _obtener_ultimos_envios(limite=10)
+    alertas = construir_alertas_operativas(ultimos_envios)
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
         historico=historico,
         ultimos_envios=ultimos_envios,
+        alertas=alertas,
     )
+
+
+@admin_bp.route("/reportes/envios.csv", methods=["GET"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def descargar_reporte_envios():
+    """Exporta un reporte operativo de envíos en formato CSV (RF 5.4)."""
+    fecha_desde = request.args.get("desde", "").strip()
+    fecha_hasta = request.args.get("hasta", "").strip()
+    try:
+        desde = datetime.strptime(fecha_desde, "%Y-%m-%d").date() if fecha_desde else datetime.now().date() - timedelta(days=6)
+        hasta = datetime.strptime(fecha_hasta, "%Y-%m-%d").date() if fecha_hasta else datetime.now().date()
+    except ValueError:
+        return Response("Las fechas deben tener formato AAAA-MM-DD.\n", status=400, mimetype="text/plain")
+    if desde > hasta:
+        return Response("La fecha inicial no puede ser posterior a la fecha final.\n", status=400, mimetype="text/plain")
+
+    filas = _obtener_reporte_envios(desde, hasta)
+    salida = io.StringIO(newline="")
+    escritor = csv.writer(salida)
+    escritor.writerow(["Guia", "Estado", "Remitente", "Destinatario", "Destino", "Costo", "Modalidad de pago", "Fecha de creacion"])
+    for fila in filas:
+        escritor.writerow([
+            fila.get("nro_guia", ""), fila.get("estado_actual", ""),
+            fila.get("remitente", ""), fila.get("destinatario", ""),
+            fila.get("localidad_destino", ""), fila.get("costo_total", 0),
+            fila.get("modalidad_pago", ""), fila.get("fecha_creacion", ""),
+        ])
+    respuesta = Response("\ufeff" + salida.getvalue(), mimetype="text/csv; charset=utf-8")
+    respuesta.headers["Content-Disposition"] = f"attachment; filename=reporte_envios_{desde}_{hasta}.csv"
+    return respuesta
+
+
+@admin_bp.route("/alertas/email", methods=["POST"])
+@login_required
+@rol_requerido("administrador")
+def enviar_alertas_email():
+    """Envía por Gmail las alertas operativas actuales (RF 5.5)."""
+    alertas = construir_alertas_operativas(_obtener_ultimos_envios(limite=50))
+    if not alertas:
+        flash("No hay alertas pendientes para enviar.", "info")
+        return redirect(url_for("admin.dashboard"))
+    try:
+        _enviar_alertas_gmail(alertas)
+        flash("Las alertas fueron enviadas por Gmail correctamente.", "success")
+    except ValueError as e:
+        flash(str(e), "warning")
+    except (OSError, smtplib.SMTPException) as e:
+        logger.error("Error al enviar alertas por Gmail: %s", e)
+        flash("No se pudieron enviar las alertas por Gmail.", "danger")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/logistica", methods=["GET"])
@@ -308,6 +367,76 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
         return []
 
 
+def _obtener_reporte_envios(desde, hasta) -> list:
+    """Obtiene el detalle de envíos para el reporte operativo."""
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT
+                e.nro_guia, e.estado_actual, e.costo_total, e.modalidad_pago,
+                e.fecha_creacion,
+                cr.nombre_completo AS remitente,
+                cd.nombre_completo AS destinatario,
+                l.nombre AS localidad_destino
+            FROM envios e
+            JOIN clientes cr ON e.id_remitente = cr.id_cliente
+            JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+            JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            WHERE DATE(e.fecha_creacion) BETWEEN %s AND %s
+            ORDER BY e.fecha_creacion ASC
+        """, (desde, hasta))
+        filas = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return filas
+    except Exception as e:
+        logger.error("Error al generar reporte de envíos: %s", e)
+        return []
+
+
+def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
+    """Construye alertas locales para supervisar envíos demorados o fallidos (RF 5.5)."""
+    ahora = ahora or datetime.now()
+    alertas = []
+    for envio in envios or []:
+        estado = str(envio.get("estado_actual") or "").lower()
+        guia = envio.get("nro_guia") or "Sin guía"
+        fecha = envio.get("fecha_creacion")
+        if isinstance(fecha, str):
+            try:
+                fecha = datetime.fromisoformat(fecha)
+            except ValueError:
+                fecha = None
+
+        if estado == "fallido":
+            alertas.append({"tipo": "danger", "guia": guia, "mensaje": "Entrega fallida: requiere seguimiento."})
+        elif estado == "recibido" and fecha and ahora - fecha >= timedelta(hours=24):
+            alertas.append({"tipo": "warning", "guia": guia, "mensaje": "Envío recibido hace más de 24 horas sin despacho."})
+        elif estado == "en_ruta" and fecha and ahora - fecha >= timedelta(days=2):
+            alertas.append({"tipo": "warning", "guia": guia, "mensaje": "Envío en ruta hace más de 48 horas: revisar estado."})
+    return alertas
+
+
+def _enviar_alertas_gmail(alertas: list[dict]) -> None:
+    """Envía un resumen de alertas mediante una cuenta Gmail con contraseña de aplicación."""
+    if not EmailConfig.USER or not EmailConfig.PASSWORD or not EmailConfig.RECIPIENT:
+        raise ValueError("Configurá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL para enviar alertas.")
+
+    mensaje = EmailMessage()
+    mensaje["Subject"] = f"FormoPack: {len(alertas)} alerta(s) operativa(s)"
+    mensaje["From"] = EmailConfig.USER
+    mensaje["To"] = EmailConfig.RECIPIENT
+    cuerpo = ["Se detectaron las siguientes alertas en FormoPack:", ""]
+    cuerpo.extend(f"- {alerta['guia']}: {alerta['mensaje']}" for alerta in alertas)
+    mensaje.set_content("\n".join(cuerpo))
+
+    with smtplib.SMTP_SSL(EmailConfig.HOST, EmailConfig.PORT, timeout=15) as smtp:
+        smtp.login(EmailConfig.USER, EmailConfig.PASSWORD)
+        smtp.send_message(mensaje)
+
+
 def _obtener_historico_metricas() -> list:
     """Obtiene siete días de actividad para el dashboard gerencial."""
     try:
@@ -362,6 +491,40 @@ def construir_timeline(envio: dict | None, historial: list[dict]) -> list[dict]:
 
     eventos.sort(key=lambda item: str(item["fecha_hora"]))
     return eventos
+
+
+def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dict:
+    """Resumir el estado actual del envío para la vista pública."""
+    if not envio:
+        return {
+            "estado": "no_encontrado",
+            "ultima_actualizacion": None,
+            "ubicacion_actual": "Sin información",
+            "progreso": "sin_datos",
+        }
+
+    timeline = construir_timeline(envio, historial)
+    estado_actual = str(envio.get("estado_actual") or timeline[-1].get("estado") or "recibido").lower()
+    ultimo_evento = timeline[-1] if timeline else {
+        "fecha_hora": envio.get("fecha_creacion") or "2000-01-01 00:00:00",
+        "ubicacion": "Sucursal Origen",
+    }
+
+    if estado_actual == "entregado":
+        progreso = "entregado"
+    elif estado_actual == "fallido":
+        progreso = "fallido"
+    elif estado_actual in {"en_ruta", "en_planta"}:
+        progreso = "en_tránsito"
+    else:
+        progreso = "registrado"
+
+    return {
+        "estado": estado_actual,
+        "ultima_actualizacion": ultimo_evento.get("fecha_hora"),
+        "ubicacion_actual": ultimo_evento.get("ubicacion") or "Sucursal Origen",
+        "progreso": progreso,
+    }
 
 
 def _obtener_timeline(nro_guia: str):
