@@ -579,26 +579,13 @@ def _obtener_detalle_envio(nro_guia: str):
             )
             detalle["pago"] = cursor.fetchone()
 
-<<<<<<< HEAD
-        cursor.execute(
-            "SELECT * FROM comprobantes_internos WHERE id_envio = %s ORDER BY fecha_emision DESC LIMIT 1",
-            (envio["id_envio"],),
-        )
-        detalle["comprobante"] = cursor.fetchone()
+            cursor.execute(
+                "SELECT * FROM comprobantes_internos WHERE id_envio = %s ORDER BY fecha_emision DESC LIMIT 1",
+                (envio["id_envio"],),
+            )
+            detalle["comprobante"] = cursor.fetchone()
 
-        # Pago registrado
-        cursor.execute(
-            "SELECT * FROM pagos WHERE id_envio = %s ORDER BY fecha DESC LIMIT 1",
-            (envio["id_envio"],)
-        )
-        detalle["pago"] = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-    return envio, detalle
-=======
         return envio, detalle
     finally:
         cursor.close()
         conn.close()
->>>>>>> 883502389ff7a2a35d982982c03c61dd7b827049
