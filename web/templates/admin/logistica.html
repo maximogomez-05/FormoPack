@@ -17,11 +17,11 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Patente</label>
-          <input name="patente" class="form-control" maxlength="10" required placeholder="AB123CD">
+          <input name="patente" class="form-control" maxlength="10" minlength="5" required placeholder="AB123CD" pattern="[A-Za-z0-9]+" title="Solo letras y números, sin espacios ni guiones. Ej: AB123CD">
         </div>
         <div class="form-group">
           <label class="form-label">Capacidad (kg)</label>
-          <input name="capacidad_kg" type="number" min="1" step="0.01" class="form-control" required>
+          <input name="capacidad_kg" type="number" min="1" max="50000" step="0.01" class="form-control" required placeholder="Ej: 1500">
         </div>
       </div>
       <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar vehículo</button>
@@ -35,7 +35,7 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">N° de despacho</label>
-          <input name="nro_despacho" class="form-control" maxlength="20" required placeholder="DESP-001">
+          <input name="nro_despacho" class="form-control" maxlength="20" minlength="3" required placeholder="DESP-001" pattern="[A-Za-z0-9\-]+" title="Solo letras, números y guiones. Ej: DESP-001">
         </div>
         <div class="form-group">
           <label class="form-label">Chofer</label>

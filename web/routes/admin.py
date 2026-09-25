@@ -161,8 +161,12 @@ def registrar_vehiculo():
 @rol_requerido("administrador", "recepcionista")
 def crear_hoja_ruta():
     """Crea una hoja de ruta con envíos recibidos."""
+    envios_ids = request.form.getlist('envios_ids')
+    if not envios_ids:
+        flash('Debe seleccionar al menos un envío para crear la hoja de ruta.', 'warning')
+        return redirect(url_for('admin.logistica'))
     try:
-        envios_ids = [int(value) for value in request.form.getlist("envios_ids")]
+        envios_ids = [int(value) for value in envios_ids]
         LogisticaController().crear_hoja_ruta(
             request.form.get("nro_despacho", "").strip(),
             int(request.form.get("id_chofer", 0)),

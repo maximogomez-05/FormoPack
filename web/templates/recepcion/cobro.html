@@ -54,7 +54,9 @@
         <div class="form-group">
           <label class="form-label">Monto Recibido ($)</label>
           <input type="number" name="monto_entregado" id="monto-entregado" class="form-control"
-                 min="{{ envio.costo_total }}" step="0.01" oninput="calcularVuelto({{ envio.costo_total }})">
+                 min="{{ envio.costo_total }}" max="999999" step="0.01" required
+                 placeholder="{{ '%.2f'|format(envio.costo_total) }}"
+                 oninput="calcularVuelto({{ envio.costo_total }})">
         </div>
         <div id="vuelto-display" style="display:none;" class="alert alert-info">
           <i class="fa-solid fa-circle-info"></i> Cambio a entregar: <strong id="vuelto-valor" style="margin-left:8px;">$0.00</strong>

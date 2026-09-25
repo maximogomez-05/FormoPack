@@ -76,7 +76,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Dirección Exacta de Entrega (*)</label>
-        <input type="text" name="direccion_destino" class="form-control" required>
+        <input type="text" name="direccion_destino" class="form-control" required maxlength="200" minlength="5" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -101,7 +101,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Valor Declarado de la Mercadería ($)</label>
-        <input type="number" name="valor_declarado" class="form-control" min="0" step="0.01">
+        <input type="number" name="valor_declarado" class="form-control" min="0" max="9999999" step="0.01" placeholder="0.00">
       </div>
     </div>
 
@@ -128,7 +128,7 @@
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-            <input type="checkbox" name="es_fragil[]" value="0">
+            <input type="checkbox" name="es_fragil[]" value="on">
             <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
           </label>
         </div>
@@ -174,7 +174,7 @@ function agregarBulto() {
       </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-      <input type="checkbox" name="es_fragil[]" value="${nb-1}">
+      <input type="checkbox" name="es_fragil[]" value="on">
       <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
     </label>`;
   c.appendChild(d);
