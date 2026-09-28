@@ -59,10 +59,12 @@ def test_cliente_from_db():
         "dni": "12345678",
         "nombre_completo": "Juan Perez",
         "telefono": "3704123456",
+        "email": "juan.perez@ejemplo.com",
     }
     cliente = Cliente.from_db_row(row)
     assert cliente.id_cliente == 1
     assert cliente.dni == "12345678"
+    assert cliente.email == "juan.perez@ejemplo.com"
     assert "Juan Perez" in cliente.obtener_datos_contacto()
     print("  [OK] Cliente: Factory from_db_row y obtenerDatosContacto")
 

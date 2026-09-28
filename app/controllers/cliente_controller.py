@@ -24,13 +24,20 @@ class ClienteController:
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
 
-    def registrar_cliente(self, dni: str, nombre_completo: str, telefono: str) -> Cliente:
+    def registrar_cliente(
+        self,
+        dni: str,
+        nombre_completo: str,
+        telefono: str,
+        email: Optional[str] = None,
+    ) -> Cliente:
         """Registra un nuevo cliente en el sistema.
 
         Args:
             dni: Documento Nacional de Identidad (obligatorio).
             nombre_completo: Nombre completo del cliente.
             telefono: Teléfono de contacto (obligatorio).
+            email: Correo electrónico de contacto (opcional).
 
         Returns:
             Instancia de Cliente registrado.
@@ -39,7 +46,8 @@ class ClienteController:
             ValidationError: Si faltan datos obligatorios.
             DuplicateError: Si el DNI ya está registrado.
         """
-        Cliente.validar_datos(dni, nombre_completo, telefono)
+        email_limpio = email.strip() if email else None
+        Cliente.validar_datos(dni, nombre_completo, telefono, email_limpio)
 
         # Verificar duplicado
         existente = self.buscar_por_dni(dni)
@@ -47,14 +55,14 @@ class ClienteController:
             raise DuplicateError(entity="Cliente", identifier=dni)
 
         sql = """
-            INSERT INTO clientes (dni, nombre_completo, telefono)
-            VALUES (%s, %s, %s)
+            INSERT INTO clientes (dni, nombre_completo, telefono, email)
+            VALUES (%s, %s, %s, %s)
         """
         conn = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
-            cursor.execute(sql, (dni.strip(), nombre_completo.strip(), telefono.strip()))
+            cursor.execute(sql, (dni.strip(), nombre_completo.strip(), telefono.strip(), email_limpio))
             conn.commit()
             id_nuevo = cursor.lastrowid
             cursor.close()
@@ -64,6 +72,7 @@ class ClienteController:
                 dni=dni.strip(),
                 nombre_completo=nombre_completo.strip(),
                 telefono=telefono.strip(),
+                email=email_limpio,
             )
             logger.info("Cliente registrado: %s", cliente)
             return cliente
@@ -150,13 +159,14 @@ class ClienteController:
             if conn:
                 conn.close()
 
-    def obtener_o_crear(self, dni: str, nombre_completo: str, telefono: str) -> Cliente:
+    def obtener_o_crear(self, dni: str, nombre_completo: str, telefono: str, email: Optional[str] = None) -> Cliente:
         """Obtiene un cliente existente por DNI, o lo crea si no existe.
 
         Args:
             dni: Documento Nacional de Identidad.
             nombre_completo: Nombre completo.
             telefono: Teléfono de contacto.
+            email: Correo electrónico (opcional).
 
         Returns:
             Instancia de Cliente (existente o recién creado).
@@ -164,4 +174,4 @@ class ClienteController:
         existente = self.buscar_por_dni(dni)
         if existente:
             return existente
-        return self.registrar_cliente(dni, nombre_completo, telefono)
+        return self.registrar_cliente(dni, nombre_completo, telefono, email)

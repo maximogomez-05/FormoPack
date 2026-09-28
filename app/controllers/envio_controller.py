@@ -159,6 +159,29 @@ class EnvioController:
 
             logger.info("Envio creado: guia=%s, costo=$%.2f", nro_guia, cotizacion["costo_total"])
 
+            # Notificación (RF 5.4)
+            try:
+                from app.services.servicio_notificacion import ServicioNotificacion
+                from app.models.cliente import Cliente
+                
+                # Obtener cliente remitente
+                conn_n = self._db.get_connection()
+                cur_n = conn_n.cursor(dictionary=True)
+                cur_n.execute("SELECT * FROM clientes WHERE id_cliente = %s", (id_remitente,))
+                cli_row = cur_n.fetchone()
+                cur_n.close()
+                conn_n.close()
+                
+                if cli_row:
+                    cliente = Cliente.from_db_row(cli_row)
+                    envio = self.obtener_por_guia(nro_guia)
+                    notificador = ServicioNotificacion()
+                    notificador.enviar_alerta_cambio_estado(
+                        envio, cliente, EstadosEnvio.RECIBIDO, "Envío recibido en mostrador."
+                    )
+            except Exception as e:
+                logger.warning("Error al notificar creación de envío: %s", e)
+
             return {
                 "id_envio": id_envio,
                 "nro_guia": nro_guia,
@@ -223,8 +246,7 @@ class EnvioController:
             ))
             conn.commit()
             id_pago = cursor.lastrowid
-            cursor.close()
-
+            
             vuelto = round(max(0, monto_entregado - monto), 2) if tipo_pago == "efectivo" else 0.0
 
             cursor.execute(
@@ -249,6 +271,7 @@ class EnvioController:
             conn.commit()
             logger.info("Pago #%d registrado: $%.2f (%s) para envio #%d", id_pago, monto, tipo_pago, id_envio)
 
+            cursor.close()
             return {
                 "id_pago": id_pago,
                 "id_envio": id_envio,

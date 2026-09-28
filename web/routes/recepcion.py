@@ -81,9 +81,10 @@ def nuevo_cliente():
         dni = request.form.get("dni", "").strip()
         nombre = request.form.get("nombre_completo", "").strip()
         telefono = request.form.get("telefono", "").strip()
+        email = request.form.get("email", "").strip() or None
         try:
             ctrl = ClienteController()
-            cliente = ctrl.registrar_cliente(dni, nombre, telefono)
+            cliente = ctrl.registrar_cliente(dni, nombre, telefono, email)
             flash(f"Cliente '{cliente.nombre_completo}' registrado exitosamente.", "success")
             return redirect(url_for("recepcion.listar_clientes"))
         except DuplicateError:
@@ -161,6 +162,7 @@ def nuevo_envio():
                 dni=form.get("rem_dni", "").strip(),
                 nombre_completo=form.get("rem_nombre", "").strip(),
                 telefono=form.get("rem_telefono", "").strip(),
+                email=form.get("rem_email", "").strip() or None,
             )
 
             # Destinatario
@@ -168,6 +170,7 @@ def nuevo_envio():
                 dni=form.get("dest_dni", "").strip(),
                 nombre_completo=form.get("dest_nombre", "").strip(),
                 telefono=form.get("dest_telefono", "").strip(),
+                email=form.get("dest_email", "").strip() or None,
             )
 
             # Bultos (vienen como listas del form)

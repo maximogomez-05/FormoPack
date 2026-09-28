@@ -32,6 +32,11 @@
                maxlength="20" minlength="6"
                placeholder="Ej: 3704 123456">
       </div>
+      <div class="form-group">
+        <label class="form-label">Correo Electrónico (Notificaciones)</label>
+        <input type="email" name="rem_email" id="rem_email" class="form-control"
+               maxlength="100" placeholder="remitente@ejemplo.com">
+      </div>
     </div>
 
     <div class="card">
@@ -57,6 +62,11 @@
         <input type="tel" name="dest_telefono" id="dest_telefono" class="form-control" required
                maxlength="20" minlength="6"
                placeholder="Ej: 3704 123456">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Correo Electrónico (Notificaciones)</label>
+        <input type="email" name="dest_email" id="dest_email" class="form-control"
+               maxlength="100" placeholder="destinatario@ejemplo.com">
       </div>
     </div>
   </div>
@@ -189,6 +199,9 @@ async function buscarCliente(prefix) {
     if (data.encontrado) {
       document.getElementById(`${prefix}_nombre`).value = data.cliente.nombre_completo;
       document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
+      if (document.getElementById(`${prefix}_email`)) {
+        document.getElementById(`${prefix}_email`).value = data.cliente.email || '';
+      }
     } else {
       alert('Cliente no registrado en la base de datos. Los datos ingresados generarán un nuevo registro al confirmar.');
     }
@@ -237,5 +250,29 @@ async function buscarCliente(prefix) {
     }
   }
 })();
+
+// Advertencia de cambios sin guardar (Data Loss Prevention)
+let formChanged = false;
+const formEnvio = document.getElementById('form-envio');
+
+if (formEnvio) {
+  // Detectar cambios en cualquier input/select/textarea
+  formEnvio.addEventListener('change', () => {
+    formChanged = true;
+  });
+
+  // Al enviar el formulario, quitar la advertencia
+  formEnvio.addEventListener('submit', () => {
+    formChanged = false;
+  });
+
+  // Mostrar advertencia si el usuario intenta cerrar la pestaña o navegar atrás
+  window.addEventListener('beforeunload', (e) => {
+    if (formChanged) {
+      e.preventDefault();
+      e.returnValue = ''; // Requerido por la mayoría de navegadores modernos
+    }
+  });
+}
 </script>
 {% endblock %}

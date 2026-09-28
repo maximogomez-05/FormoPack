@@ -97,6 +97,34 @@ class ChoferController:
                     (envio["id_envio"], "En ruta", "Ruta iniciada por el chofer"),
                 )
             conn.commit()
+
+            # --- NOTIFICACIONES (RF 5.4) ---
+            try:
+                from app.services.servicio_notificacion import ServicioNotificacion
+                from app.models.cliente import Cliente
+                from app.models.envio import Envio
+                
+                conn_notif = self.db.get_connection()
+                cur_notif = conn_notif.cursor(dictionary=True)
+                notificador = ServicioNotificacion()
+                
+                for envio in envios:
+                    cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (envio["id_envio"],))
+                    env_row = cur_notif.fetchone()
+                    if env_row:
+                        envio_obj = Envio.from_db_row(env_row)
+                        cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
+                        cli_row = cur_notif.fetchone()
+                        if cli_row:
+                            cli_obj = Cliente.from_db_row(cli_row)
+                            notificador.enviar_alerta_cambio_estado(
+                                envio_obj, cli_obj, 'en_ruta', "Ruta iniciada por el chofer."
+                            )
+                cur_notif.close()
+                conn_notif.close()
+            except Exception as e:
+                logger.warning("Error enviando notificaciones chofer en_ruta: %s", e)
+
         except ValidationError:
             conn.rollback()
             raise
@@ -189,6 +217,33 @@ class ChoferController:
                 (id_envio, nuevo_estado, coordenadas_gps or "Sin ubicación", observacion),
             )
             conn.commit()
+
+            # --- NOTIFICACION (RF 5.4) ---
+            try:
+                from app.services.servicio_notificacion import ServicioNotificacion
+                from app.models.cliente import Cliente
+                from app.models.envio import Envio
+                
+                conn_notif = self.db.get_connection()
+                cur_notif = conn_notif.cursor(dictionary=True)
+                
+                cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
+                env_row = cur_notif.fetchone()
+                if env_row:
+                    envio_obj = Envio.from_db_row(env_row)
+                    cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
+                    cli_row = cur_notif.fetchone()
+                    if cli_row:
+                        cli_obj = Cliente.from_db_row(cli_row)
+                        notificador = ServicioNotificacion()
+                        notificador.enviar_alerta_cambio_estado(
+                            envio_obj, cli_obj, nuevo_estado, observacion
+                        )
+                cur_notif.close()
+                conn_notif.close()
+            except Exception as e:
+                logger.warning("Error enviando notificaciones de entrega: %s", e)
+
         except ValidationError:
             conn.rollback()
             raise
@@ -235,6 +290,33 @@ class ChoferController:
                 (id_envio, observacion_historial),
             )
             conn.commit()
+
+            # --- NOTIFICACION (RF 5.4) ---
+            try:
+                from app.services.servicio_notificacion import ServicioNotificacion
+                from app.models.cliente import Cliente
+                from app.models.envio import Envio
+                
+                conn_notif = self.db.get_connection()
+                cur_notif = conn_notif.cursor(dictionary=True)
+                
+                cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
+                env_row = cur_notif.fetchone()
+                if env_row:
+                    envio_obj = Envio.from_db_row(env_row)
+                    cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
+                    cli_row = cur_notif.fetchone()
+                    if cli_row:
+                        cli_obj = Cliente.from_db_row(cli_row)
+                        notificador = ServicioNotificacion()
+                        notificador.enviar_alerta_cambio_estado(
+                            envio_obj, cli_obj, 'devolucion', observacion_historial
+                        )
+                cur_notif.close()
+                conn_notif.close()
+            except Exception as e:
+                logger.warning("Error enviando notificacion de devolucion: %s", e)
+
         except ValidationError:
             conn.rollback()
             raise

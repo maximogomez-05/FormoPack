@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS clientes (
     dni             VARCHAR(15)     NOT NULL,
     nombre_completo VARCHAR(100)    NOT NULL,
     telefono        VARCHAR(20)     NOT NULL,
+    email           VARCHAR(100)    DEFAULT NULL,
     PRIMARY KEY (id_cliente),
     UNIQUE KEY uk_clientes_dni (dni),
     INDEX idx_clientes_telefono (telefono)

@@ -22,11 +22,13 @@ class Cliente:
         dni: str,
         nombre_completo: str,
         telefono: str,
+        email: Optional[str] = None,
     ) -> None:
         self._id_cliente = id_cliente
         self._dni = dni
         self._nombre_completo = nombre_completo
         self._telefono = telefono
+        self._email = email
 
     # --- Properties ---
 
@@ -46,11 +48,16 @@ class Cliente:
     def telefono(self) -> str:
         return self._telefono
 
+    @property
+    def email(self) -> Optional[str]:
+        return self._email
+
     # --- Métodos de negocio (UML) ---
 
     def obtener_datos_contacto(self) -> str:
         """Retorna una cadena formateada con los datos de contacto del cliente."""
-        return f"{self._nombre_completo} | DNI: {self._dni} | Tel: {self._telefono}"
+        email_str = f" | Email: {self._email}" if self._email else ""
+        return f"{self._nombre_completo} | DNI: {self._dni} | Tel: {self._telefono}{email_str}"
 
     # --- Serialización ---
 
@@ -61,6 +68,7 @@ class Cliente:
             "dni": self._dni,
             "nombre_completo": self._nombre_completo,
             "telefono": self._telefono,
+            "email": self._email,
         }
 
     @classmethod
@@ -71,16 +79,18 @@ class Cliente:
             dni=row["dni"],
             nombre_completo=row["nombre_completo"],
             telefono=row["telefono"],
+            email=row.get("email"),
         )
 
     @staticmethod
-    def validar_datos(dni: str, nombre_completo: str, telefono: str) -> None:
-        """Valida los datos obligatorios de un cliente antes del registro."""
+    def validar_datos(dni: str, nombre_completo: str, telefono: str, email: Optional[str] = None) -> None:
+        """Valida los datos obligatorios y opcionales de un cliente antes del registro."""
         import re
 
         dni_limpio = (dni or "").strip()
         nombre_limpio = (nombre_completo or "").strip()
         tel_limpio = (telefono or "").strip()
+        email_limpio = (email or "").strip()
 
         # --- DNI / CUIT ---
         if not dni_limpio:
@@ -119,5 +129,9 @@ class Cliente:
                 reason="El teléfono debe tener entre 6 y 15 dígitos.",
             )
 
+        # --- Email (Opcional) ---
+        if email_limpio and not re.fullmatch(r"[^@]+@[^@]+\.[^@]+", email_limpio):
+            raise ValidationError(field="email", reason="El correo electrónico ingresado no tiene un formato válido.")
+
     def __repr__(self) -> str:
-        return f"<Cliente id={self._id_cliente} dni='{self._dni}' nombre='{self._nombre_completo}'>"
+        return f"<Cliente id={self._id_cliente} dni='{self._dni}' nombre='{self._nombre_completo}' email='{self._email}'>"

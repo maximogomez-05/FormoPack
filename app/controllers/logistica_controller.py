@@ -154,6 +154,33 @@ class LogisticaController:
             conn.commit()
             cursor.close()
 
+            # Notificaciones (RF 5.4)
+            try:
+                from app.services.servicio_notificacion import ServicioNotificacion
+                from app.models.cliente import Cliente
+                from app.models.envio import Envio
+                
+                conn_notif = self.db.get_connection()
+                cur_notif = conn_notif.cursor(dictionary=True)
+                notificador = ServicioNotificacion()
+                
+                for id_envio in envios_ids:
+                    cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
+                    env_row = cur_notif.fetchone()
+                    if env_row:
+                        envio_obj = Envio.from_db_row(env_row)
+                        cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
+                        cli_row = cur_notif.fetchone()
+                        if cli_row:
+                            cli_obj = Cliente.from_db_row(cli_row)
+                            notificador.enviar_alerta_cambio_estado(
+                                envio_obj, cli_obj, 'en_planta', "El envío ha sido asignado a una hoja de ruta."
+                            )
+                cur_notif.close()
+                conn_notif.close()
+            except Exception as e:
+                logger.warning("Error enviando notificaciones logistica: %s", e)
+
             # Recuperar la hoja completa
             return self.obtener_hoja_ruta(id_hoja_ruta)
 
