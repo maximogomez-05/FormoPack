@@ -47,6 +47,7 @@ def descargar_reporte_envios():
     """Exporta un reporte operativo de envíos en formato CSV (RF 5.4)."""
     fecha_desde = request.args.get("desde", "").strip()
     fecha_hasta = request.args.get("hasta", "").strip()
+    estado = request.args.get("estado", "").strip().lower()
     try:
         desde = datetime.strptime(fecha_desde, "%Y-%m-%d").date() if fecha_desde else datetime.now().date() - timedelta(days=6)
         hasta = datetime.strptime(fecha_hasta, "%Y-%m-%d").date() if fecha_hasta else datetime.now().date()
@@ -55,7 +56,7 @@ def descargar_reporte_envios():
     if desde > hasta:
         return Response("La fecha inicial no puede ser posterior a la fecha final.\n", status=400, mimetype="text/plain")
 
-    filas = _obtener_reporte_envios(desde, hasta)
+    filas = _obtener_reporte_envios(desde, hasta, estado=estado or None)
     salida = io.StringIO(newline="")
     escritor = csv.writer(salida)
     escritor.writerow(["Guia", "Estado", "Remitente", "Destinatario", "Destino", "Costo", "Modalidad de pago", "Fecha de creacion"])
@@ -67,7 +68,8 @@ def descargar_reporte_envios():
             fila.get("modalidad_pago", ""), fila.get("fecha_creacion", ""),
         ])
     respuesta = Response("\ufeff" + salida.getvalue(), mimetype="text/csv; charset=utf-8")
-    respuesta.headers["Content-Disposition"] = f"attachment; filename=reporte_envios_{desde}_{hasta}.csv"
+    nombre_estado = f"_{estado}" if estado else ""
+    respuesta.headers["Content-Disposition"] = f"attachment; filename=reporte_envios_{desde}_{hasta}{nombre_estado}.csv"
     return respuesta
 
 
@@ -371,26 +373,43 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
         return []
 
 
-def _obtener_reporte_envios(desde, hasta) -> list:
+def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
     """Obtiene el detalle de envíos para el reporte operativo."""
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT
-                e.nro_guia, e.estado_actual, e.costo_total, e.modalidad_pago,
-                e.fecha_creacion,
-                cr.nombre_completo AS remitente,
-                cd.nombre_completo AS destinatario,
-                l.nombre AS localidad_destino
-            FROM envios e
-            JOIN clientes cr ON e.id_remitente = cr.id_cliente
-            JOIN clientes cd ON e.id_destinatario = cd.id_cliente
-            JOIN localidades l ON e.id_localidad_destino = l.id_localidad
-            WHERE DATE(e.fecha_creacion) BETWEEN %s AND %s
-            ORDER BY e.fecha_creacion ASC
-        """, (desde, hasta))
+        if estado:
+            cursor.execute("""
+                SELECT
+                    e.nro_guia, e.estado_actual, e.costo_total, e.modalidad_pago,
+                    e.fecha_creacion,
+                    cr.nombre_completo AS remitente,
+                    cd.nombre_completo AS destinatario,
+                    l.nombre AS localidad_destino
+                FROM envios e
+                JOIN clientes cr ON e.id_remitente = cr.id_cliente
+                JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+                JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+                WHERE DATE(e.fecha_creacion) BETWEEN %s AND %s
+                  AND e.estado_actual = %s
+                ORDER BY e.fecha_creacion ASC
+            """, (desde, hasta, estado))
+        else:
+            cursor.execute("""
+                SELECT
+                    e.nro_guia, e.estado_actual, e.costo_total, e.modalidad_pago,
+                    e.fecha_creacion,
+                    cr.nombre_completo AS remitente,
+                    cd.nombre_completo AS destinatario,
+                    l.nombre AS localidad_destino
+                FROM envios e
+                JOIN clientes cr ON e.id_remitente = cr.id_cliente
+                JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+                JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+                WHERE DATE(e.fecha_creacion) BETWEEN %s AND %s
+                ORDER BY e.fecha_creacion ASC
+            """, (desde, hasta))
         filas = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -423,15 +442,22 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
     return alertas
 
 
+def _obtener_destinatarios_alertas() -> list[str]:
+    """Devuelve una lista de emails válidos para alertas operativas."""
+    raw = (EmailConfig.RECIPIENT or "").replace(";", ",")
+    return [email.strip() for email in raw.split(",") if email.strip()]
+
+
 def _enviar_alertas_gmail(alertas: list[dict]) -> None:
     """Envía un resumen de alertas mediante una cuenta Gmail con contraseña de aplicación."""
-    if not EmailConfig.USER or not EmailConfig.PASSWORD or not EmailConfig.RECIPIENT:
+    destinatarios = _obtener_destinatarios_alertas()
+    if not EmailConfig.USER or not EmailConfig.PASSWORD or not destinatarios:
         raise ValueError("Configurá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL para enviar alertas.")
 
     mensaje = EmailMessage()
     mensaje["Subject"] = f"FormoPack: {len(alertas)} alerta(s) operativa(s)"
     mensaje["From"] = EmailConfig.USER
-    mensaje["To"] = EmailConfig.RECIPIENT
+    mensaje["To"] = ", ".join(destinatarios)
     cuerpo = ["Se detectaron las siguientes alertas en FormoPack:", ""]
     cuerpo.extend(f"- {alerta['guia']}: {alerta['mensaje']}" for alerta in alertas)
     mensaje.set_content("\n".join(cuerpo))

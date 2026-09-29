@@ -103,9 +103,18 @@ def registrar_devolucion(id_hoja_ruta: int, id_envio: int):
             id_envio,
             request.form.get("motivo_devolucion", ""),
         )
+        if request.headers.get("X-Offline-Sync") == "1":
+            return jsonify({"ok": True})
         flash("El envío fue marcado para devolución a origen.", "success")
     except (ValidationError, DatabaseQueryError) as exc:
+        if request.headers.get("X-Offline-Sync") == "1":
+            return jsonify({"ok": False, "error": str(exc)}), 400
         flash(str(exc), "danger")
+    except Exception as exc:
+        logger.exception("Error al registrar devolución offline")
+        if request.headers.get("X-Offline-Sync") == "1":
+            return jsonify({"ok": False, "error": "Error inesperado al sincronizar devolución"}), 500
+        flash(f"No se pudo registrar la devolución: {exc}", "danger")
     return redirect(url_for("chofer.panel"))
 
 

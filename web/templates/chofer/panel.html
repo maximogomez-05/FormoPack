@@ -53,7 +53,7 @@
         {% if envio.estado_actual == 'fallido' %}
         <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
           <input type="hidden" name="motivo_devolucion" value="Entrega fallida sin reintento exitoso">
-          <button type="submit" class="btn btn-danger" onclick="return confirm('¿Marcar este envío para devolución a origen?')"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
+          <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
         </form>
         {% endif %}
         {% else %}
@@ -244,6 +244,32 @@ async function enviarEntrega(form) {
     cerrarEntrega();
     actualizarContador();
     alert('Sin conexión: la entrega quedó guardada y se enviará automáticamente al volver Internet.');
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => registration.sync && registration.sync.register('formopack-deliveries')).catch(() => {});
+  }
+}
+
+async function enviarDevolucion(form) {
+  const data = new FormData(form);
+  const fields = {};
+  for (const [key, value] of data.entries()) {
+    fields[key] = value;
+  }
+  const item = { action: form.action, fields, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
+  try {
+    if (!navigator.onLine) throw new Error('offline');
+    const response = await fetch(form.action, {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin'
+    });
+    if (!response.ok) throw new Error('server');
+    window.location.reload();
+  } catch (error) {
+    await guardarPendiente(item);
+    actualizarContador();
+    alert('Sin conexión: la devolución quedó guardada y se sincronizará cuando vuelva Internet.');
   }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => registration.sync && registration.sync.register('formopack-deliveries')).catch(() => {});

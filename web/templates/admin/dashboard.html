@@ -50,9 +50,24 @@
   <div class="card-header">
     <span class="card-title"><i class="fa-solid fa-bell"></i> Alertas operativas</span>
     <div>
-      <a href="{{ url_for('admin.descargar_reporte_envios') }}" class="btn btn-secondary btn-sm">
-        <i class="fa-solid fa-file-csv"></i> Descargar reporte CSV
-      </a>
+      <form method="get" action="{{ url_for('admin.descargar_reporte_envios') }}" style="display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label style="font-size:12px; color:var(--text-muted);">Desde</label>
+        <input type="date" name="desde" class="form-control" style="max-width:150px;">
+        <label style="font-size:12px; color:var(--text-muted);">Hasta</label>
+        <input type="date" name="hasta" class="form-control" style="max-width:150px;">
+        <label style="font-size:12px; color:var(--text-muted);">Estado</label>
+        <select name="estado" class="form-control" style="max-width:150px;">
+          <option value="">Todos</option>
+          <option value="recibido">Recibido</option>
+          <option value="en_ruta">En ruta</option>
+          <option value="entregado">Entregado</option>
+          <option value="fallido">Fallido</option>
+          <option value="devolucion">Devolución</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">
+          <i class="fa-solid fa-file-csv"></i> Exportar CSV
+        </button>
+      </form>
       {% if alertas %}
       <form method="post" action="{{ url_for('admin.enviar_alertas_email') }}" style="display:inline;">
         <button type="submit" class="btn btn-primary btn-sm">
