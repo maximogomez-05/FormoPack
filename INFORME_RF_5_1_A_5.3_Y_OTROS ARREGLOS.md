@@ -13,6 +13,7 @@ Se verificaron y completaron los requisitos que estaban parcialmente implementad
 - RF 4.5 - Entregas fallidas y devoluciones.
 - RF 5.1 - Tracking publico del envio.
 - RF 5.3 - Dashboard gerencial.
+- RF 5.4 - Notificaciones automaticas por email.
 - RNF 2.1 - Interfaz adaptable a dispositivos moviles.
 
 La verificacion se hizo sobre el codigo actual del repositorio, no solamente sobre los informes anteriores.
@@ -157,7 +158,24 @@ El tracking fue probado con una guia existente y con una guia inexistente. La co
 - `web/routes/admin.py`
 - `web/templates/admin/dashboard.html`
 
-## 8. RNF 2.1 - Interfaz adaptable
+## 8. RF 5.4 - Notificaciones automáticas por email
+
+### Implementado
+
+- Nuevo servicio `ServicioNotificacion` con integración nativa SMTP (`smtplib`).
+- Envío automático de correo al remitente ante cambios de estado de un envío (`recibido`, `en_planta`, `en_ruta`, `entregado`, `fallido`, `devolucion`).
+- Manejo silencioso y seguro de excepciones (si fallan las credenciales o el SMTP, se loggea el error sin interrumpir transacciones de base de datos).
+- Pruebas unitarias comprobando el comportamiento ante conexiones SSL, TLS y fallos de autenticación.
+
+### Archivos principales
+
+- `app/services/servicio_notificacion.py`
+- `app/controllers/envio_controller.py`
+- `app/controllers/logistica_controller.py`
+- `app/controllers/chofer_controller.py`
+- `tests/test_notificaciones.py`
+
+## 9. RNF 2.1 - Interfaz adaptable
 
 ### Implementado
 
@@ -176,7 +194,7 @@ El tracking fue probado con una guia existente y con una guia inexistente. La co
 - `web/templates/base_chofer.html`
 - `web/static/css/style.css`
 
-## 9. Trabajo anterior verificado
+## 10. Trabajo anterior verificado
 
 Antes de estos cambios ya estaban implementados y se conservaron:
 
@@ -199,7 +217,7 @@ Antes de estos cambios ya estaban implementados y se conservaron:
 - Tracking publico con timeline.
 - Dashboard basico.
 
-## 10. Validaciones ejecutadas
+## 11. Validaciones ejecutadas
 
 ### Diagnosticos del editor
 
@@ -239,9 +257,9 @@ El script `tests/test_modelos.py` completo finalizo correctamente:
 
 El entorno virtual no tiene instalado `pytest`, por lo que no se pudo ejecutar `pytest -q tests`. Las pruebas standalone y las validaciones directas de codigo si fueron ejecutadas correctamente.
 
-## 11. Estado final
+## 12. Estado final
 
-Los siete requisitos solicitados tienen ahora una implementacion funcional dentro del alcance local del proyecto:
+Los requisitos solicitados tienen ahora una implementacion funcional dentro del alcance local del proyecto:
 
 - RF 2.5: funcional para cobro local efectivo y digital con referencia QR.
 - RF 3.4: funcional para remitos triplicados y etiquetas Code128.
@@ -249,6 +267,7 @@ Los siete requisitos solicitados tienen ahora una implementacion funcional dentr
 - RF 4.5: funcional para fallos, reintentos y devolucion a origen.
 - RF 5.1: funcional para tracking publico con timeline cronologico.
 - RF 5.3: funcional con metricas del dia e historico semanal.
+- RF 5.4: funcional con envío de alertas automáticas vía SMTP.
 - RNF 2.1: interfaz adaptable con navegacion movil.
 
 Las integraciones externas reales, como MercadoPago, AFIP, WhatsApp y despliegue SaaS, siguen requiriendo credenciales, servicios externos e infraestructura que no forman parte del repositorio local.
