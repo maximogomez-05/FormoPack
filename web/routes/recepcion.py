@@ -69,7 +69,7 @@ def buscar_cliente_ajax():
             return jsonify({"encontrado": True, "cliente": cliente.to_dict()})
         return jsonify({"encontrado": False})
     except Exception as e:
-        return jsonify({"encontrado": False, "error": str(e)})
+        return jsonify({"encontrado": False, "error": "Error interno"})
 
 
 @recepcion_bp.route("/clientes/nuevo", methods=["GET", "POST"])
@@ -92,7 +92,7 @@ def nuevo_cliente():
         except ValidationError as e:
             flash(e.message, "danger")
         except Exception as e:
-            flash(f"Error al registrar cliente: {e}", "danger")
+            flash("Ocurrió un error al registrar el cliente. Intente nuevamente.", "danger")
     return render_template("recepcion/nuevo_cliente.html")
 
 
@@ -138,7 +138,7 @@ def calcular_cotizacion():
 
     except Exception as e:
         logger.error("Error en cotización AJAX: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Error al calcular cotización"}), 500
 
 
 # ──────────────────────────────────────────
@@ -221,7 +221,7 @@ def nuevo_envio():
             flash(e.message, "danger")
         except Exception as e:
             logger.error("Error al crear envío: %s", e)
-            flash(f"Error al registrar el envío: {e}", "danger")
+            flash("Ocurrió un error al registrar el envío. Intente nuevamente.", "danger")
 
     return render_template(
         "recepcion/nuevo_envio.html",
@@ -248,17 +248,19 @@ def cobrar_envio(nro_guia: str):
     qr_base64 = None
     qr_id = None
 
+    conn_check = None
     try:
         db = DatabaseManager.get_instance()
-        conn = db.get_connection()
-        cursor = conn.cursor()
+        conn_check = db.get_connection()
+        cursor = conn_check.cursor()
         cursor.execute("SELECT 1 FROM pagos WHERE id_envio = %s LIMIT 1", (envio.id_envio,))
         ya_pagado = cursor.fetchone() is not None
-        cursor.close()
-        conn.close()
     except Exception as e:
         logger.error(f"Error verificando pago: {e}")
         ya_pagado = False
+    finally:
+        if conn_check:
+            conn_check.close()
 
     if ya_pagado:
         if request.method == "POST":
@@ -318,7 +320,7 @@ def cobrar_envio(nro_guia: str):
             return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
         except Exception as e:
-            flash(f"Error al registrar pago: {e}", "danger")
+            flash("Ocurrió un error al procesar el pago. Intente nuevamente.", "danger")
 
     # Generar QR estático con datos del cobro
     qr_id = _generar_id_qr(envio.id_envio, envio.costo_total)
@@ -368,7 +370,7 @@ def descargar_pdf(nro_guia: str):
             download_name=f"comprobante_{nro_guia}.pdf",
         )
     except Exception as e:
-        flash(f"Error al generar PDF: {e}", "danger")
+        flash("No se pudo generar el PDF. Intente nuevamente.", "danger")
         return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
 
@@ -390,7 +392,7 @@ def descargar_documentos_despacho(nro_guia: str):
             download_name=f"documentos_{nro_guia}.pdf",
         )
     except Exception as e:
-        flash(f"Error al generar documentos: {e}", "danger")
+        flash("No se pudieron generar los documentos. Intente nuevamente.", "danger")
         return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
 
@@ -412,7 +414,7 @@ def descargar_etiqueta(nro_guia: str):
             download_name=f"etiqueta_{nro_guia}.pdf",
         )
     except Exception as e:
-        flash(f"Error al generar etiqueta: {e}", "danger")
+        flash("No se pudo generar la etiqueta. Intente nuevamente.", "danger")
         return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
 
@@ -448,7 +450,7 @@ def abrir_caja():
     except TurnoCajaError as e:
         flash(e.message, "warning")
     except Exception as e:
-        flash(f"Error al abrir caja: {e}", "danger")
+        flash("Ocurrió un error al abrir la caja. Intente nuevamente.", "danger")
     return redirect(url_for("recepcion.caja"))
 
 
@@ -469,7 +471,7 @@ def cerrar_caja(id_turno: int):
     except TurnoCajaError as e:
         flash(e.message, "warning")
     except Exception as e:
-        flash(f"Error al cerrar caja: {e}", "danger")
+        flash("Ocurrió un error al cerrar la caja. Intente nuevamente.", "danger")
     return redirect(url_for("recepcion.caja"))
 
 
@@ -477,31 +479,33 @@ def cerrar_caja(id_turno: int):
 # Helpers internos
 # ──────────────────────────────────────────
 def _obtener_localidades() -> list:
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM localidades ORDER BY nombre ASC")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
+        return cursor.fetchall()
     except Exception:
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _obtener_seguros() -> list:
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM seguros ORDER BY cobertura_estandar ASC")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
+        return cursor.fetchall()
     except Exception:
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _generar_qr_pago(nro_guia: str, monto: float) -> str:
@@ -530,6 +534,7 @@ def _generar_id_qr(id_envio: int, monto: float) -> str:
 
 def _obtener_turno_activo(id_usuario: int):
     """Obtiene el turno de caja abierto del usuario."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -543,12 +548,12 @@ def _obtener_turno_activo(id_usuario: int):
             WHERE tc.id_recepcionista = %s AND tc.estado_caja = 'abierto'
             LIMIT 1
         """, (id_usuario,))
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return row
+        return cursor.fetchone()
     except Exception:
         return None
+    finally:
+        if conn:
+            conn.close()
 
 
 def _obtener_detalle_envio(nro_guia: str):

@@ -29,6 +29,7 @@ class LogisticaController:
 
     def listar_vehiculos(self) -> List[Dict[str, Any]]:
         """Lista todos los vehículos registrados."""
+        conn = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -38,15 +39,17 @@ class LogisticaController:
                 ORDER BY patente ASC
             """)
             vehiculos = cursor.fetchall()
-            cursor.close()
-            conn.close()
             return [Vehiculo.from_db_row(v).to_dict() for v in vehiculos]
         except Exception as e:
             logger.error("Error al listar vehículos: %s", e)
             raise DatabaseConnectionError(f"Error al listar vehículos: {e}")
+        finally:
+            if conn:
+                conn.close()
 
     def obtener_vehiculo(self, id_vehiculo: int) -> Optional[Vehiculo]:
         """Obtiene un vehículo por ID."""
+        conn = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -55,16 +58,18 @@ class LogisticaController:
                 (id_vehiculo,)
             )
             fila = cursor.fetchone()
-            cursor.close()
-            conn.close()
             return Vehiculo.from_db_row(fila) if fila else None
         except Exception as e:
             logger.error("Error al obtener vehículo %d: %s", id_vehiculo, e)
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def registrar_vehiculo(self, patente: str, capacidad_kg: float) -> Vehiculo:
         """Registra un nuevo vehículo en la flota."""
         Vehiculo.validar_datos(patente, capacidad_kg)
+        conn = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
@@ -74,13 +79,16 @@ class LogisticaController:
             )
             conn.commit()
             id_vehiculo = cursor.lastrowid
-            cursor.close()
-            conn.close()
             logger.info("Vehículo registrado: %s (ID: %d)", patente, id_vehiculo)
             return Vehiculo(id_vehiculo, patente.upper(), capacidad_kg, "disponible")
         except Exception as e:
+            if conn:
+                conn.rollback()
             logger.error("Error al registrar vehículo: %s", e)
             raise DatabaseQueryError(f"Error al registrar vehículo: {e}")
+        finally:
+            if conn:
+                conn.close()
 
     # ─────────────────────────────────────────
     # RF 3.2: Armado de Despachos

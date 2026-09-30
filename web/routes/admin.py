@@ -154,7 +154,7 @@ def registrar_vehiculo():
         flash("La capacidad debe ser un número válido.", "danger")
     except Exception as e:
         logger.error("Error al registrar vehículo: %s", e)
-        flash(str(e), "danger")
+        flash("Ocurrió un error al registrar el vehículo.", "danger")
     return redirect(url_for("admin.logistica"))
 
 
@@ -180,12 +180,13 @@ def crear_hoja_ruta():
         flash("Completá correctamente los datos de la hoja de ruta.", "danger")
     except Exception as e:
         logger.error("Error al crear hoja de ruta: %s", e)
-        flash(str(e), "danger")
+        flash("Ocurrió un error al crear la hoja de ruta.", "danger")
     return redirect(url_for("admin.logistica"))
 
 
 def _obtener_choferes_disponibles() -> list:
     """Obtiene choferes activos para asignar un despacho."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -194,13 +195,13 @@ def _obtener_choferes_disponibles() -> list:
             """SELECT id_usuario, nombre FROM usuarios
                WHERE tipo_usuario = 'chofer' AND activo = 1 ORDER BY nombre"""
         )
-        choferes = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return choferes
+        return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener choferes: %s", e)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 @admin_bp.route("/tracking", methods=["GET"])
@@ -288,6 +289,7 @@ def toggle_usuario(id_usuario: int):
 # ──────────────────────────────────────────
 def _obtener_metricas() -> dict:
     """Obtiene métricas del día desde la BD."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -318,9 +320,6 @@ def _obtener_metricas() -> dict:
         """)
         caja = cursor.fetchone() or {}
 
-        cursor.close()
-        conn.close()
-
         return {
             "total_envios": int(metricas.get("total_envios", 0)),
             "facturado_total": float(metricas.get("facturado_total", 0)),
@@ -339,10 +338,14 @@ def _obtener_metricas() -> dict:
             "recibidos": 0, "entregados": 0, "fallidos": 0, "en_ruta": 0,
             "efectivo_hoy": 0, "digital_hoy": 0, "pagos_hoy": 0,
         }
+    finally:
+        if conn:
+            conn.close()
 
 
 def _obtener_ultimos_envios(limite: int = 10) -> list:
     """Obtiene los últimos envíos registrados."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -364,17 +367,18 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
             ORDER BY e.fecha_creacion DESC
             LIMIT %s
         """, (limite,))
-        filas = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return filas
+        return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener envíos: %s", e)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
     """Obtiene el detalle de envíos para el reporte operativo."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -410,13 +414,13 @@ def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
                 WHERE DATE(e.fecha_creacion) BETWEEN %s AND %s
                 ORDER BY e.fecha_creacion ASC
             """, (desde, hasta))
-        filas = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return filas
+        return cursor.fetchall()
     except Exception as e:
         logger.error("Error al generar reporte de envíos: %s", e)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
@@ -469,6 +473,7 @@ def _enviar_alertas_gmail(alertas: list[dict]) -> None:
 
 def _obtener_historico_metricas() -> list:
     """Obtiene siete días de actividad para el dashboard gerencial."""
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -485,13 +490,13 @@ def _obtener_historico_metricas() -> list:
             GROUP BY DATE(fecha_creacion)
             ORDER BY dia ASC
         """)
-        filas = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return filas
+        return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener histórico del dashboard: %s", e)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def construir_timeline(envio: dict | None, historial: list[dict]) -> list[dict]:
@@ -559,34 +564,39 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
 
 def _obtener_timeline(nro_guia: str):
     """Obtiene el envío y su timeline de estados."""
-    db = DatabaseManager.get_instance()
-    conn = db.get_connection()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT
-            e.*,
-            cr.nombre_completo AS remitente,
-            cd.nombre_completo AS destinatario,
-            l.nombre AS localidad_destino
-        FROM envios e
-        JOIN clientes cr ON e.id_remitente = cr.id_cliente
-        JOIN clientes cd ON e.id_destinatario = cd.id_cliente
-        JOIN localidades l ON e.id_localidad_destino = l.id_localidad
-        WHERE e.nro_guia = %s
-    """, (nro_guia,))
-    envio = cursor.fetchone()
-
-    timeline = []
-    if envio:
         cursor.execute("""
-            SELECT estado, fecha_hora, ubicacion, observacion
-            FROM historial_estados
-            WHERE id_envio = %s
-            ORDER BY fecha_hora ASC
-        """, (envio["id_envio"],))
-        timeline = cursor.fetchall()
+            SELECT
+                e.*,
+                cr.nombre_completo AS remitente,
+                cd.nombre_completo AS destinatario,
+                l.nombre AS localidad_destino
+            FROM envios e
+            JOIN clientes cr ON e.id_remitente = cr.id_cliente
+            JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+            JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            WHERE e.nro_guia = %s
+        """, (nro_guia,))
+        envio = cursor.fetchone()
 
-    cursor.close()
-    conn.close()
-    return envio, timeline
+        historial = []
+        if envio:
+            cursor.execute("""
+                SELECT * FROM historial_estados
+                WHERE id_envio = %s
+                ORDER BY fecha_hora ASC
+            """, (envio["id_envio"],))
+            historial = cursor.fetchall()
+
+        return envio, historial
+    except Exception as e:
+        logger.error("Error al obtener timeline: %s", e)
+        return None, []
+    finally:
+        if conn:
+            conn.close()
