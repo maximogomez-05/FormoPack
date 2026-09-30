@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Liquidaciones de Choferes — FormoPack{% endblock %}
+{% block page_title %}<i class="fa-solid fa-file-invoice-dollar"></i> Liquidaciones de Choferes{% endblock %}
+
+{% block content %}
+<!-- Filtros de consulta -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-filter"></i> Parámetros de Consulta</span>
+  </div>
+  <form method="GET" action="{{ url_for('admin.liquidaciones') }}">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:16px;align-items:end;">
+      <div class="form-group">
+        <label class="form-label">Chofer</label>
+        <select name="id_chofer" class="form-control">
+          <option value="">Todos los choferes</option>
+          {% for c in choferes %}
+          <option value="{{ c.id_usuario }}" {% if c.id_usuario|string == id_chofer_sel %}selected{% endif %}>
+            {{ c.nombre }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Desde</label>
+        <input type="date" name="desde" class="form-control" value="{{ fecha_desde }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hasta</label>
+        <input type="date" name="hasta" class="form-control" value="{{ fecha_hasta }}" required>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary" style="white-space:nowrap;">
+          <i class="fa-solid fa-magnifying-glass"></i> Consultar
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if liquidacion %}
+<!-- Liquidación individual de un chofer -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-user"></i> {{ liquidacion.nombre_chofer }}</span>
+    <span style="font-size:12px;color:var(--text-muted);">
+      {{ liquidacion.fecha_desde.strftime('%d/%m/%Y') }} — {{ liquidacion.fecha_hasta.strftime('%d/%m/%Y') }}
+    </span>
+  </div>
+
+  <div class="metrics-grid" style="margin-bottom:16px;">
+    <div class="metric-card blue">
+      <i class="fa-solid fa-clipboard-list metric-icon"></i>
+      <div class="metric-value">{{ liquidacion.total_hojas }}</div>
+      <div class="metric-label">Hojas de Ruta</div>
+    </div>
+    <div class="metric-card">
+      <i class="fa-solid fa-boxes-stacked metric-icon"></i>
+      <div class="metric-value">{{ liquidacion.total_envios }}</div>
+      <div class="metric-label">Envíos Asignados</div>
+    </div>
+    <div class="metric-card green">
+      <i class="fa-solid fa-check-double metric-icon"></i>
+      <div class="metric-value">{{ liquidacion.entregados }}</div>
+      <div class="metric-label">Entregados</div>
+    </div>
+    <div class="metric-card yellow">
+      <i class="fa-solid fa-triangle-exclamation metric-icon"></i>
+      <div class="metric-value">{{ liquidacion.fallidos }}</div>
+      <div class="metric-label">Fallidos</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+    <div class="desglose-row" style="flex-direction:column;align-items:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Rendimiento</div>
+      <div style="font-size:28px;font-weight:700;color:{% if liquidacion.calcular_rendimiento() >= 80 %}var(--success){% elif liquidacion.calcular_rendimiento() >= 50 %}var(--warning){% else %}var(--danger){% endif %};">
+        {{ liquidacion.calcular_rendimiento() }}%
+      </div>
+    </div>
+    <div class="desglose-row" style="flex-direction:column;align-items:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Monto Facturado</div>
+      <div style="font-size:28px;font-weight:700;color:var(--primary);">
+        ${{ "%.2f"|format(liquidacion.monto_facturado) }}
+      </div>
+    </div>
+    <div class="desglose-row" style="flex-direction:column;align-items:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Km Recorridos (est.)</div>
+      <div style="font-size:28px;font-weight:700;color:var(--primary);">
+        {{ "%.0f"|format(liquidacion.km_recorridos) }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Detalle de hojas de ruta -->
+  {% if liquidacion.hojas_detalle %}
+  <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">
+    <i class="fa-solid fa-list"></i> Detalle por Hoja de Ruta
+  </div>
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>N° Despacho</th>
+          <th>Fecha</th>
+          <th>Vehículo</th>
+          <th>Envíos</th>
+          <th>Entregados</th>
+          <th>Fallidos</th>
+          <th>Pendientes</th>
+          <th>Monto</th>
+          <th>Distancia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in liquidacion.hojas_detalle %}
+        <tr>
+          <td><strong style="color:var(--primary);">{{ h.nro_despacho }}</strong></td>
+          <td style="font-size:12px;color:var(--text-muted);">
+            {{ h.fecha_emision.strftime('%d/%m/%Y %H:%M') if h.fecha_emision and h.fecha_emision.strftime is defined else h.fecha_emision }}
+          </td>
+          <td>{{ h.patente }}</td>
+          <td>{{ h.cant_envios }}</td>
+          <td><span class="badge badge-entregado">{{ h.entregados }}</span></td>
+          <td>
+            {% if h.fallidos > 0 %}
+            <span class="badge badge-fallido">{{ h.fallidos }}</span>
+            {% else %}
+            <span style="color:var(--text-muted);">0</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.pendientes > 0 %}
+            <span class="badge badge-en_ruta">{{ h.pendientes }}</span>
+            {% else %}
+            <span style="color:var(--text-muted);">0</span>
+            {% endif %}
+          </td>
+          <td><strong>${{ "%.2f"|format(h.monto) }}</strong></td>
+          <td>{{ "%.1f"|format(h.max_distancia) }} km</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:32px;color:var(--text-muted);">
+    <i class="fa-solid fa-inbox fa-3x" style="margin-bottom:12px;color:#dee2e6;"></i>
+    <div>No se encontraron hojas de ruta en el período seleccionado.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% elif resumen %}
+<!-- Resumen de todos los choferes -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-users"></i> Resumen General</span>
+    <span style="font-size:12px;color:var(--text-muted);">
+      {{ fecha_desde }} — {{ fecha_hasta }}
+    </span>
+  </div>
+
+  {% if resumen|length > 0 %}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Chofer</th>
+          <th>Hojas</th>
+          <th>Envíos</th>
+          <th>Entregados</th>
+          <th>Fallidos</th>
+          <th>Rendimiento</th>
+          <th>Monto Facturado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumen %}
+        {% set rendimiento = ((r.entregados / r.total_envios * 100) if r.total_envios > 0 else 0)|round(1) %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="avatar-circle role-chofer" style="width:32px;height:32px;font-size:14px;">
+                {{ r.nombre_chofer[0]|upper }}
+              </div>
+              <strong>{{ r.nombre_chofer }}</strong>
+            </div>
+          </td>
+          <td>{{ r.total_hojas }}</td>
+          <td>{{ r.total_envios }}</td>
+          <td><span class="badge badge-entregado">{{ r.entregados }}</span></td>
+          <td>
+            {% if r.fallidos > 0 %}
+            <span class="badge badge-fallido">{{ r.fallidos }}</span>
+            {% else %}
+            <span style="color:var(--text-muted);">0</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;background:#e9ecef;border-radius:4px;height:8px;overflow:hidden;">
+                <div style="width:{{ rendimiento }}%;height:100%;background:{% if rendimiento >= 80 %}var(--success){% elif rendimiento >= 50 %}var(--warning){% else %}var(--danger){% endif %};border-radius:4px;"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;min-width:45px;">{{ rendimiento }}%</span>
+            </div>
+          </td>
+          <td><strong>${{ "%.2f"|format(r.monto_facturado) }}</strong></td>
+          <td>
+            <a href="{{ url_for('admin.liquidaciones', id_chofer=r.id_chofer, desde=fecha_desde, hasta=fecha_hasta) }}"
+               class="btn btn-secondary btn-sm" title="Ver detalle">
+              <i class="fa-solid fa-eye"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:40px;color:var(--text-muted);">
+    <i class="fa-solid fa-inbox fa-3x" style="margin-bottom:12px;color:#dee2e6;"></i>
+    <div>No se encontraron entregas en el período seleccionado.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+<!-- Estado inicial: sin consulta -->
+<div class="card" style="text-align:center;padding:48px 20px;">
+  <i class="fa-solid fa-file-invoice-dollar fa-3x" style="color:#dee2e6;margin-bottom:20px;"></i>
+  <div style="font-size:16px;font-weight:600;color:var(--text-main);margin-bottom:8px;">Liquidaciones de Choferes</div>
+  <div style="color:var(--text-muted);font-size:13px;">
+    Seleccione un período y opcionalmente un chofer para consultar el rendimiento y la facturación.
+  </div>
+</div>
+{% endif %}
+{% endblock %}

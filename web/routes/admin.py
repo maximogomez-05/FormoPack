@@ -17,6 +17,7 @@ from app.models.hoja_ruta import HojaRuta
 from app.controllers.logistica_controller import LogisticaController
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
 from app.controllers.usuario_controller import UsuarioController
+from app.controllers.liquidacion_controller import LiquidacionController
 from config.settings import EmailConfig
 admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
@@ -284,7 +285,70 @@ def toggle_usuario(id_usuario: int):
 
 
 # ──────────────────────────────────────────
+# RF 5.6 — Liquidaciones de Choferes
+# ──────────────────────────────────────────
+@admin_bp.route('/liquidaciones')
+@login_required
+@rol_requerido('administrador')
+def liquidaciones():
+    """Liquidaciones de choferes — rendimiento y facturación por período."""
+    from datetime import date
 
+    liq_ctrl = LiquidacionController()
+    choferes = liq_ctrl.obtener_choferes_con_actividad()
+
+    # Parámetros de filtro
+    id_chofer_sel = request.args.get('id_chofer', '').strip()
+    fecha_desde_str = request.args.get('desde', '').strip()
+    fecha_hasta_str = request.args.get('hasta', '').strip()
+
+    # Valores por defecto: últimos 30 días
+    hoy = date.today()
+    try:
+        fecha_desde = datetime.strptime(fecha_desde_str, '%Y-%m-%d').date() if fecha_desde_str else hoy.replace(day=1)
+        fecha_hasta = datetime.strptime(fecha_hasta_str, '%Y-%m-%d').date() if fecha_hasta_str else hoy
+    except ValueError:
+        flash('Las fechas ingresadas no son válidas.', 'warning')
+        fecha_desde = hoy.replace(day=1)
+        fecha_hasta = hoy
+
+    liquidacion = None
+    resumen = None
+
+    # Solo consultar si hay parámetros de fecha (no en carga inicial)
+    if fecha_desde_str or fecha_hasta_str:
+        try:
+            if id_chofer_sel:
+                # Liquidación individual
+                liquidacion = liq_ctrl.generar_liquidacion(
+                    int(id_chofer_sel), fecha_desde, fecha_hasta
+                )
+                if liquidacion and liquidacion.total_hojas == 0:
+                    flash('No se encontraron hojas de ruta para este chofer en el período seleccionado.', 'info')
+                    liquidacion = None
+            else:
+                # Resumen de todos
+                resumen = liq_ctrl.generar_resumen_todos(fecha_desde, fecha_hasta)
+                if not resumen:
+                    flash('No se encontraron registros en el período seleccionado.', 'info')
+        except ValidationError as e:
+            flash(str(e), 'warning')
+        except Exception as e:
+            logger.error("Error al generar liquidación: %s", e)
+            flash('Ocurrió un error al generar la liquidación.', 'danger')
+
+    return render_template(
+        'admin/liquidaciones.html',
+        choferes=choferes,
+        id_chofer_sel=id_chofer_sel,
+        fecha_desde=fecha_desde.isoformat(),
+        fecha_hasta=fecha_hasta.isoformat(),
+        liquidacion=liquidacion,
+        resumen=resumen,
+    )
+
+
+# ──────────────────────────────────────────
 # Helpers internos
 # ──────────────────────────────────────────
 def _obtener_metricas() -> dict:

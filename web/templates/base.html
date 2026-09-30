@@ -52,6 +52,9 @@
       <a href="{{ url_for('admin.usuarios') }}" class="nav-link {% if request.endpoint == 'admin.usuarios' %}active{% endif %}">
         <i class="fa-solid fa-user-shield nav-icon"></i> Gestión de Usuarios
       </a>
+      <a href="{{ url_for('admin.liquidaciones') }}" class="nav-link {% if request.endpoint == 'admin.liquidaciones' %}active{% endif %}">
+        <i class="fa-solid fa-file-invoice-dollar nav-icon"></i> Liquidaciones
+      </a>
       {% endif %}
 
       <!-- Tracking público -->
