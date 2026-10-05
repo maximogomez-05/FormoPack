@@ -24,6 +24,20 @@ class ClienteController:
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
 
+    def _tiene_columna_email(self) -> bool:
+        """Compatibilidad con esquemas antiguos sin columna email."""
+        conn = None
+        try:
+            conn = self._db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SHOW COLUMNS FROM clientes LIKE 'email'")
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+        finally:
+            if conn:
+                conn.close()
+
     def registrar_cliente(
         self,
         dni: str,
@@ -54,15 +68,28 @@ class ClienteController:
         if existente:
             raise DuplicateError(entity="Cliente", identifier=dni)
 
-        sql = """
-            INSERT INTO clientes (dni, nombre_completo, telefono, email)
-            VALUES (%s, %s, %s, %s)
-        """
         conn = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
-            cursor.execute(sql, (dni.strip(), nombre_completo.strip(), telefono.strip(), email_limpio))
+
+            if self._tiene_columna_email():
+                cursor.execute(
+                    """
+                        INSERT INTO clientes (dni, nombre_completo, telefono, email)
+                        VALUES (%s, %s, %s, %s)
+                    """,
+                    (dni.strip(), nombre_completo.strip(), telefono.strip(), email_limpio),
+                )
+            else:
+                cursor.execute(
+                    """
+                        INSERT INTO clientes (dni, nombre_completo, telefono)
+                        VALUES (%s, %s, %s)
+                    """,
+                    (dni.strip(), nombre_completo.strip(), telefono.strip()),
+                )
+
             conn.commit()
             id_nuevo = cursor.lastrowid
             cursor.close()
@@ -72,7 +99,7 @@ class ClienteController:
                 dni=dni.strip(),
                 nombre_completo=nombre_completo.strip(),
                 telefono=telefono.strip(),
-                email=email_limpio,
+                email=email_limpio if self._tiene_columna_email() else None,
             )
             logger.info("Cliente registrado: %s", cliente)
             return cliente

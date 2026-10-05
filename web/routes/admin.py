@@ -23,6 +23,35 @@ admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
 
+def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un error inesperado.") -> str:
+    """Convierte excepciones internas en mensajes útiles para la UI."""
+    if hasattr(excepcion, "message"):
+        mensaje = str(excepcion.message)
+    else:
+        mensaje = str(excepcion)
+
+    if isinstance(excepcion, ValidationError):
+        return mensaje.replace("[VALIDATION_ERROR] ", "").replace("Validacion fallida en '", "").replace("': ", ": ").replace("'.", ".")
+
+    texto = (mensaje or fallback).strip()
+    texto_lower = texto.lower()
+
+    if "duplicate entry" in texto_lower or "uk_" in texto_lower:
+        return "Ya existe un registro con ese valor. Revisá la patente, la guía o el número de despacho."
+    if "foreign key" in texto_lower or "cannot add or update a child row" in texto_lower:
+        return "Hay un dato relacionado que no existe. Revisá chofer, vehículo o envío asociado."
+    if "cannot be null" in texto_lower or "not null" in texto_lower:
+        return "Faltan datos obligatorios para completar la operación."
+    if "data too long" in texto_lower:
+        return "Uno de los campos supera la longitud permitida. Revisá los datos ingresados."
+    if "out of range" in texto_lower:
+        return "Un valor numérico quedó fuera del rango permitido."
+    if "unknown column" in texto_lower or "field list" in texto_lower or "no such column" in texto_lower:
+        return "La base de datos está desactualizada: falta una columna del sistema. Actualizá la estructura de la base de datos o ejecutá el script de inicialización."
+
+    return texto or fallback
+
+
 @admin_bp.route("/dashboard")
 @login_required
 @rol_requerido("administrador", "recepcionista")
@@ -153,9 +182,12 @@ def registrar_vehiculo():
         flash("Vehículo registrado correctamente.", "success")
     except ValueError:
         flash("La capacidad debe ser un número válido.", "danger")
-    except Exception as e:
+    except (ValidationError, DatabaseQueryError, DatabaseConnectionError, DuplicateError) as e:
         logger.error("Error al registrar vehículo: %s", e)
-        flash("Ocurrió un error al registrar el vehículo.", "danger")
+        flash(_mensaje_usuario_error(e, "No se pudo registrar el vehículo."), "danger")
+    except Exception as e:
+        logger.error("Error inesperado al registrar vehículo: %s", e)
+        flash(_mensaje_usuario_error(e, "No se pudo registrar el vehículo."), "danger")
     return redirect(url_for("admin.logistica"))
 
 
@@ -178,10 +210,13 @@ def crear_hoja_ruta():
         )
         flash("Hoja de ruta creada y envíos asignados correctamente.", "success")
     except (ValueError, TypeError):
-        flash("Completá correctamente los datos de la hoja de ruta.", "danger")
-    except Exception as e:
+        flash("Completá correctamente los datos de la hoja de ruta. Revisá número de despacho, chofer, vehículo y envíos seleccionados.", "danger")
+    except (ValidationError, DatabaseQueryError, DatabaseConnectionError, DuplicateError) as e:
         logger.error("Error al crear hoja de ruta: %s", e)
-        flash("Ocurrió un error al crear la hoja de ruta.", "danger")
+        flash(_mensaje_usuario_error(e, "No se pudo crear la hoja de ruta."), "danger")
+    except Exception as e:
+        logger.error("Error inesperado al crear hoja de ruta: %s", e)
+        flash(_mensaje_usuario_error(e, "No se pudo crear la hoja de ruta."), "danger")
     return redirect(url_for("admin.logistica"))
 
 

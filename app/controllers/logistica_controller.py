@@ -13,6 +13,7 @@ from app.utils.exceptions import (
     DatabaseQueryError,
     ValidationError,
 )
+from config.settings import EstadosEnvio
 
 logger = logging.getLogger(__name__)
 
@@ -286,8 +287,17 @@ class LogisticaController:
     # RF 3.3: Ruteo por Kilometraje
     # ─────────────────────────────────────────
 
-    def obtener_entregas_pendientes(self, estado: str = "recibido") -> List[Dict[str, Any]]:
-        """Obtiene envíos en estado 'recibido' listos para despachar."""
+    @staticmethod
+    def es_envio_despachable(estado_actual: Optional[str], id_hoja_ruta: Any) -> bool:
+        """Define si un envío aún puede entrar en una hoja de ruta."""
+        if id_hoja_ruta is not None:
+            return False
+
+        estado = (estado_actual or "").strip().lower()
+        return estado in {EstadosEnvio.RECIBIDO, EstadosEnvio.EN_PLANTA}
+
+    def obtener_entregas_pendientes(self, estado: str = EstadosEnvio.RECIBIDO) -> List[Dict[str, Any]]:
+        """Obtiene solo envíos no resueltos y sin hoja de ruta asignada."""
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -303,10 +313,12 @@ class LogisticaController:
                 FROM envios e
                 JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                 LEFT JOIN bultos b ON e.id_envio = b.id_envio
-                WHERE e.estado_actual = %s AND e.id_hoja_ruta IS NULL
+                WHERE e.estado_actual IN (%s, %s)
+                  AND e.id_hoja_ruta IS NULL
+                  AND e.estado_actual NOT IN ('entregado', 'fallido', 'devolucion', 'siniestro')
                 GROUP BY e.id_envio
                 ORDER BY l.distancia_km ASC
-            """, (estado,))
+            """, (EstadosEnvio.RECIBIDO, EstadosEnvio.EN_PLANTA))
             entregas = cursor.fetchall()
             cursor.close()
             conn.close()

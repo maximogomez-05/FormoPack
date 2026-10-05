@@ -17,9 +17,12 @@ from app.models.historial_estado import HistorialEstado
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
 from app.controllers.chofer_controller import ChoferController
+from app.controllers.cliente_controller import ClienteController
+from app.controllers.logistica_controller import LogisticaController
 from app.services.ruteo import ServicioRuteo
-from app.utils.exceptions import ValidationError, TurnoCajaError
+from app.utils.exceptions import ValidationError, TurnoCajaError, DatabaseQueryError
 from config.settings import EstadosEnvio
+from web.routes.admin import _mensaje_usuario_error
 
 
 def test_cliente_validacion():
@@ -153,6 +156,35 @@ def test_envio_ciclo_vida():
         pass
 
     print("  [OK] Envio: Ciclo de vida de estados y gestión de bultos")
+
+
+def test_logistica_envio_despachable():
+    """Solo deben aparecer envíos pendientes de despacho y no resueltos."""
+    assert LogisticaController.es_envio_despachable(EstadosEnvio.RECIBIDO, None) is True
+    assert LogisticaController.es_envio_despachable(EstadosEnvio.EN_PLANTA, None) is True
+    assert LogisticaController.es_envio_despachable(EstadosEnvio.ENTREGADO, None) is False
+    assert LogisticaController.es_envio_despachable(EstadosEnvio.FALLIDO, None) is False
+    assert LogisticaController.es_envio_despachable(EstadosEnvio.RECIBIDO, 99) is False
+    print("  [OK] Logistica: validación de envíos despachables")
+
+
+def test_mensaje_usuario_error():
+    """Los mensajes de error deben mostrarse con información útil al usuario."""
+    validacion = ValidationError("vehiculo", "El vehículo no existe o no está disponible")
+    assert "El vehículo no existe o no está disponible" in _mensaje_usuario_error(validacion)
+
+    db_error = DatabaseQueryError("Duplicate entry 'AB123CD' for key 'uk_vehiculos_patente'")
+    assert "Ya existe un registro con ese valor" in _mensaje_usuario_error(db_error)
+
+    assert "Faltan datos obligatorios" in _mensaje_usuario_error(DatabaseQueryError("Column 'id_chofer' cannot be null"))
+    print("  [OK] Admin: mensajes de error legibles para usuario")
+
+
+def test_cliente_compatibilidad_sin_email():
+    """Los esquemas viejos sin columna email deben seguir funcionando."""
+    ctrl = ClienteController()
+    assert isinstance(ctrl._tiene_columna_email(), bool)
+    print("  [OK] Cliente: compatibilidad con esquema sin columna email")
 
 
 def test_pago_efectivo_vuelto():

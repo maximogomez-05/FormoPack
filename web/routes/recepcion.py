@@ -19,7 +19,8 @@ from app.controllers.caja_controller import CajaController
 from app.core.database import DatabaseManager
 from app.utils.exceptions import (
     ValidationError, DuplicateError, DatabaseConnectionError,
-    ClienteNotFoundError, EnvioNotFoundError, TurnoCajaError,
+    DatabaseQueryError, ClienteNotFoundError, EnvioNotFoundError,
+    TurnoCajaError,
 )
 from app.services.cotizador import Cotizador
 from app.models.bulto import Bulto
@@ -31,6 +32,35 @@ from config.settings import MercadoPagoConfig
 
 recepcion_bp = Blueprint("recepcion", __name__)
 logger = logging.getLogger(__name__)
+
+
+def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un error inesperado.") -> str:
+    """Convierte errores internos en mensajes útiles para la UI."""
+    if hasattr(excepcion, "message"):
+        mensaje = str(excepcion.message)
+    else:
+        mensaje = str(excepcion)
+
+    texto = (mensaje or fallback).strip()
+    texto_lower = texto.lower()
+
+    if isinstance(excepcion, ValidationError):
+        return texto.replace("[VALIDATION_ERROR] ", "").replace("Validacion fallida en '", "").replace("': ", ": ").replace("'.", ".")
+
+    if "duplicate entry" in texto_lower or "uk_" in texto_lower:
+        return "Ya existe un registro con ese valor. Revisá la guía, el DNI, la patente o el número asociado."
+    if "foreign key" in texto_lower or "cannot add or update a child row" in texto_lower:
+        return "Hay un dato relacionado que no existe. Revisá el cliente, la localidad o el seguro seleccionado."
+    if "cannot be null" in texto_lower or "not null" in texto_lower:
+        return "Faltan datos obligatorios para completar el envío."
+    if "data too long" in texto_lower:
+        return "Uno de los campos supera la longitud permitida. Revisá los valores ingresados."
+    if "out of range" in texto_lower:
+        return "Un valor numérico quedó fuera del rango permitido."
+    if "unknown column" in texto_lower or "field list" in texto_lower or "no such column" in texto_lower:
+        return "La base de datos está desactualizada: falta una columna del sistema (por ejemplo, email). Actualizá la estructura de la tabla clientes o ejecutá el script de inicialización."
+
+    return texto or fallback
 
 
 # ──────────────────────────────────────────
@@ -223,11 +253,15 @@ def nuevo_envio():
             ))
 
         except ValidationError as e:
-            flash(e.message, "danger")
+            flash(_mensaje_usuario_error(e, "Los datos del envío no son válidos."), "danger")
+            return redirect(request.url)
+        except (DuplicateError, DatabaseConnectionError, DatabaseQueryError) as e:
+            logger.error("Error al crear envío: %s", e)
+            flash(_mensaje_usuario_error(e, "No se pudo registrar el envío."), "danger")
             return redirect(request.url)
         except Exception as e:
             logger.error("Error al crear envío: %s", e)
-            flash("Ocurrió un error al registrar el envío. Intente nuevamente.", "danger")
+            flash(_mensaje_usuario_error(e, "No se pudo registrar el envío."), "danger")
             return redirect(request.url)
 
     return render_template(
