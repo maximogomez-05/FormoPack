@@ -109,26 +109,20 @@
             align-items: center;
             text-align: center;
             padding: 6rem 5% 2rem;
-            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--blue-corp) 100%);
-            background-size: 200% 200%;
-            animation: gradientShift 10s ease infinite;
+            /* Fondo con imagen real de logística y un overlay oscuro/azulado para que resalte el texto */
+            background: linear-gradient(135deg, rgba(10, 25, 47, 0.85) 0%, rgba(0, 68, 129, 0.75) 100%),
+                        url('https://images.unsplash.com/photo-1580674285054-bed31e145f59?auto=format&fit=crop&q=80&w=1920') center/cover no-repeat fixed;
             color: var(--white);
             position: relative;
-        }
-
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
         }
 
         .hero::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
             background-size: 20px 20px;
-            opacity: 0.5;
+            pointer-events: none;
         }
 
         .hero-content {

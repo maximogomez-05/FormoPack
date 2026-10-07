@@ -97,55 +97,59 @@ class ServicioNotificacion:
         cuerpo_texto += f"\nDestino: {envio.direccion_destino}\nTotal bultos: {envio.cantidad_bultos}\n\nPodés seguir el estado completo en nuestro portal web."
         msg.set_content(cuerpo_texto)
 
-        # Versión HTML profesional
+        # Versión HTML profesional con colores premium
         html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }}
-                .header {{ background-color: #0a192f; color: #ffffff; padding: 20px; text-align: center; }}
-                .header h1 {{ margin: 0; font-size: 24px; letter-spacing: 1px; }}
-                .content {{ padding: 30px; color: #333333; }}
-                .status-badge {{ display: inline-block; padding: 8px 16px; background-color: {color_estado}; color: #ffffff; font-weight: bold; border-radius: 20px; font-size: 14px; text-transform: uppercase; margin: 15px 0; }}
-                .details-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                .details-table th, .details-table td {{ padding: 12px; border-bottom: 1px solid #eeeeee; text-align: left; font-size: 14px; }}
-                .details-table th {{ color: #6c757d; font-weight: normal; width: 40%; }}
-                .details-table td {{ font-weight: 600; color: #333333; }}
-                .footer {{ background-color: #f8f9fa; padding: 15px; text-align: center; color: #6c757d; font-size: 12px; border-top: 1px solid #eeeeee; }}
-                .btn {{ display: inline-block; background-color: #004481; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 20px; }}
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; padding: 30px; }}
+                .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.05); border: 1px solid #e0e6ef; }}
+                .header {{ background: linear-gradient(135deg, #0a192f 0%, #004481 100%); color: #ffffff; padding: 25px 30px; text-align: center; border-bottom: 4px solid {color_estado}; }}
+                .header h1 {{ margin: 0; font-size: 26px; letter-spacing: 1px; font-weight: 800; }}
+                .header span {{ font-weight: 300; font-size: 14px; opacity: 0.8; letter-spacing: 2px; text-transform: uppercase; display: block; margin-top: 5px; }}
+                .content {{ padding: 35px 40px; color: #1a2332; line-height: 1.6; }}
+                .status-container {{ text-align: center; margin: 25px 0 35px; }}
+                .status-badge {{ display: inline-block; padding: 10px 24px; background-color: {color_estado}; color: #ffffff; font-weight: bold; border-radius: 30px; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 12px {color_estado}40; }}
+                .details-table {{ width: 100%; border-collapse: collapse; background: #f8fafd; border-radius: 8px; overflow: hidden; }}
+                .details-table th, .details-table td {{ padding: 16px; border-bottom: 1px solid #e0e6ef; text-align: left; font-size: 15px; }}
+                .details-table tr:last-child th, .details-table tr:last-child td {{ border-bottom: none; }}
+                .details-table th {{ color: #6c757d; font-weight: 600; width: 40%; background: #f0f4f8; }}
+                .details-table td {{ font-weight: 700; color: #0a192f; }}
+                .footer {{ background-color: #f8fafd; padding: 20px; text-align: center; color: #6c757d; font-size: 13px; border-top: 1px solid #e0e6ef; }}
+                .btn {{ display: inline-block; background-color: #004481; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 15px; margin-top: 30px; box-shadow: 0 4px 12px rgba(0,68,129,0.2); transition: background 0.3s; }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>FormoPack Express</h1>
+                    <h1>FormoPack</h1>
+                    <span>Sistema Express</span>
                 </div>
                 <div class="content">
-                    <p style="font-size: 16px;">Hola,</p>
-                    <p style="font-size: 16px;">Te informamos que ha habido una actualización en el estado de tu envío.</p>
+                    <p style="font-size: 17px; margin-top: 0;"><strong>Hola,</strong></p>
+                    <p style="font-size: 16px; color: #4a5568;">Te informamos que ha habido una actualización en el estado de tu envío.</p>
                     
-                    <div style="text-align: center;">
+                    <div class="status-container">
                         <span class="status-badge">{estado.replace('_', ' ')}</span>
                     </div>
 
                     <table class="details-table">
                         <tr>
                             <th>Número de Guía</th>
-                            <td style="color: #004481; font-size: 16px;">{envio.nro_guia}</td>
+                            <td style="color: #004481;">{envio.nro_guia}</td>
                         </tr>
                         <tr>
                             <th>Destino</th>
                             <td>{envio.direccion_destino}</td>
                         </tr>
                         <tr>
-                            <th>Cantidad de Bultos</th>
+                            <th>Bultos</th>
                             <td>{envio.cantidad_bultos}</td>
                         </tr>
                         <tr>
-                            <th>Modalidad de Pago</th>
+                            <th>Modalidad</th>
                             <td style="text-transform: capitalize;">{envio.modalidad_pago}</td>
                         </tr>
                         """
@@ -154,19 +158,19 @@ class ServicioNotificacion:
             html_content += f"""
                         <tr>
                             <th>Observación</th>
-                            <td style="color: #d32f2f;">{observacion}</td>
+                            <td style="color: #c62828;">{observacion}</td>
                         </tr>"""
 
         html_content += f"""
                     </table>
 
                     <div style="text-align: center;">
-                        <a href="{EmailConfig.BASE_URL if hasattr(EmailConfig, 'BASE_URL') else 'http://localhost:5050'}/" class="btn">Rastrear Envío</a>
+                        <a href="{EmailConfig.BASE_URL if hasattr(EmailConfig, 'BASE_URL') else 'http://localhost:5050'}/" class="btn">Rastrear mi Envío</a>
                     </div>
                 </div>
                 <div class="footer">
-                    <p>Este es un mensaje automático generado por el Sistema FormoPack Express. Por favor, no responda a este correo.</p>
-                    <p>&copy; 2026 FormoPack Express. Todos los derechos reservados.</p>
+                    <p style="margin: 0 0 10px 0;">Este es un mensaje automático generado por <strong>FormoPack Express</strong>.</p>
+                    <p style="margin: 0; opacity: 0.7;">&copy; 2026 FormoPack. Todos los derechos reservados.</p>
                 </div>
             </div>
         </body>

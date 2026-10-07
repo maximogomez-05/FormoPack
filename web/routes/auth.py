@@ -98,7 +98,11 @@ def login():
             logger.error("Error inesperado en login: %s", e)
             flash("Ocurrió un error inesperado. Intentá de nuevo.", "danger")
 
-    return render_template("login.html")
+        # Si hubo un error en POST, redirigir a la landing (que abrirá el modal por los flash messages)
+        return redirect(url_for('auth.landing'))
+
+    # Si alguien entra a /login por GET directo, lo mandamos a la landing
+    return redirect(url_for('auth.landing'))
 
 
 @auth_bp.route("/dashboard")
