@@ -268,30 +268,55 @@
       radius: 4000
   }).addTo(map);
 
-  // Mock markers for pending deliveries to make it look alive across the whole province
+  // Coordenadas reales de las localidades de Formosa
+  const coordenadasLocalidades = {
+    'Formosa': [-26.1848, -58.1731],
+    'Clorinda': [-25.2848, -57.7185],
+    'Pirané': [-25.7324, -59.1088],
+    'El Colorado': [-26.3050, -59.3729],
+    'Las Lomitas': [-24.7062, -60.5930],
+    'Ibarreta': [-25.2146, -59.8587],
+    'Ingeniero Juárez': [-23.8967, -61.8530],
+    'Laguna Blanca': [-25.1264, -58.2464],
+    'Comandante Fontana': [-25.3340, -59.6830],
+    'Herradura': [-26.4851, -58.3117],
+    'General San Martín': [-26.2333, -59.5833],
+    'Misión Laishí': [-26.2333, -58.6000]
+  };
+
+  // Ícono para las entregas
+  var iconoEnvio = L.icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+
+  // Generar los marcadores usando la localidad_destino real
   {% if entregas|length > 0 %}
-    var envios = [
-      {% for envio in entregas[:15] %}
-        // Añadir una pequeña aleatoriedad a las coordenadas para esparcirlas por la provincia de Formosa
-        // Rango de latitud aproximado Formosa: -26.2 a -23.5
-        // Rango de longitud aproximado Formosa: -62.3 a -57.5
-        [-24.8 + (Math.random() - 0.5) * 2.5, -60.0 + (Math.random() - 0.5) * 4.0, '{{ envio.nro_guia }} - {{ envio.direccion_destino|replace("'", "\\'") }}'],
-      {% endfor %}
-    ];
+    {% for envio in entregas %}
+      (function() {
+        // Normalizamos el nombre (quitamos espacios extra)
+        const localidadStr = '{{ envio.localidad_destino }}'.trim();
+        let coords = coordenadasLocalidades[localidadStr];
+        
+        // Si no tenemos la coordenada exacta de la localidad, la centramos en Formosa Capital
+        if (!coords) {
+            coords = [-26.1848, -58.1731];
+        }
 
-    var iconoEnvio = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41]
-    });
+        // Le damos un desplazamiento (offset) microscópico aleatorio para que los pines en la misma ciudad no se tapen exactamente uno encima del otro
+        const latOffset = (Math.random() - 0.5) * 0.015;
+        const lngOffset = (Math.random() - 0.5) * 0.015;
+        const finalLat = coords[0] + latOffset;
+        const finalLng = coords[1] + lngOffset;
 
-    envios.forEach(function(envio) {
-        L.marker([envio[0], envio[1]], {icon: iconoEnvio}).addTo(map)
-            .bindPopup('<b style="color:#c62828;">Destino de Entrega</b><br>Guía: ' + envio[2]);
-    });
+        L.marker([finalLat, finalLng], {icon: iconoEnvio}).addTo(map)
+            .bindPopup('<b style="color:#c62828;">Destino: ' + localidadStr + '</b><br>Guía: {{ envio.nro_guia }}');
+      })();
+    {% endfor %}
   {% endif %}
 
   function toggleAll(source) {
