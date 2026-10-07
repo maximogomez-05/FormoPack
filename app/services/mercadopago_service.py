@@ -63,7 +63,7 @@ class MercadoPagoService:
                 "failure": self._cfg.FAILURE_URL,
                 "pending": self._cfg.PENDING_URL,
             },
-            "auto_return": "approved",
+            # "auto_return": "approved", # MercadoPago a veces rechaza localhost con auto_return
             "notification_url": self._cfg.WEBHOOK_URL,
             "statement_descriptor": "FORMOPACK EXPRESS",
             "expires": False,

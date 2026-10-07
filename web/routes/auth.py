@@ -53,6 +53,14 @@ def rol_requerido(*roles):
 # ──────────────────────────────────────────
 # Rutas
 # ──────────────────────────────────────────
+@auth_bp.route("/")
+def landing():
+    """Página de presentación pública del sistema."""
+    if "usuario_id" in session:
+        return redirect(url_for("auth.dashboard"))
+    return render_template("landing.html")
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """Pantalla de inicio de sesión."""

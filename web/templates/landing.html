@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FormoPack Express</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <style>
+        :root {
+            --navy-dark: #0a192f;
+            --blue-corp: #004481;
+            --white: #ffffff;
+            --light-bg: #f8f9fa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            color: #333;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        /* Navbar */
+        .navbar {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 5%;
+            background-color: rgba(10, 25, 47, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        .navbar-brand {
+            color: var(--white);
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+        }
+
+        .navbar-brand strong {
+            font-weight: 700;
+        }
+
+        .navbar-brand span {
+            font-size: 1rem;
+            font-weight: 300;
+            opacity: 0.8;
+        }
+
+        .btn-outline-white {
+            background: transparent;
+            border: 2px solid var(--white);
+            color: var(--white);
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-outline-white:hover {
+            background: var(--white);
+            color: var(--navy-dark);
+        }
+
+        .btn-primary {
+            background: var(--blue-corp);
+            border: none;
+            color: var(--white);
+            padding: 0.75rem 2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(0, 68, 129, 0.4);
+        }
+
+        .btn-primary:hover {
+            background: #003366;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 68, 129, 0.6);
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 6rem 5% 2rem;
+            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--blue-corp) 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 10s ease infinite;
+            color: var(--white);
+            position: relative;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            opacity: 0.5;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 800px;
+        }
+
+        .eyebrow {
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+            color: #88c0d0;
+            font-weight: 600;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            margin-bottom: 1.5rem;
+            line-height: 1.1;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .hero-icon {
+            font-size: 4rem;
+            margin-top: 3rem;
+            animation: float 3s ease-in-out infinite;
+            color: rgba(255,255,255,0.8);
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            background-color: var(--navy-dark);
+            padding: 3rem 5%;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 2rem;
+            color: var(--white);
+            text-align: center;
+        }
+
+        .stat-item i {
+            font-size: 2.5rem;
+            color: var(--blue-corp);
+            margin-bottom: 1rem;
+            background: rgba(255,255,255,0.1);
+            padding: 1rem;
+            border-radius: 50%;
+        }
+
+        .stat-item h3 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-item p {
+            opacity: 0.8;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Features */
+        .features {
+            padding: 5rem 5%;
+            background: var(--white);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--light-bg);
+            padding: 2.5rem;
+            border-radius: 12px;
+            border-left: 4px solid var(--blue-corp);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+
+        .feature-card i {
+            font-size: 2.5rem;
+            color: var(--blue-corp);
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-card h3 {
+            margin-bottom: 1rem;
+            color: var(--navy-dark);
+            font-size: 1.3rem;
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        /* CTA */
+        .cta {
+            padding: 5rem 5%;
+            text-align: center;
+            background: linear-gradient(135deg, var(--blue-corp) 0%, var(--navy-dark) 100%);
+            color: var(--white);
+        }
+
+        .cta h2 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Footer */
+        .footer {
+            background-color: var(--navy-dark);
+            color: var(--white);
+            text-align: center;
+            padding: 2rem 5%;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .footer p {
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        .footer a {
+            color: var(--blue-corp);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Modal Login */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 25, 47, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-card {
+            background: var(--white);
+            padding: 2.5rem;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            position: relative;
+            transform: translateY(-50px);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: translateY(0);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close-modal:hover {
+            color: var(--navy-dark);
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-header h2 {
+            color: var(--navy-dark);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--blue-corp);
+        }
+
+        .btn-block {
+            width: 100%;
+            display: block;
+            text-align: center;
+        }
+
+        .flashes {
+            list-style: none;
+            margin-bottom: 1rem;
+        }
+
+        .flashes li {
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .flash-danger { background: #fee2e2; color: #991b1b; }
+        .flash-warning { background: #fef3c7; color: #92400e; }
+        .flash-success { background: #d1fae5; color: #065f46; }
+        .flash-info { background: #dbeafe; color: #1e40af; }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <a href="#" class="navbar-brand">
+            <i class="fa-solid fa-cube"></i>
+            <strong>FormoPack</strong> <span>Express</span>
+        </a>
+        <button class="btn-outline-white" onclick="openModal()">Iniciar Sesión</button>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content" data-aos="fade-up">
+            <div class="eyebrow">PLATAFORMA LOGÍSTICA DIGITAL</div>
+            <h1>Gestión Inteligente de Paquetería</h1>
+            <p>FormoPack Express digitaliza y automatiza el ciclo completo de la paquetería: desde el mostrador hasta la puerta de tu cliente.</p>
+            <div class="hero-buttons">
+                <button class="btn-primary" onclick="openModal()">Iniciar Sesión</button>
+                <a href="{{ url_for('admin.tracking_publico') }}" class="btn-outline-white">Consultar Envío</a>
+            </div>
+            <div class="hero-icon">
+                <i class="fa-solid fa-truck-fast"></i>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Bar -->
+    <section class="stats-bar">
+        <div class="stat-item" data-aos="fade-up" data-aos-delay="100">
+            <i class="fa-solid fa-box-open"></i>
+            <h3>100%</h3>
+            <p>Digital</p>
+        </div>
+        <div class="stat-item" data-aos="fade-up" data-aos-delay="200">
+            <i class="fa-solid fa-lock"></i>
+            <h3>Acceso RBAC</h3>
+            <p>por Roles</p>
+        </div>
+        <div class="stat-item" data-aos="fade-up" data-aos-delay="300">
+            <i class="fa-solid fa-bolt"></i>
+            <h3>Tiempo Real</h3>
+            <p>Estado de Envíos</p>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" id="features">
+        <div class="features-grid">
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="100">
+                <i class="fa-solid fa-box-open"></i>
+                <h3>Registro de Envíos</h3>
+                <p>Generación automática de guías únicas, gestión de múltiples bultos con regla de aforo y peso volumétrico.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="200">
+                <i class="fa-solid fa-route"></i>
+                <h3>Ruteo Inteligente</h3>
+                <p>Asignación de flotas y cálculo de hojas de ruta optimizadas por distancia.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="300">
+                <i class="fa-solid fa-credit-card"></i>
+                <h3>Cobros Integrados</h3>
+                <p>Efectivo, QR Digital y Mercado Pago Checkout Pro para agilizar el pago en mostrador.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="400">
+                <i class="fa-solid fa-mobile-screen"></i>
+                <h3>App del Chofer</h3>
+                <p>PWA mobile-first con firma digital, GPS y modo offline para registrar entregas en campo.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+        <div data-aos="zoom-in">
+            <h2>¿Listo para digitalizarte?</h2>
+            <button class="btn-primary" onclick="openModal()">Acceder al Sistema</button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div>
+            <i class="fa-solid fa-cube"></i> <strong>FormoPack</strong> Express
+        </div>
+        <p>&copy; <span id="year"></span> FormoPack Express. Sistema de Gestión Logística.</p>
+        <p><a href="{{ url_for('admin.tracking_publico') }}">Seguimiento Público</a></p>
+    </footer>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal" onclick="closeModalOnOutsideClick(event)">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h2>Iniciar Sesión</h2>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <ul class="flashes">
+                    {% for category, message in messages %}
+                        <li class="flash-{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('auth.login') }}" method="POST">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" class="form-control" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-primary btn-block">Ingresar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        // Init AOS
+        AOS.init({ duration: 700, once: true });
+
+        // Set Year
+        document.getElementById('year').textContent = new Date().getFullYear();
+
+        // Modal functions
+        const modal = document.getElementById('loginModal');
+
+        function openModal() {
+            modal.style.display = 'flex';
+            // Pequeño delay para que aplique la transición de opacidad
+            setTimeout(() => {
+                modal.classList.add('active');
+            }, 10);
+            document.body.style.overflow = 'hidden';
+            
+            // Foco en el input
+            setTimeout(() => {
+                document.getElementById('email').focus();
+            }, 300);
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+            document.body.style.overflow = 'auto';
+        }
+
+        function closeModalOnOutsideClick(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // Close on ESC
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape" && modal.classList.contains('active')) {
+                closeModal();
+            }
+        });
+
+        // Abrir el modal automáticamente si hay mensajes flash de error (por ej. si falló el login)
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                openModal();
+            {% endif %}
+        {% endwith %}
+    </script>
+</body>
+</html>

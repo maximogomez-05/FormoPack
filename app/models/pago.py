@@ -141,11 +141,13 @@ class PagoDigital(Pago):
         self,
         id_transaccion_qr: Optional[str] = None,
         billetera_virtual: Optional[str] = None,
+        id_transaccion_ext: Optional[str] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs, tipo_pago="digital")
         self._id_transaccion_qr = id_transaccion_qr
         self._billetera_virtual = billetera_virtual
+        self._id_transaccion_ext = id_transaccion_ext
 
     @property
     def id_transaccion_qr(self) -> Optional[str]:
@@ -154,6 +156,10 @@ class PagoDigital(Pago):
     @property
     def billetera_virtual(self) -> Optional[str]:
         return self._billetera_virtual
+
+    @property
+    def id_transaccion_ext(self) -> Optional[str]:
+        return self._id_transaccion_ext
 
     def generar_qr(self, monto: float) -> str:
         """Genera un string representativo del QR para el monto dado.
