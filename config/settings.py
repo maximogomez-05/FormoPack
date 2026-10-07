@@ -72,4 +72,22 @@ class ModalidadPago:
     EFECTIVO: str = "efectivo"
     DIGITAL: str = "digital"
     CUENTA_CORRIENTE: str = "cuenta_corriente"
-    TODOS: list[str] = [EFECTIVO, DIGITAL, CUENTA_CORRIENTE]
+    MERCADOPAGO: str = "mercadopago"
+    TODOS: list[str] = [EFECTIVO, DIGITAL, CUENTA_CORRIENTE, MERCADOPAGO]
+
+
+class MercadoPagoConfig:
+    """Configuración del SDK de Mercado Pago (RF 2.5 — Checkout Pro)."""
+    ACCESS_TOKEN: str = os.getenv("MP_ACCESS_TOKEN", "")
+    PUBLIC_KEY: str = os.getenv("MP_PUBLIC_KEY", "")
+    BASE_URL: str = os.getenv("MP_BASE_URL", "http://localhost:5050")
+    # Rutas de callback (Mercado Pago redirige al usuario a estas URLs)
+    SUCCESS_URL: str = f"{BASE_URL}/recepcion/mp/success"
+    FAILURE_URL: str = f"{BASE_URL}/recepcion/mp/failure"
+    PENDING_URL: str = f"{BASE_URL}/recepcion/mp/pending"
+    WEBHOOK_URL: str = f"{BASE_URL}/recepcion/mp/webhook"
+
+    @classmethod
+    def esta_configurado(cls) -> bool:
+        """Verifica si las credenciales de Mercado Pago están cargadas."""
+        return bool(cls.ACCESS_TOKEN and not cls.ACCESS_TOKEN.startswith("TEST-PEGAR"))

@@ -20,3 +20,6 @@ reportlab==4.2.2
 qrcode==7.4.2
 pillow==10.4.0
 
+# Mercado Pago — Checkout Pro (RF 2.5)
+mercadopago==3.6.0
+

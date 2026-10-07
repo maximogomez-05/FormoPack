@@ -178,9 +178,11 @@ CREATE TABLE IF NOT EXISTS pagos (
     monto_entregado     DECIMAL(12,2)   DEFAULT NULL,
     id_transaccion_qr   VARCHAR(100)    DEFAULT NULL,
     billetera_virtual   VARCHAR(50)     DEFAULT NULL,
+    id_transaccion_ext  VARCHAR(100)    DEFAULT NULL COMMENT 'ID de pago externo (Mercado Pago payment_id)',
     PRIMARY KEY (id_pago),
     INDEX idx_pagos_envio (id_envio),
     INDEX idx_pagos_turno (id_turno),
+    INDEX idx_pagos_transaccion_ext (id_transaccion_ext),
     CONSTRAINT fk_pagos_envio  FOREIGN KEY (id_envio)  REFERENCES envios(id_envio),
     CONSTRAINT fk_pagos_turno  FOREIGN KEY (id_turno)  REFERENCES turnos_caja(id_turno)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

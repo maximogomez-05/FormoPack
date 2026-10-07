@@ -26,6 +26,8 @@ from app.models.bulto import Bulto
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from app.models.pago import PagoDigital
+from app.services.mercadopago_service import MercadoPagoService
+from config.settings import MercadoPagoConfig
 
 recepcion_bp = Blueprint("recepcion", __name__)
 logger = logging.getLogger(__name__)
@@ -597,3 +599,170 @@ def _obtener_detalle_envio(nro_guia: str):
     finally:
         cursor.close()
         conn.close()
+
+
+# ═══════════════════════════════════════════════════════════
+# RF 2.5 — Integración Mercado Pago (Checkout Pro)
+# ═══════════════════════════════════════════════════════════
+
+@recepcion_bp.route('/mp/iniciar/<nro_guia>', methods=['POST'])
+@login_required
+@rol_requerido('administrador', 'recepcionista')
+def mp_iniciar_pago(nro_guia: str):
+    """Genera una preferencia de pago en Mercado Pago y redirige al Checkout Pro."""
+    if not MercadoPagoConfig.esta_configurado():
+        flash('Mercado Pago no está configurado. Completá las credenciales en el .env.', 'warning')
+        return redirect(url_for('recepcion.cobrar_envio', nro_guia=nro_guia))
+
+    try:
+        envio, _ = _obtener_detalle_envio(nro_guia)
+        if not envio:
+            flash('No se encontró el envío.', 'danger')
+            return redirect(url_for('recepcion.dashboard'))
+
+        mp = MercadoPagoService()
+        preferencia = mp.crear_preferencia(
+            nro_guia=nro_guia,
+            descripcion=f"Envío FormoPack — Guía {nro_guia}",
+            monto=float(envio['costo_total']),
+        )
+
+        # Usar sandbox en desarrollo, init_point en producción
+        url_checkout = preferencia['sandbox_init_point'] if MercadoPagoConfig.ACCESS_TOKEN.startswith('TEST') \
+            else preferencia['init_point']
+
+        logger.info("Redirigiendo a Checkout Pro MP para guía %s — Preferencia %s", nro_guia, preferencia['id'])
+        from flask import redirect as flask_redirect
+        return flask_redirect(url_checkout)
+
+    except EnvironmentError as e:
+        flash(str(e), 'warning')
+    except RuntimeError as e:
+        logger.error("Error MP al iniciar pago para %s: %s", nro_guia, e)
+        flash('No se pudo conectar con Mercado Pago. Intentá con otro método de pago.', 'danger')
+    except Exception as e:
+        logger.error("Error inesperado MP para %s: %s", nro_guia, e)
+        flash('Ocurrió un error inesperado con Mercado Pago.', 'danger')
+
+    return redirect(url_for('recepcion.cobrar_envio', nro_guia=nro_guia))
+
+
+@recepcion_bp.route('/mp/success')
+def mp_success():
+    """Mercado Pago redirige aquí cuando el pago fue APROBADO."""
+    payment_id = request.args.get('payment_id', '')
+    external_reference = request.args.get('external_reference', '')   # nro_guia
+    status = request.args.get('status', '')
+
+    if status == 'approved' and payment_id and external_reference:
+        try:
+            mp = MercadoPagoService()
+            pago = mp.obtener_pago(payment_id)
+
+            if pago and pago['status'] == 'approved':
+                # Registrar el pago en la base de datos
+                _registrar_pago_mp(
+                    nro_guia=external_reference,
+                    payment_id=payment_id,
+                    monto=pago['monto'],
+                )
+                flash(f'Pago aprobado correctamente por Mercado Pago. Referencia: {payment_id}', 'success')
+                return redirect(url_for('recepcion.comprobante', nro_guia=external_reference))
+        except Exception as e:
+            logger.error("Error al procesar MP success para payment_id %s: %s", payment_id, e)
+
+    flash('El pago fue procesado. Verificá el estado en el sistema.', 'info')
+    return redirect(url_for('recepcion.dashboard'))
+
+
+@recepcion_bp.route('/mp/failure')
+@recepcion_bp.route('/mp/pending')
+def mp_failure_pending():
+    """Mercado Pago redirige aquí cuando el pago fue RECHAZADO o está PENDIENTE."""
+    external_reference = request.args.get('external_reference', '')
+    status = request.args.get('status', 'unknown')
+    logger.warning("Pago MP no completado — guía %s, status: %s", external_reference, status)
+    flash('El pago no fue completado o está pendiente de acreditación. Podés reintentar o usar otro método.', 'warning')
+    if external_reference:
+        return redirect(url_for('recepcion.cobrar_envio', nro_guia=external_reference))
+    return redirect(url_for('recepcion.dashboard'))
+
+
+@recepcion_bp.route('/mp/webhook', methods=['POST'])
+def mp_webhook():
+    """Webhook que Mercado Pago llama automáticamente cuando cambia el estado de un pago.
+
+    Este endpoint NO requiere login ya que lo llama el servidor de MP.
+    La autenticación se hace validando que el payment_id sea real consultando la API.
+    """
+    from flask import Response as FlaskResponse
+    try:
+        data = request.json or {}
+        tipo = data.get('type', '')
+        accion = data.get('action', '')
+
+        if tipo == 'payment' and accion in ('payment.created', 'payment.updated'):
+            payment_id = str(data.get('data', {}).get('id', ''))
+            if payment_id:
+                mp = MercadoPagoService()
+                pago = mp.obtener_pago(payment_id)
+                if pago and pago['status'] == 'approved':
+                    _registrar_pago_mp(
+                        nro_guia=pago['external_reference'],
+                        payment_id=payment_id,
+                        monto=pago['monto'],
+                    )
+                    logger.info("Webhook MP: pago %s aprobado para guía %s", payment_id, pago['external_reference'])
+
+    except Exception as e:
+        logger.error("Error procesando webhook MP: %s", e)
+
+    # Siempre devolver 200 para que MP no reintente
+    return FlaskResponse(status=200)
+
+
+def _registrar_pago_mp(nro_guia: str, payment_id: str, monto: float) -> None:
+    """Helper interno: registra el pago de MP en la tabla pagos de la BD.
+
+    Evita duplicados verificando si ya existe un pago con el mismo payment_id.
+    """
+    db = DatabaseManager.get_instance()
+    conn = None
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Obtener el envío
+        cursor.execute("SELECT id_envio FROM envios WHERE nro_guia = %s", (nro_guia,))
+        envio = cursor.fetchone()
+        if not envio:
+            logger.warning("Webhook MP: no se encontró envío con guía %s", nro_guia)
+            return
+
+        # Verificar que no se registre dos veces
+        cursor.execute(
+            "SELECT id_pago FROM pagos WHERE id_transaccion_ext = %s LIMIT 1",
+            (payment_id,)
+        )
+        if cursor.fetchone():
+            logger.info("Pago MP %s ya estaba registrado. Se omite duplicado.", payment_id)
+            return
+
+        # Registrar el pago
+        id_turno = None  # Los pagos MP pueden llegar fuera de turno de caja
+        cursor.execute("""
+            INSERT INTO pagos (id_envio, id_turno, monto, tipo_pago, id_transaccion_ext, fecha)
+            VALUES (%s, %s, %s, 'digital', %s, NOW())
+        """, (envio['id_envio'], id_turno, monto, payment_id))
+
+        conn.commit()
+        logger.info("Pago MP %s registrado para guía %s — $%.2f", payment_id, nro_guia, monto)
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error("Error al registrar pago MP en BD para guía %s: %s", nro_guia, e)
+    finally:
+        if conn:
+            conn.close()
+

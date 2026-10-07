@@ -38,12 +38,16 @@
     <div class="card">
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-cash-register"></i> Procesamiento de Pago</span></div>
 
-      <div style="display:flex;gap:12px;margin-bottom:24px;">
+      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
         <button type="button" class="btn btn-primary" id="btn-efectivo" onclick="mostrarPago('efectivo')">
           <i class="fa-solid fa-money-bill-wave"></i> Efectivo
         </button>
         <button type="button" class="btn btn-secondary" id="btn-digital" onclick="mostrarPago('digital')">
           <i class="fa-solid fa-qrcode"></i> QR / Digital
+        </button>
+        <button type="button" class="btn btn-secondary" id="btn-mp" onclick="mostrarPago('mp')"
+                style="background:#009ee3;border-color:#009ee3;color:#fff;">
+          <i class="fa-solid fa-credit-card"></i> Mercado Pago
         </button>
       </div>
 
@@ -102,6 +106,29 @@
           Confirmar Transacción Digital <i class="fa-solid fa-check" style="margin-left:8px;"></i>
         </button>
       </form>
+
+      <!-- Pago Mercado Pago -->
+      <div id="panel-mp" style="display:none;">
+        <div style="text-align:center;padding:24px 16px;border:2px solid #009ee3;border-radius:10px;background:#f0faff;">
+          <img src="https://http2.mlstatic.com/frontend-assets/ui-navigation/5.19.5/mercadopago/logo__large.png"
+               alt="Mercado Pago" style="max-width:180px;margin-bottom:16px;"
+               onerror="this.style.display='none'">
+          <div style="font-size:13px;color:#006699;margin-bottom:20px;line-height:1.5;">
+            Al hacer clic en <strong>"Pagar con Mercado Pago"</strong>, serás redirigido a la
+            plataforma segura de Mercado Pago para completar el pago de
+            <strong style="font-size:16px;">${{ "%.2f"|format(envio.costo_total) }}</strong>.
+            <br>Una vez aprobado, volverás automáticamente al sistema.
+          </div>
+          <form method="POST" action="{{ url_for('recepcion.mp_iniciar_pago', nro_guia=envio.nro_guia) }}">
+            <button type="submit" class="btn btn-lg w-100"
+                    style="background:#009ee3;border:none;color:#fff;font-weight:700;padding:14px;font-size:16px;border-radius:8px;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              Pagar ${{ "%.2f"|format(envio.costo_total) }} con Mercado Pago
+            </button>
+          </form>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -110,10 +137,35 @@
 {% block scripts %}
 <script>
 function mostrarPago(tipo) {
-  document.getElementById('form-efectivo').style.display = tipo === 'efectivo' ? 'block' : 'none';
-  document.getElementById('form-digital').style.display = tipo === 'digital' ? 'block' : 'none';
-  document.getElementById('btn-efectivo').className = `btn ${tipo === 'efectivo' ? 'btn-primary' : 'btn-secondary'}`;
-  document.getElementById('btn-digital').className = `btn ${tipo === 'digital' ? 'btn-primary' : 'btn-secondary'}`;
+  const paneles = ['form-efectivo', 'form-digital', 'panel-mp'];
+  const botones = { 'efectivo': 'btn-efectivo', 'digital': 'btn-digital', 'mp': 'btn-mp' };
+  const coloresActivo = { 'mp': '#009ee3' };
+
+  paneles.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const panelId = tipo === 'mp' ? 'panel-mp' : `form-${tipo}`;
+  const panel = document.getElementById(panelId);
+  if (panel) panel.style.display = 'block';
+
+  Object.entries(botones).forEach(([key, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (key === tipo) {
+      const color = coloresActivo[key] || '';
+      btn.style.background = color || '';
+      btn.style.borderColor = color || '';
+      btn.style.color = color ? '#fff' : '';
+      btn.className = 'btn btn-primary';
+    } else {
+      btn.className = 'btn btn-secondary';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  });
 }
 
 function calcularVuelto(total) {
