@@ -636,9 +636,8 @@ def mp_iniciar_pago(nro_guia: str):
         url_checkout = preferencia['sandbox_init_point'] if MercadoPagoConfig.ACCESS_TOKEN.startswith('TEST') \
             else preferencia['init_point']
 
-        logger.info("Redirigiendo a Checkout Pro MP para guía %s — Preferencia %s", nro_guia, preferencia['id'])
-        from flask import redirect as flask_redirect
-        return flask_redirect(url_checkout)
+        logger.info("Mostrando QR de Checkout Pro MP para guía %s — Preferencia %s", nro_guia, preferencia['id'])
+        return render_template("recepcion/cobro_mp_qr.html", url_checkout=url_checkout, envio=envio)
 
     except EnvironmentError as e:
         flash(str(e), 'warning')

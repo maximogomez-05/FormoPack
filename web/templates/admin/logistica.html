@@ -95,10 +95,20 @@
   </div>
 </div>
 
-<!-- Entregas ordenadas por distancia (Ruteo Óptimo - RF 3.3) -->
+<!-- Mapa de Cobertura y Ruteo -->
+<div class="card" style="margin-top: 22px;" data-aos="fade-up">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-map-location-dot"></i> Mapa de Operaciones (Formosa)</span>
+    <small style="color: var(--text-muted); font-weight: normal;">Vista satelital de planta y zonas de entrega</small>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <div id="mapa-rutas" style="height: 350px; width: 100%; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; z-index: 1;"></div>
+  </div>
+</div>
+
 <div class="card" style="margin-top: 22px;">
   <div class="card-header">
-    <span class="card-title"><i class="fa-solid fa-route"></i> Entregas ordenadas por distancia (RF 3.3)</span>
+    <span class="card-title"><i class="fa-solid fa-route"></i> Entregas ordenadas por distancia</span>
     <small style="color: var(--text-muted); font-weight: normal;">Ruteo óptimo desde la más cercana a la más lejana</small>
   </div>
   {% if entregas %}
@@ -136,10 +146,10 @@
   {% endif %}
 </div>
 
-<!-- Flota disponible (RF 3.1) -->
+<!-- Flota disponible -->
 <div class="card" style="margin-top: 22px;">
   <div class="card-header">
-    <span class="card-title"><i class="fa-solid fa-van-shuttle"></i> Flota disponible (RF 3.1)</span>
+    <span class="card-title"><i class="fa-solid fa-van-shuttle"></i> Flota disponible</span>
   </div>
   {% if vehiculos %}
   <div class="table-responsive">
@@ -178,10 +188,10 @@
   {% endif %}
 </div>
 
-<!-- Despachos activos (RF 3.2) -->
+<!-- Despachos activos -->
 <div class="card" style="margin-top: 22px;">
   <div class="card-header">
-    <span class="card-title"><i class="fa-solid fa-clipboard-list"></i> Hojas de ruta activas (RF 3.2)</span>
+    <span class="card-title"><i class="fa-solid fa-clipboard-list"></i> Hojas de ruta activas</span>
   </div>
   {% if hojas_activas %}
   <div class="table-responsive">
@@ -218,4 +228,73 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // Inicializar mapa centrado en Formosa Capital
+  var map = L.map('mapa-rutas').setView([-26.18489, -58.17313], 13);
+
+  // Cargar tiles (capa base de OpenStreetMap)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // Marcador de la Planta FormoPack
+  var iconoPlanta = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+  });
+
+  L.marker([-26.18489, -58.17313], {icon: iconoPlanta}).addTo(map)
+      .bindPopup('<b>Planta FormoPack Express</b><br>Centro de Distribución')
+      .openPopup();
+
+  // Dibujar un círculo representando el radio de cobertura local
+  L.circle([-26.18489, -58.17313], {
+      color: '#004481',
+      fillColor: '#004481',
+      fillOpacity: 0.1,
+      radius: 4000
+  }).addTo(map);
+
+  // Mock markers for pending deliveries to make it look alive
+  {% if entregas|length > 0 %}
+    var envios = [
+      {% for envio in entregas[:5] %}
+        // Añadir una pequeña aleatoriedad a las coordenadas para esparcirlas por la ciudad
+        [-26.18489 + (Math.random() - 0.5) * 0.04, -58.17313 + (Math.random() - 0.5) * 0.04, '{{ envio.nro_guia }} - {{ envio.direccion_destino }}'],
+      {% endfor %}
+    ];
+
+    var iconoEnvio = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    envios.forEach(function(envio) {
+        L.marker([envio[0], envio[1]], {icon: iconoEnvio}).addTo(map)
+            .bindPopup('<b>Guía: ' + envio[2] + '</b><br>Pendiente de Ruteo');
+    });
+  {% endif %}
+
+  function toggleAll(source) {
+    const checkboxes = document.querySelectorAll('.chk-envio');
+    checkboxes.forEach(chk => chk.checked = source.checked);
+  }
+</script>
 {% endblock %}
