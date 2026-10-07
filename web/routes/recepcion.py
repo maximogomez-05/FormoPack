@@ -91,10 +91,13 @@ def nuevo_cliente():
             return redirect(url_for("recepcion.listar_clientes"))
         except DuplicateError:
             flash(f"Ya existe un cliente con el DNI {dni}.", "warning")
+            return redirect(request.url)
         except ValidationError as e:
             flash(e.message, "danger")
+            return redirect(request.url)
         except Exception as e:
             flash("Ocurrió un error al registrar el cliente. Intente nuevamente.", "danger")
+            return redirect(request.url)
     return render_template("recepcion/nuevo_cliente.html")
 
 
@@ -221,9 +224,11 @@ def nuevo_envio():
 
         except ValidationError as e:
             flash(e.message, "danger")
+            return redirect(request.url)
         except Exception as e:
             logger.error("Error al crear envío: %s", e)
             flash("Ocurrió un error al registrar el envío. Intente nuevamente.", "danger")
+            return redirect(request.url)
 
     return render_template(
         "recepcion/nuevo_envio.html",
