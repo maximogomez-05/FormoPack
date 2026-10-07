@@ -237,8 +237,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-  // Inicializar mapa centrado en Formosa Capital
-  var map = L.map('mapa-rutas').setView([-26.18489, -58.17313], 13);
+  // Inicializar mapa centrado en la Provincia de Formosa
+  var map = L.map('mapa-rutas').setView([-24.8, -60.0], 7);
 
   // Cargar tiles (capa base de OpenStreetMap)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -246,7 +246,7 @@
       attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  // Marcador de la Planta FormoPack
+  // Marcador de la Planta Central (Formosa Capital)
   var iconoPlanta = L.icon({
       iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
       shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -257,7 +257,7 @@
   });
 
   L.marker([-26.18489, -58.17313], {icon: iconoPlanta}).addTo(map)
-      .bindPopup('<b>Planta FormoPack Express</b><br>Centro de Distribución')
+      .bindPopup('<b>Planta Central FormoPack</b><br>Formosa Capital')
       .openPopup();
 
   // Dibujar un círculo representando el radio de cobertura local
@@ -268,12 +268,14 @@
       radius: 4000
   }).addTo(map);
 
-  // Mock markers for pending deliveries to make it look alive
+  // Mock markers for pending deliveries to make it look alive across the whole province
   {% if entregas|length > 0 %}
     var envios = [
-      {% for envio in entregas[:5] %}
-        // Añadir una pequeña aleatoriedad a las coordenadas para esparcirlas por la ciudad
-        [-26.18489 + (Math.random() - 0.5) * 0.04, -58.17313 + (Math.random() - 0.5) * 0.04, '{{ envio.nro_guia }} - {{ envio.direccion_destino }}'],
+      {% for envio in entregas[:15] %}
+        // Añadir una pequeña aleatoriedad a las coordenadas para esparcirlas por la provincia de Formosa
+        // Rango de latitud aproximado Formosa: -26.2 a -23.5
+        // Rango de longitud aproximado Formosa: -62.3 a -57.5
+        [-24.8 + (Math.random() - 0.5) * 2.5, -60.0 + (Math.random() - 0.5) * 4.0, '{{ envio.nro_guia }} - {{ envio.direccion_destino|replace("'", "\\'") }}'],
       {% endfor %}
     ];
 
@@ -288,7 +290,7 @@
 
     envios.forEach(function(envio) {
         L.marker([envio[0], envio[1]], {icon: iconoEnvio}).addTo(map)
-            .bindPopup('<b>Guía: ' + envio[2] + '</b><br>Pendiente de Ruteo');
+            .bindPopup('<b style="color:#c62828;">Destino de Entrega</b><br>Guía: ' + envio[2]);
     });
   {% endif %}
 
