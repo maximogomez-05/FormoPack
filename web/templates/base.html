@@ -7,8 +7,8 @@
   <title>{% block title %}FormoPack Express{% endblock %}</title>
   <!-- CSS Principal -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
 <body data-page="{{ request.endpoint }}">
 <div class="layout">
@@ -84,9 +84,9 @@
   </aside>
 
   <!-- MAIN CONTENT -->
-  <div class="main-content">
+  <div class="main-content" data-aos="fade-up">
     <div class="topbar">
-      <button type="button" class="mobile-menu-button" id="mobile-menu-button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+      <button type="button" class="mobile-menu-button" id="sidebar-toggle" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
         <i class="fa-solid fa-bars"></i>
       </button>
       <div class="topbar-title">{% block page_title %}Sistema Logístico{% endblock %}</div>
@@ -119,18 +119,30 @@
 </div>
 
 {% block scripts %}{% endblock %}
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
 <script>
-const mobileMenuButton = document.getElementById('mobile-menu-button');
-const sidebar = document.getElementById('sidebar');
-if (mobileMenuButton && sidebar) {
-  mobileMenuButton.addEventListener('click', () => {
-    const isOpen = sidebar.classList.toggle('active');
-    mobileMenuButton.setAttribute('aria-expanded', String(isOpen));
+  AOS.init({ duration: 500, once: true, offset: 40 });
+  
+  // Auto-dismiss alerts después de 5 segundos
+  document.querySelectorAll('.alert').forEach(alert => {
+    setTimeout(() => {
+      alert.style.opacity = '0';
+      alert.style.transform = 'translateY(-8px)';
+      alert.style.transition = 'all 0.4s ease';
+      setTimeout(() => alert.remove(), 400);
+    }, 5000);
   });
-}
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
-}
+  
+  // Mobile sidebar toggle
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  const sidebar = document.querySelector('.sidebar');
+  if(toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
+  }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+  }
 </script>
 </body>
 </html>
