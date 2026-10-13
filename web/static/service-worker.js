@@ -1,6 +1,6 @@
-const CACHE_NAME = "formopack-chofer-v2";
+const CACHE_NAME = "formopack-chofer-v3";
 const APP_SHELL = [
-  "/static/css/style.css",
+  "/static/css/style.css?v=3",
   "/static/manifest.json",
 ];
 
@@ -32,7 +32,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (new URL(request.url).pathname.startsWith("/static/")) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(networkFirst(request));
   }
 });
 
@@ -60,11 +60,3 @@ async function networkFirst(request) {
   }
 }
 
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-  const response = await fetch(request);
-  const cache = await caches.open(CACHE_NAME);
-  if (response.ok) await cache.put(request, response.clone());
-  return response;
-}

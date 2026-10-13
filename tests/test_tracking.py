@@ -71,3 +71,33 @@ def test_construir_alertas_operativas_detecta_fallidos_y_demorados():
     assert [alerta["guia"] for alerta in alertas] == ["FALL-1", "DEM-1"]
     assert alertas[0]["tipo"] == "danger"
     assert alertas[1]["tipo"] == "warning"
+
+
+def test_alertas_miden_desde_ultimo_cambio_de_estado():
+    """Una transición reciente no debe alertar usando la antigüedad del envío."""
+    envios = [{
+        "nro_guia": "RUTA-RECIENTE",
+        "estado_actual": "en_ruta",
+        "fecha_creacion": "2026-10-01 08:00:00",
+        "fecha_estado": "2026-10-06 18:00:00",
+    }]
+
+    alertas = construir_alertas_operativas(envios, datetime(2026, 10, 7, 8, 0, 0))
+
+    assert alertas == []
+
+
+def test_alerta_fallida_incluye_intentos_y_motivo():
+    """La alerta de fallo debe dar contexto para decidir reintento o devolución."""
+    envios = [{
+        "nro_guia": "FALL-2",
+        "estado_actual": "fallido",
+        "cantidad_intentos": 2,
+        "motivo_fallo": "destinatario_ausente",
+    }]
+
+    alertas = construir_alertas_operativas(envios, datetime(2026, 10, 7, 8, 0, 0))
+
+    assert len(alertas) == 1
+    assert "2 intento(s)" in alertas[0]["mensaje"]
+    assert "Destinatario ausente" in alertas[0]["mensaje"]

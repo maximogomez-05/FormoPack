@@ -3,192 +3,359 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#102a43">
   <title>Seguimiento de Envíos — FormoPack</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    body { background: var(--bg-body); padding: 40px 20px; }
-    .tracking-container { max-width: 600px; margin: 0 auto; }
-    .tracking-header { text-align: center; margin-bottom: 32px; }
-    .tracking-logo { font-size: 32px; color: var(--primary); }
-    .tracking-title { font-size: 20px; font-weight: 700; margin-top: 12px; color: var(--text-main); }
-    .tracking-sub { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
-    
-    .search-input {
-        padding: 15px 20px;
-        font-size: 16px;
-        border-radius: 8px;
-        border: 2px solid var(--border);
+    :root {
+      --track-ink: #102a43;
+      --track-blue: #176b87;
+      --track-mint: #dff4ec;
+      --track-paper: #f2f6f5;
+      --track-line: #d7e1e5;
     }
-    .search-input:focus {
-        border-color: var(--primary);
-        outline: none;
+
+    body {
+      min-height: 100vh;
+      padding: 32px 20px 48px;
+      background: var(--track-paper);
+      color: var(--track-ink);
     }
-    .btn-search {
-        padding: 15px 25px;
-        font-size: 16px;
-        font-weight: bold;
+
+    .tracking-container { width: min(1120px, 100%); margin: 0 auto; }
+    .tracking-topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+    .tracking-brand { display:flex; align-items:center; gap:12px; color:var(--track-ink); text-decoration:none; font-weight:800; }
+    .tracking-brand-mark { display:grid; place-items:center; width:42px; height:42px; border-radius:12px; color:white; background:var(--track-ink); }
+    .tracking-brand small { display:block; color:var(--text-muted); font-size:11px; font-weight:600; }
+    .tracking-access { color:var(--text-muted); text-decoration:none; font-size:13px; }
+    .tracking-access:hover { color:var(--track-blue); }
+
+    .tracking-intro { margin:0 0 18px; }
+    .tracking-intro h1 { margin:0; color:var(--track-ink); font-size:26px; }
+    .tracking-intro p { margin:6px 0 0; color:var(--text-muted); font-size:14px; }
+    .tracking-search { padding:18px; border:1px solid var(--track-line); border-radius:10px; background:white; box-shadow:0 8px 28px rgba(16,42,67,.06); }
+    .tracking-search form { display:flex; gap:10px; }
+    .tracking-search label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+    .tracking-search .form-control { min-width:0; min-height:48px; flex:1; border-radius:6px; }
+    .tracking-search .btn { min-height:48px; white-space:nowrap; background:var(--track-ink); }
+    .tracking-error { margin-top:16px; }
+
+    .tracking-result { margin-top:20px; }
+    .tracking-card { padding:22px; border:1px solid var(--track-line); border-radius:10px; background:#fff; box-shadow:0 8px 28px rgba(16,42,67,.055); }
+    .tracking-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:18px; padding-bottom:20px; border-bottom:1px solid var(--track-line); }
+    .tracking-kicker { color:var(--text-muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+    .tracking-guide { margin-top:3px; font-size:21px; font-weight:800; overflow-wrap:anywhere; }
+    .tracking-updated { margin-top:6px; color:var(--text-muted); font-size:12px; }
+    .tracking-status { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; background:#e8f2f5; color:var(--track-blue); font-size:12px; font-weight:800; text-transform:uppercase; }
+    .tracking-status--delivered { background:var(--track-mint); color:#16724d; }
+    .tracking-status--issue { background:#fff0ed; color:#a4392b; }
+
+    .tracking-main-grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(280px,.9fr); gap:18px; margin-top:18px; align-items:start; }
+    .tracking-section-title { display:flex; align-items:center; gap:9px; margin:0 0 14px; color:var(--track-ink); font-size:14px; font-weight:800; }
+    .tracking-section-title i { color:var(--track-blue); }
+    .tracking-map-wrap { overflow:hidden; border:1px solid var(--track-line); border-radius:8px; background:#e7eff0; }
+    #tracking-map { height:340px; width:100%; }
+    .tracking-map-note { padding:10px 12px; color:#526777; background:#f5f8f8; font-size:11px; line-height:1.5; }
+    .tracking-destination { display:flex; align-items:flex-start; gap:10px; margin-top:14px; }
+    .tracking-destination i { margin-top:3px; color:var(--track-blue); }
+    .tracking-destination strong { display:block; font-size:13px; }
+    .tracking-destination span { display:block; margin-top:3px; color:var(--text-muted); font-size:12px; overflow-wrap:anywhere; }
+
+    .tracking-eta { margin-bottom:16px; padding:16px; border-left:4px solid #e3a72f; border-radius:6px; background:#fff8e8; }
+    .tracking-eta-label { color:#785611; font-size:11px; font-weight:800; text-transform:uppercase; }
+    .tracking-eta strong { display:block; margin-top:5px; font-size:16px; }
+    .tracking-eta p { margin:7px 0 0; color:#685e4a; font-size:12px; line-height:1.5; }
+    .tracking-progress { display:grid; gap:0; margin:0 0 20px; padding:0; list-style:none; }
+    .tracking-progress li { position:relative; display:grid; grid-template-columns:24px minmax(0,1fr); gap:10px; min-height:48px; color:#7b8994; font-size:12px; }
+    .tracking-progress li:not(:last-child)::before { position:absolute; top:23px; bottom:0; left:11px; width:2px; background:var(--track-line); content:""; }
+    .tracking-progress .step-dot { z-index:1; display:grid; place-items:center; width:24px; height:24px; border:2px solid var(--track-line); border-radius:50%; background:#fff; font-size:10px; }
+    .tracking-progress li.is-complete { color:var(--track-ink); }
+    .tracking-progress li.is-complete .step-dot { border-color:#3c9874; background:#e5f5ed; color:#16724d; }
+    .tracking-progress li.is-current { color:var(--track-blue); font-weight:800; }
+    .tracking-progress li.is-current .step-dot { border-color:var(--track-blue); background:var(--track-blue); color:#fff; }
+
+    .tracking-history { margin-top:20px; }
+    .tracking-history-list { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+    .tracking-event { position:relative; display:grid; grid-template-columns:34px minmax(0,1fr); gap:12px; padding:0 0 18px; }
+    .tracking-event:not(:last-child)::before { position:absolute; top:32px; bottom:0; left:15px; width:2px; background:var(--track-line); content:""; }
+    .tracking-event-icon { z-index:1; display:grid; place-items:center; width:32px; height:32px; border:1px solid var(--track-line); border-radius:50%; background:white; color:var(--track-blue); }
+    .tracking-event:last-child .tracking-event-icon { border-color:#3c9874; background:#e5f5ed; color:#16724d; }
+    .tracking-event-date { color:var(--text-muted); font-size:11px; }
+    .tracking-event-title { margin-top:3px; font-size:13px; font-weight:800; text-transform:capitalize; }
+    .tracking-event-location,.tracking-event-note { margin-top:3px; color:var(--text-muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+
+    .tracking-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; padding-top:16px; border-top:1px solid var(--track-line); }
+    .tracking-actions .btn { min-height:40px; font-size:12px; }
+    .tracking-actions .btn-whatsapp { border-color:#16845a; background:#16845a; color:white; }
+    .tracking-actions .btn-outline { border-color:var(--track-line); background:white; color:var(--track-ink); }
+    .tracking-live-note { margin:12px 0 0; color:var(--text-muted); font-size:11px; }
+
+    .leaflet-container { font-family:'Segoe UI',system-ui,sans-serif; }
+    .tracking-empty { margin-top:18px; padding:34px 20px; border:1px solid var(--track-line); border-radius:10px; background:#fff; text-align:center; }
+    .tracking-empty i { color:var(--track-blue); font-size:25px; }
+    .tracking-empty h2 { margin:12px 0 6px; font-size:17px; }
+    .tracking-empty p { margin:0; color:var(--text-muted); font-size:13px; }
+
+    @media (max-width:760px) {
+      body { padding:20px 14px 36px; }
+      .tracking-topbar { margin-bottom:22px; }
+      .tracking-intro h1 { font-size:22px; }
+      .tracking-search { padding:14px; }
+      .tracking-search form { flex-direction:column; }
+      .tracking-search .btn { width:100%; }
+      .tracking-card { padding:16px; }
+      .tracking-main-grid { grid-template-columns:1fr; }
+      .tracking-summary { grid-template-columns:1fr; align-items:start; }
+      .tracking-status { justify-self:start; }
+      #tracking-map { height:280px; }
+      .tracking-actions .btn { flex:1 1 140px; }
     }
-    
-    .timeline {
-        border-left: 2px solid var(--border);
-        margin-left: 20px;
-        padding-left: 25px;
-        position: relative;
+
+    @media (prefers-reduced-motion: reduce) {
+      *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; transition-duration:.01ms !important; }
     }
-    .timeline-item {
-        position: relative;
-        margin-bottom: 25px;
-    }
-    .timeline-item:last-child {
-        margin-bottom: 0;
-    }
-    .timeline-icon {
-        position: absolute;
-        left: -42px;
-        top: 0;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: white;
-        border: 2px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-muted);
-        z-index: 1;
-        font-size: 14px;
-    }
-    .timeline-item.current .timeline-icon {
-        border-color: var(--primary);
-        color: var(--primary);
-        background: #e9ecef;
-    }
-    .icon-entregado { color: #198754 !important; border-color: #198754 !important; background: #e8f5e9 !important; }
-    .icon-fallido { color: #dc3545 !important; border-color: #dc3545 !important; background: #ffebee !important; }
-    
   </style>
 </head>
 <body>
+<main class="tracking-container">
+  <nav class="tracking-topbar" aria-label="Navegación principal">
+    <a class="tracking-brand" href="{{ url_for('admin.tracking_publico') }}">
+      <span class="tracking-brand-mark" aria-hidden="true"><i class="fa-solid fa-box"></i></span>
+      <span>FormoPack<small>Seguimiento de envíos</small></span>
+    </a>
+    <a class="tracking-access" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-lock"></i> Acceso operativo</a>
+  </nav>
 
-<div class="tracking-container">
-  <div class="tracking-header">
-    <i class="fa-solid fa-route tracking-logo"></i>
-    <div class="tracking-title">FormoPack - Consultas Públicas</div>
-    <div class="tracking-sub">Seguimiento de Envíos Logísticos</div>
-  </div>
+  <header class="tracking-intro">
+    <h1>¿Dónde está tu envío?</h1>
+    <p>Ingresá el número de guía para consultar su último estado registrado.</p>
+  </header>
 
-  <!-- Buscador -->
-  <div class="card" style="margin-bottom:24px; padding: 20px;">
+  <section class="tracking-search" aria-label="Buscar envío">
     <form method="GET" action="{{ url_for('admin.tracking_publico') }}">
-      <div style="display:flex;gap:12px; align-items: stretch; flex-wrap: wrap;">
-        <input type="text" name="guia" class="form-control search-input"
-               placeholder="🔍 Ingrese su número de seguimiento (Ej: FPX-2026...)"
-               style="flex: 1; min-width: 250px;"
-               value="{{ nro_guia or '' }}" required maxlength="25" pattern="[A-Za-z0-9\-]+">
-        <button type="submit" class="btn btn-primary btn-search">
-          Consultar Envío
-        </button>
-      </div>
+      <label for="tracking-guide-input">Número de guía</label>
+      <input id="tracking-guide-input" type="text" name="guia" class="form-control"
+             placeholder="Ej.: FPX-2026-0001" value="{{ nro_guia or '' }}"
+             required maxlength="25" pattern="[A-Za-z0-9\-]+" autocomplete="off" spellcheck="false">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Consultar envío</button>
     </form>
-  </div>
+  </section>
 
   {% if error %}
-  <div class="alert alert-danger"><i class="fa-solid fa-circle-xmark"></i> {{ error }}</div>
+  <div class="alert alert-danger tracking-error" role="alert"><i class="fa-solid fa-circle-exclamation"></i> {{ error }}</div>
   {% endif %}
 
   {% if envio %}
-  <div class="card">
-    <div style="text-align:center;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:16px;">
-      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Guía Localizada</div>
-      <div style="font-size:24px;font-weight:700;color:var(--primary);">{{ envio.nro_guia }}</div>
-    </div>
-
-    {% if envio.estado_actual == 'entregado' %}
-    <div class="alert alert-success" style="background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; padding: 15px; border-radius: 8px; margin-bottom: 24px;">
-        <i class="fa-solid fa-circle-check"></i> <strong>Entregado exitosamente</strong>
-        {% if timeline %}
-            el {{ timeline[-1].fecha_hora.strftime('%d/%m/%Y %H:%M') if timeline[-1].fecha_hora and timeline[-1].fecha_hora.strftime is defined else timeline[-1].fecha_hora }}
-        {% endif %}
-    </div>
-    {% elif envio.estado_actual == 'fallido' %}
-    <div class="alert alert-danger" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; padding: 15px; border-radius: 8px; margin-bottom: 24px;">
-        <i class="fa-solid fa-circle-xmark"></i> <strong>Intento de entrega fallido:</strong>
-        {% if timeline %}
-            {{ timeline[-1].observacion or 'Sin observaciones registradas.' }}
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
-      <div>
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> Origen (Remitente)</div>
-        <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.remitente }}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-right-to-bracket"></i> Destino (Receptor)</div>
-        <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.destinatario }}</div>
-        <div style="font-size:12px;color:var(--text-muted);">{{ envio.direccion_destino or '' }}</div>
-        <div style="font-size:12px;color:var(--text-muted);">{{ envio.localidad_destino }}</div>
-      </div>
-    </div>
-
-    <hr class="divider">
-
-    {% if timeline %}
-    <div style="font-size:11px;color:var(--primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;">
-      <i class="fa-solid fa-clock-rotate-left"></i> Historial de Movimientos
-    </div>
-    <div class="timeline">
-      {% for t in timeline %}
-      {% set is_last = loop.last %}
-      <div class="timeline-item {% if is_last %}current{% endif %}">
-        <div class="timeline-icon 
-            {% if t.estado == 'entregado' %}icon-entregado
-            {% elif t.estado == 'fallido' %}icon-fallido
-            {% endif %}">
-            {% if t.estado == 'recibido' %}
-                <i class="fa-solid fa-box"></i>
-            {% elif t.estado == 'en_planta' %}
-                <i class="fa-solid fa-warehouse"></i>
-            {% elif t.estado == 'en_ruta' %}
-                <i class="fa-solid fa-truck"></i>
-            {% elif t.estado == 'entregado' %}
-                <i class="fa-solid fa-circle-check"></i>
-            {% elif t.estado == 'fallido' %}
-                <i class="fa-solid fa-circle-xmark"></i>
+  {% set estado = resumen_tracking.estado %}
+  {% set estado_nombres = {'recibido': 'Envío registrado', 'en_planta': 'En centro de distribución', 'en_ruta': 'En ruta de entrega', 'entregado': 'Entregado', 'fallido': 'Intento de entrega fallido', 'devolucion': 'En devolución', 'siniestro': 'Incidencia reportada'} %}
+  {% set paso_actual = 0 if estado == 'recibido' else (1 if estado == 'en_planta' else (2 if estado == 'en_ruta' else (3 if estado == 'entregado' else -1))) %}
+  <section class="tracking-result" aria-label="Resultado del seguimiento">
+    <article class="tracking-card">
+      <header class="tracking-summary">
+        <div>
+          <div class="tracking-kicker">Número de seguimiento</div>
+          <div class="tracking-guide">{{ envio.nro_guia }}</div>
+          <div class="tracking-updated">
+            Última actualización:
+            {% if resumen_tracking.ultima_actualizacion and resumen_tracking.ultima_actualizacion.strftime is defined %}
+              {{ resumen_tracking.ultima_actualizacion.strftime('%d/%m/%Y a las %H:%M') }}
             {% else %}
-                <i class="fa-solid fa-circle"></i>
+              {{ resumen_tracking.ultima_actualizacion or 'Sin fecha registrada' }}
             {% endif %}
+            · {{ resumen_tracking.ubicacion_actual }}
+          </div>
         </div>
-        <div class="timeline-date">
-          {{ t.fecha_hora.strftime('%d/%m/%Y %H:%M') if t.fecha_hora and t.fecha_hora.strftime is defined else t.fecha_hora }}
-          {% if t.ubicacion %} | Sucursal/Punto: {{ t.ubicacion }}{% endif %}
-        </div>
-        <div class="timeline-estado" style="font-weight: bold;">
-          {{ t.estado | replace('_', ' ') | upper }}
-        </div>
-        {% if t.observacion %}
-        <div class="timeline-obs" style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">
-            {{ t.observacion }}
-        </div>
-        {% endif %}
+        <span class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}tracking-status--issue{% endif %}">
+          <i class="fa-solid {% if estado == 'entregado' %}fa-circle-check{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}fa-triangle-exclamation{% else %}fa-truck-fast{% endif %}" aria-hidden="true"></i>
+          {{ estado_nombres.get(estado, estado|replace('_', ' ')|title) }}
+        </span>
+      </header>
+
+      {% if estado in ['fallido', 'devolucion', 'siniestro'] %}
+      <div class="alert alert-danger" role="status" style="margin-top:16px;">
+        <strong>Revisá el último movimiento:</strong>
+        {% if timeline %}{{ timeline[-1].observacion }}{% else %}El envío tiene una incidencia registrada.{% endif %}
       </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div style="color:var(--text-muted);text-align:center;padding:20px;font-size:13px;">
-      El envío ha sido registrado pero aún no presenta movimientos logísticos.
-    </div>
-    {% endif %}
-  </div>
+      {% elif estado == 'entregado' %}
+      <div class="alert alert-success" role="status" style="margin-top:16px;">
+        <i class="fa-solid fa-circle-check"></i> El envío figura como entregado en el último registro.
+      </div>
+      {% endif %}
+
+      <div class="tracking-main-grid">
+        <section aria-labelledby="tracking-map-title">
+          <h2 id="tracking-map-title" class="tracking-section-title"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Recorrido de referencia</h2>
+          <div class="tracking-map-wrap">
+            <div id="tracking-map" role="img" aria-label="Mapa referencial desde Formosa Capital hasta {{ envio.localidad_destino }}"></div>
+            <div id="tracking-map-note" class="tracking-map-note">
+              {% if envio.ubicacion_gps and envio.ubicacion_gps.en_vivo %}
+                <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> GPS del chofer actualizado {{ envio.ubicacion_gps.fecha_actualizacion }}{% if envio.ubicacion_gps.precision_m %} · precisión ±{{ envio.ubicacion_gps.precision_m|round|int }} m{% endif %}.
+              {% elif envio.ubicacion_gps %}
+                <i class="fa-solid fa-location-dot" aria-hidden="true"></i> Último GPS registrado al completar el intento de entrega: {{ envio.ubicacion_gps.fecha_actualizacion }}. No es ubicación en vivo.
+              {% else %}
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i> Mapa referencial entre planta y localidad de destino. No representa la posición GPS del vehículo ni calles recorridas.
+              {% endif %}
+            </div>
+          </div>
+          <div class="tracking-destination">
+            <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+            <div><strong>{{ envio.destinatario }}</strong><span>{{ envio.direccion_destino or 'Dirección no informada' }}, {{ envio.localidad_destino }}</span></div>
+          </div>
+        </section>
+
+        <section aria-labelledby="tracking-status-title">
+          <h2 id="tracking-status-title" class="tracking-section-title"><i class="fa-solid fa-route" aria-hidden="true"></i> Estado y llegada</h2>
+          <div class="tracking-eta">
+            <div class="tracking-eta-label"><i class="fa-regular fa-clock" aria-hidden="true"></i> Tiempo estimado</div>
+            <strong>{% if estado == 'entregado' %}Envío entregado{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}Requiere revisión operativa{% elif estado == 'en_ruta' %}En reparto{% else %}Pendiente de despacho{% endif %}</strong>
+            <p>No hay ETA horario disponible: el sistema todavía no recibe ubicación GPS ni duración estimada del recorrido.</p>
+          </div>
+
+          <ol class="tracking-progress" aria-label="Progreso del envío">
+            {% set pasos = [('recibido', 'Envío registrado'), ('en_planta', 'En centro de distribución'), ('en_ruta', 'En ruta de entrega'), ('entregado', 'Entregado')] %}
+            {% for codigo, etiqueta in pasos %}
+            <li class="{% if paso_actual >= loop.index0 and paso_actual >= 0 %}is-complete{% endif %} {% if codigo == estado %}is-current{% endif %}" {% if codigo == estado %}aria-current="step"{% endif %}>
+              <span class="step-dot"><i class="fa-solid {% if paso_actual > loop.index0 %}fa-check{% elif codigo == estado %}fa-circle{% else %}fa-minus{% endif %}" aria-hidden="true"></i></span>
+              <span>{{ etiqueta }}</span>
+            </li>
+            {% endfor %}
+          </ol>
+
+          <div class="tracking-kicker">Partes del envío</div>
+          <div class="tracking-destination">
+            <i class="fa-solid fa-box" aria-hidden="true"></i>
+            <div><strong>Remitente</strong><span>{{ envio.remitente }}</span></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="tracking-history" aria-labelledby="tracking-history-title">
+        <h2 id="tracking-history-title" class="tracking-section-title"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Historial del paquete</h2>
+        {% if timeline %}
+        <ol class="tracking-history-list">
+          {% for evento in timeline|reverse %}
+          <li class="tracking-event">
+            <span class="tracking-event-icon" aria-hidden="true"><i class="fa-solid {% if evento.estado == 'entregado' %}fa-check{% elif evento.estado == 'en_ruta' %}fa-truck{% elif evento.estado == 'en_planta' %}fa-warehouse{% elif evento.estado == 'fallido' %}fa-triangle-exclamation{% else %}fa-box{% endif %}"></i></span>
+            <div>
+              <div class="tracking-event-date">{% if evento.fecha_hora.strftime is defined %}{{ evento.fecha_hora.strftime('%d/%m/%Y · %H:%M') }}{% else %}{{ evento.fecha_hora }}{% endif %}</div>
+              <div class="tracking-event-title">{{ estado_nombres.get(evento.estado, evento.estado|replace('_', ' ')|title) }}</div>
+              {% if evento.ubicacion %}<div class="tracking-event-location"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ evento.ubicacion }}</div>{% endif %}
+              {% if evento.observacion %}<div class="tracking-event-note">{{ evento.observacion }}</div>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="tracking-event-note">El envío todavía no tiene movimientos adicionales registrados.</p>
+        {% endif %}
+      </section>
+
+      <nav class="tracking-actions" aria-label="Acciones de seguimiento">
+        <a id="share-whatsapp" class="btn btn-whatsapp" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Compartir por WhatsApp</a>
+        <a id="share-sms" class="btn btn-outline" href="#"><i class="fa-solid fa-comment-sms" aria-hidden="true"></i> Compartir por SMS</a>
+        <button id="copy-tracking-link" class="btn btn-outline" type="button"><i class="fa-regular fa-copy" aria-hidden="true"></i> Copiar enlace</button>
+        <button id="refresh-tracking" class="btn btn-outline" type="button" aria-label="Actualizar estado ahora" title="Actualizar estado ahora"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+      </nav>
+      <p id="tracking-live-note" class="tracking-live-note" aria-live="polite">El estado se consulta en la base de datos al actualizar esta página.</p>
+    </article>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const destinationName = {{ envio.localidad_destino|tojson }};
+    const destinationAddress = {{ envio.direccion_destino|tojson }};
+    const guideNumber = {{ envio.nro_guia|tojson }};
+    const currentStatus = {{ estado|tojson }};
+    const gpsPosition = {{ (envio.ubicacion_gps or none)|tojson }};
+    const knownLocations = {
+      'Formosa': [-26.1848, -58.1731],
+      'Clorinda': [-25.2848, -57.7185],
+      'Pirané': [-25.7324, -59.1088],
+      'El Colorado': [-26.3050, -59.3729],
+      'Las Lomitas': [-24.7062, -60.5930],
+      'Ibarreta': [-25.2146, -59.8587],
+      'Ingeniero Juárez': [-23.8967, -61.8530],
+      'Laguna Blanca': [-25.1264, -58.2464],
+      'Comandante Fontana': [-25.3340, -59.6830],
+      'Herradura': [-26.4851, -58.3117],
+      'General San Martín': [-26.2333, -59.5833],
+      'Misión Laishí': [-26.2333, -58.6000],
+      'San Martín': [-26.2333, -59.5833],
+      'San Pedro': [-22.8539, -59.4200],
+      'Pozo del Tigre': [-25.2806, -58.6984],
+      'Palma Sola': [-25.3920, -58.9482]
+    };
+    const plant = [-26.18489, -58.17313];
+    const destination = knownLocations[destinationName];
+    const hasDestinationCoordinates = Boolean(destination);
+    const hasGpsPosition = Boolean(gpsPosition && Number.isFinite(Number(gpsPosition.latitud)) && Number.isFinite(Number(gpsPosition.longitud)));
+    const gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
+    const map = L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    L.marker(plant).addTo(map).bindPopup('<strong>Planta FormoPack</strong><br>Formosa Capital');
+    if (hasDestinationCoordinates && destinationName !== 'Formosa') {
+      L.marker(destination).addTo(map).bindPopup(`<strong>Destino</strong><br>${destinationName}`);
+      L.polyline([plant, destination], { color: '#176b87', weight: 4, opacity: 0.8, dashArray: '8 8' }).addTo(map);
+    }
+    if (hasGpsPosition) {
+      const puntoGps = L.circleMarker(gpsCoordinates, {
+        radius: 10,
+        color: '#ffffff',
+        weight: 3,
+        fillColor: '#d25a38',
+        fillOpacity: 1
+      }).addTo(map);
+      puntoGps.bindPopup(`<strong>${gpsPosition.en_vivo ? 'Ubicación actual del chofer' : 'Última ubicación registrada'}</strong><br>${new Date(gpsPosition.fecha_actualizacion).toLocaleString()}`);
+      const puntosVisibles = [plant, gpsCoordinates];
+      if (hasDestinationCoordinates) puntosVisibles.push(destination);
+      map.fitBounds(L.latLngBounds(puntosVisibles).pad(0.22));
+    } else if (hasDestinationCoordinates && destinationName !== 'Formosa') {
+      map.fitBounds(L.latLngBounds([plant, destination]).pad(0.22));
+    } else {
+      map.setView(plant, 9);
+      if (!hasDestinationCoordinates) {
+        document.getElementById('tracking-map-note').textContent = 'Sin GPS registrado ni coordenadas referenciales para esta localidad. Se muestra únicamente la planta.';
+      }
+    }
+    window.addEventListener('load', () => setTimeout(() => map.invalidateSize(), 100));
+
+    const currentUrl = window.location.href;
+    const shareText = `Seguimiento FormoPack ${guideNumber}: ${currentUrl}`;
+    document.getElementById('share-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    document.getElementById('share-sms').href = `sms:?body=${encodeURIComponent(shareText)}`;
+    document.getElementById('copy-tracking-link').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      try {
+        await navigator.clipboard.writeText(currentUrl);
+        button.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i> Enlace copiado';
+      } catch {
+        window.prompt('Copiá el enlace de seguimiento:', currentUrl);
+      }
+    });
+    document.getElementById('refresh-tracking').addEventListener('click', () => window.location.reload());
+
+    const activeStatuses = ['recibido', 'en_planta', 'en_ruta'];
+    if (activeStatuses.includes(currentStatus)) {
+      document.getElementById('tracking-live-note').textContent = 'Consulta automática cada 60 segundos. Se mostrarán cambios cuando se registren en el sistema.';
+      window.setTimeout(() => window.location.reload(), 60000);
+    }
+  </script>
   {% endif %}
 
-  <div style="text-align:center;margin-top:32px;">
-    <a href="{{ url_for('auth.login') }}" style="color:var(--text-muted);font-size:12px;text-decoration:none;">
-      <i class="fa-solid fa-lock"></i> Acceso Personal Operativo
-    </a>
-  </div>
-</div>
+  {% if not envio and not error %}
+  <section class="tracking-empty" aria-label="Instrucciones de seguimiento">
+    <i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i>
+    <h2>Consultá el recorrido de tu paquete</h2>
+    <p>Ingresá el número de guía que recibiste al registrar el envío.</p>
+  </section>
+  {% endif %}
+</main>
 </body>
 </html>

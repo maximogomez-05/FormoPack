@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 class ChoferController:
     """Consulta rutas propias y registra evidencias de entrega."""
 
-    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido", "devolucion"}
+    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido"}
+    ESTADOS_FINALES = {"entregado", "devolucion", "siniestro"}
 
     @staticmethod
     def calcular_estado_post_intento(tipo_intento: str) -> str:
@@ -26,7 +27,12 @@ class ChoferController:
     @staticmethod
     def es_estado_terminal(estado: str | None) -> bool:
         """Indica si un envío ya no acepta más intentos de entrega."""
-        return bool(estado) and estado in {"entregado", "fallido", "devolucion"}
+        return bool(estado) and estado in ChoferController.ESTADOS_FINALES
+
+    @classmethod
+    def es_hoja_ruta_completada(cls, estados: list[str]) -> bool:
+        """Una hoja se completa cuando todos sus envíos alcanzan un estado final."""
+        return bool(estados) and all(cls.es_estado_terminal(estado) for estado in estados)
 
     def __init__(self) -> None:
         self.db = DatabaseManager.get_instance()
@@ -50,7 +56,10 @@ class ChoferController:
                 cursor.execute(
                     """SELECT e.id_envio, e.nro_guia, e.estado_actual,
                               e.direccion_destino, l.nombre AS localidad_destino,
-                              l.distancia_km, i.tipo_intento, i.fecha_hora AS intento_fecha
+                              l.distancia_km, i.tipo_intento, i.fecha_hora AS intento_fecha,
+                              i.motivo_fallo AS ultimo_motivo_fallo,
+                              (SELECT COUNT(*) FROM intentos_entrega total
+                               WHERE total.id_envio = e.id_envio) AS cantidad_intentos
                        FROM envios e
                        JOIN localidades l ON l.id_localidad = e.id_localidad_destino
                        LEFT JOIN intentos_entrega i ON i.id_intento = (
@@ -136,6 +145,59 @@ class ChoferController:
             cursor.close()
             conn.close()
 
+    def actualizar_ubicacion_ruta(
+        self,
+        id_chofer: int,
+        id_hoja_ruta: int,
+        latitud: float,
+        longitud: float,
+        precision_m: float | None,
+    ) -> None:
+        """Guarda el último punto GPS de una hoja activa del chofer autenticado."""
+        if not -90 <= latitud <= 90 or not -180 <= longitud <= 180:
+            raise ValidationError(field="ubicacion", reason="Las coordenadas GPS están fuera de rango")
+
+        conn = self.db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """SELECT hr.id_hoja_ruta
+                   FROM hojas_de_ruta hr
+                   WHERE hr.id_hoja_ruta = %s AND hr.id_chofer = %s
+                     AND EXISTS (
+                         SELECT 1 FROM envios e
+                         WHERE e.id_hoja_ruta = hr.id_hoja_ruta
+                           AND e.estado_actual = 'en_ruta'
+                     )""",
+                (id_hoja_ruta, id_chofer),
+            )
+            if not cursor.fetchone():
+                raise ValidationError(field="hoja_ruta", reason="La ruta no está activa o no pertenece al chofer actual")
+
+            cursor.execute(
+                """INSERT INTO ubicaciones_hojas_ruta
+                       (id_hoja_ruta, id_chofer, latitud, longitud, precision_m, fecha_actualizacion)
+                   VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                   ON DUPLICATE KEY UPDATE
+                       id_chofer = %s, latitud = %s, longitud = %s,
+                       precision_m = %s, fecha_actualizacion = CURRENT_TIMESTAMP""",
+                (
+                    id_hoja_ruta, id_chofer, latitud, longitud, precision_m,
+                    id_chofer, latitud, longitud, precision_m,
+                ),
+            )
+            conn.commit()
+        except ValidationError:
+            conn.rollback()
+            raise
+        except Exception as exc:
+            conn.rollback()
+            logger.exception("Error al actualizar ubicación GPS de ruta")
+            raise DatabaseQueryError(f"No se pudo actualizar la ubicación de la ruta: {exc}") from exc
+        finally:
+            cursor.close()
+            conn.close()
+
     def registrar_entrega(
         self,
         id_chofer: int,
@@ -216,6 +278,7 @@ class ChoferController:
                    VALUES (%s, %s, %s, %s)""",
                 (id_envio, nuevo_estado, coordenadas_gps or "Sin ubicación", observacion),
             )
+            self._liberar_vehiculo_si_hoja_completada(cursor, id_hoja_ruta)
             conn.commit()
 
             # --- NOTIFICACION (RF 5.4) ---
@@ -289,6 +352,7 @@ class ChoferController:
                    VALUES (%s, 'devolucion', 'Base operativa', %s)""",
                 (id_envio, observacion_historial),
             )
+            self._liberar_vehiculo_si_hoja_completada(cursor, id_hoja_ruta)
             conn.commit()
 
             # --- NOTIFICACION (RF 5.4) ---
@@ -327,6 +391,22 @@ class ChoferController:
         finally:
             cursor.close()
             conn.close()
+
+    def _liberar_vehiculo_si_hoja_completada(self, cursor, id_hoja_ruta: int) -> None:
+        """Devuelve a disponibilidad el vehículo al cerrar todos los envíos de la hoja."""
+        cursor.execute(
+            "SELECT estado_actual FROM envios WHERE id_hoja_ruta = %s",
+            (id_hoja_ruta,),
+        )
+        estados = [fila["estado_actual"] for fila in cursor.fetchall()]
+        if self.es_hoja_ruta_completada(estados):
+            cursor.execute(
+                """UPDATE vehiculos v
+                   JOIN hojas_de_ruta hr ON hr.id_vehiculo = v.id_vehiculo
+                   SET v.estado = 'disponible'
+                   WHERE hr.id_hoja_ruta = %s AND v.estado = 'en_ruta'""",
+                (id_hoja_ruta,),
+            )
 
     @staticmethod
     def validar_foto(nombre: str | None, permitido: set[str]) -> bool:

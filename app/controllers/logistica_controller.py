@@ -155,6 +155,11 @@ class LogisticaController:
                     "UPDATE envios SET id_hoja_ruta = %s, estado_actual = 'en_planta' WHERE id_envio = %s",
                     (id_hoja_ruta, id_envio)
                 )
+                cursor.execute(
+                    """INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
+                       VALUES (%s, %s, %s, %s)""",
+                    (id_envio, EstadosEnvio.EN_PLANTA, "Sucursal Origen", "Envío asignado a una hoja de ruta."),
+                )
             cursor.execute(
                 "UPDATE vehiculos SET estado = 'en_ruta' WHERE id_vehiculo = %s",
                 (id_vehiculo,),
@@ -282,6 +287,88 @@ class LogisticaController:
         except Exception as e:
             logger.error("Error al listar hojas de ruta: %s", e)
             raise DatabaseConnectionError(f"Error al listar hojas de ruta: {e}")
+
+    def obtener_envios_mapa(self) -> List[Dict[str, Any]]:
+        """Obtiene los envíos y su última ubicación disponible para el mapa global."""
+        conn = None
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT e.id_envio, e.nro_guia, e.estado_actual, e.id_hoja_ruta,
+                       e.direccion_destino, e.fecha_creacion,
+                       l.nombre AS localidad_destino, l.distancia_km,
+                       hr.nro_despacho, u.nombre AS chofer_nombre, v.patente,
+                       ug.latitud AS gps_latitud, ug.longitud AS gps_longitud,
+                       ug.precision_m AS gps_precision_m,
+                       ug.fecha_actualizacion AS gps_fecha,
+                       ie.coordenadas_gps AS gps_entrega,
+                       ie.fecha_hora AS gps_entrega_fecha
+                FROM envios e
+                JOIN localidades l ON l.id_localidad = e.id_localidad_destino
+                LEFT JOIN hojas_de_ruta hr ON hr.id_hoja_ruta = e.id_hoja_ruta
+                LEFT JOIN usuarios u ON u.id_usuario = hr.id_chofer
+                LEFT JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
+                LEFT JOIN ubicaciones_hojas_ruta ug
+                    ON ug.id_hoja_ruta = e.id_hoja_ruta
+                   AND e.estado_actual = 'en_ruta'
+                   AND ug.fecha_actualizacion >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+                LEFT JOIN intentos_entrega ie ON ie.id_intento = (
+                    SELECT MAX(i.id_intento)
+                    FROM intentos_entrega i
+                    WHERE i.id_envio = e.id_envio
+                      AND i.coordenadas_gps IS NOT NULL
+                      AND e.estado_actual IN ('entregado', 'fallido', 'devolucion')
+                )
+                ORDER BY e.fecha_creacion DESC, e.id_envio DESC
+            """)
+            filas = cursor.fetchall()
+            resultado = []
+            for fila in filas:
+                gps_latitud = fila.get("gps_latitud")
+                gps_longitud = fila.get("gps_longitud")
+                gps_fecha = fila.get("gps_fecha")
+                gps_precision = fila.get("gps_precision_m")
+                gps_en_vivo = gps_latitud is not None and gps_longitud is not None
+
+                if not gps_en_vivo and fila.get("gps_entrega"):
+                    try:
+                        gps_latitud, gps_longitud = (
+                            float(valor.strip())
+                            for valor in fila["gps_entrega"].split(",", 1)
+                        )
+                        if not -90 <= gps_latitud <= 90 or not -180 <= gps_longitud <= 180:
+                            gps_latitud = gps_longitud = None
+                        else:
+                            gps_fecha = fila.get("gps_entrega_fecha")
+                    except (AttributeError, TypeError, ValueError):
+                        gps_latitud = gps_longitud = None
+
+                resultado.append({
+                    "id_envio": fila["id_envio"],
+                    "nro_guia": fila["nro_guia"],
+                    "estado_actual": fila["estado_actual"],
+                    "id_hoja_ruta": fila.get("id_hoja_ruta"),
+                    "direccion_destino": fila.get("direccion_destino") or "",
+                    "localidad_destino": fila["localidad_destino"],
+                    "distancia_km": float(fila.get("distancia_km") or 0),
+                    "nro_despacho": fila.get("nro_despacho"),
+                    "chofer_nombre": fila.get("chofer_nombre"),
+                    "patente": fila.get("patente"),
+                    "gps_latitud": float(gps_latitud) if gps_latitud is not None else None,
+                    "gps_longitud": float(gps_longitud) if gps_longitud is not None else None,
+                    "gps_precision_m": float(gps_precision) if gps_en_vivo and gps_precision is not None else None,
+                    "gps_fecha": gps_fecha.isoformat() if hasattr(gps_fecha, "isoformat") else str(gps_fecha) if gps_fecha else None,
+                    "gps_en_vivo": gps_en_vivo,
+                })
+            cursor.close()
+            return resultado
+        except Exception as e:
+            logger.error("Error al obtener envíos para mapa global: %s", e)
+            raise DatabaseQueryError(f"Error al obtener envíos para mapa: {e}") from e
+        finally:
+            if conn:
+                conn.close()
 
     # ─────────────────────────────────────────
     # RF 3.3: Ruteo por Kilometraje

@@ -27,6 +27,7 @@ from app.models.bulto import Bulto
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from app.models.pago import PagoDigital
+from app.models.comprobante_interno import ComprobanteInterno
 from app.services.mercadopago_service import MercadoPagoService
 from config.settings import MercadoPagoConfig
 
@@ -699,11 +700,14 @@ def mp_success():
 
             if pago and pago['status'] == 'approved':
                 # Registrar el pago en la base de datos
-                _registrar_pago_mp(
+                pago_registrado = _registrar_pago_mp(
                     nro_guia=external_reference,
                     payment_id=payment_id,
                     monto=pago['monto'],
                 )
+                if not pago_registrado:
+                    flash('Mercado Pago aprobó el cobro, pero no se pudo conciliar con el envío. Contactá a administración.', 'warning')
+                    return redirect(url_for('recepcion.cobrar_envio', nro_guia=external_reference))
                 flash(f'Pago aprobado correctamente por Mercado Pago. Referencia: {payment_id}', 'success')
                 return redirect(url_for('recepcion.comprobante', nro_guia=external_reference))
         except Exception as e:
@@ -759,7 +763,7 @@ def mp_webhook():
     return FlaskResponse(status=200)
 
 
-def _registrar_pago_mp(nro_guia: str, payment_id: str, monto: float) -> None:
+def _registrar_pago_mp(nro_guia: str, payment_id: str, monto: float) -> bool:
     """Helper interno: registra el pago de MP en la tabla pagos de la BD.
 
     Evita duplicados verificando si ya existe un pago con el mismo payment_id.
@@ -771,20 +775,34 @@ def _registrar_pago_mp(nro_guia: str, payment_id: str, monto: float) -> None:
         cursor = conn.cursor(dictionary=True)
 
         # Obtener el envío
-        cursor.execute("SELECT id_envio FROM envios WHERE nro_guia = %s", (nro_guia,))
+        cursor.execute(
+            "SELECT id_envio, costo_total FROM envios WHERE nro_guia = %s FOR UPDATE",
+            (nro_guia,),
+        )
         envio = cursor.fetchone()
         if not envio:
             logger.warning("Webhook MP: no se encontró envío con guía %s", nro_guia)
-            return
+            return False
 
-        # Verificar que no se registre dos veces
+        if round(float(monto), 2) != round(float(envio["costo_total"]), 2):
+            logger.error("Webhook MP: importe no coincide con el envío %s", nro_guia)
+            return False
+
+        # Serializar cobros por envío y hacer idempotentes los reintentos del webhook.
         cursor.execute(
-            "SELECT id_pago FROM pagos WHERE id_transaccion_ext = %s LIMIT 1",
-            (payment_id,)
+            "SELECT id_pago, id_transaccion_ext FROM pagos WHERE id_envio = %s LIMIT 1",
+            (envio["id_envio"],),
         )
-        if cursor.fetchone():
-            logger.info("Pago MP %s ya estaba registrado. Se omite duplicado.", payment_id)
-            return
+        pago_existente = cursor.fetchone()
+        if pago_existente:
+            if pago_existente.get("id_transaccion_ext") == payment_id:
+                logger.info("Pago MP %s ya estaba registrado. Se omite duplicado.", payment_id)
+                conn.rollback()
+                return True
+            else:
+                logger.warning("El envío %s ya tiene otro pago registrado; se omite MP %s", nro_guia, payment_id)
+                conn.rollback()
+                return False
 
         # Registrar el pago
         id_turno = None  # Los pagos MP pueden llegar fuera de turno de caja
@@ -793,13 +811,28 @@ def _registrar_pago_mp(nro_guia: str, payment_id: str, monto: float) -> None:
             VALUES (%s, %s, %s, 'digital', %s, NOW())
         """, (envio['id_envio'], id_turno, monto, payment_id))
 
+        cursor.execute(
+            """SELECT id_comprobante FROM comprobantes_internos
+               WHERE id_envio = %s AND tipo_comprobante = 'recepcion' LIMIT 1""",
+            (envio["id_envio"],),
+        )
+        if not cursor.fetchone():
+            nro_comprobante = ComprobanteInterno.generar_nro_comprobante(envio["id_envio"], "recepcion")
+            cursor.execute(
+                """INSERT INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante)
+                   VALUES (%s, %s, 'recepcion')""",
+                (envio["id_envio"], nro_comprobante),
+            )
+
         conn.commit()
         logger.info("Pago MP %s registrado para guía %s — $%.2f", payment_id, nro_guia, monto)
+        return True
 
     except Exception as e:
         if conn:
             conn.rollback()
         logger.error("Error al registrar pago MP en BD para guía %s: %s", nro_guia, e)
+        return False
     finally:
         if conn:
             conn.close()

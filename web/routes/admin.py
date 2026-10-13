@@ -60,7 +60,7 @@ def dashboard():
     metricas = _obtener_metricas()
     historico = _obtener_historico_metricas()
     ultimos_envios = _obtener_ultimos_envios(limite=10)
-    alertas = construir_alertas_operativas(ultimos_envios)
+    alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
@@ -108,7 +108,7 @@ def descargar_reporte_envios():
 @rol_requerido("administrador")
 def enviar_alertas_email():
     """Envía por Gmail las alertas operativas actuales (RF 5.5)."""
-    alertas = construir_alertas_operativas(_obtener_ultimos_envios(limite=50))
+    alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
     if not alertas:
         flash("No hay alertas pendientes para enviar.", "info")
         return redirect(url_for("admin.dashboard"))
@@ -132,6 +132,7 @@ def logistica():
     entregas_pendientes = []
     vehiculos = []
     hojas_activas = []
+    mapa_envios = []
     total_km = 0.0
     error = None
 
@@ -148,6 +149,7 @@ def logistica():
 
         # Obtener hojas de ruta activas
         hojas_activas = logistica_ctrl.listar_hojas_ruta()
+        mapa_envios = logistica_ctrl.obtener_envios_mapa()
 
         entregas_pendientes = entregas_ordenadas
 
@@ -163,10 +165,24 @@ def logistica():
         entregas=entregas_pendientes,
         vehiculos=vehiculos,
         hojas_activas=hojas_activas,
+        mapa_envios=mapa_envios,
+        mapa_envios_url=url_for("admin.datos_mapa_logistica"),
         choferes=_obtener_choferes_disponibles(),
         total_km=total_km,
         error=error,
     )
+
+
+@admin_bp.route("/logistica/mapa/envios", methods=["GET"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def datos_mapa_logistica():
+    """Devuelve la ubicación más reciente para cada envío del mapa global."""
+    try:
+        return jsonify({"envios": LogisticaController().obtener_envios_mapa()})
+    except Exception as exc:
+        logger.error("Error al actualizar datos del mapa global: %s", exc)
+        return jsonify({"error": "No se pudieron actualizar las ubicaciones."}), 503
 
 
 @admin_bp.route("/logistica/vehiculos/nuevo", methods=["POST"])
@@ -247,11 +263,13 @@ def tracking_publico():
     timeline = []
     envio = None
     error = None
+    resumen_tracking = None
 
     if nro_guia:
         try:
             envio, timeline = _obtener_timeline(nro_guia)
             timeline = construir_timeline(envio, timeline)
+            resumen_tracking = construir_resumen_tracking(envio, timeline)
             if not envio:
                 error = f"No se encontró ningún envío con la guía '{nro_guia}'."
         except DatabaseConnectionError:
@@ -259,12 +277,16 @@ def tracking_publico():
         except Exception as e:
             logger.error("Error en tracking: %s", e)
             error = "Ocurrió un error al consultar el envío."
+            resumen_tracking = None
+    else:
+        resumen_tracking = None
 
     return render_template(
         "tracking.html",
         nro_guia=nro_guia,
         envio=envio,
         timeline=timeline,
+        resumen_tracking=resumen_tracking,
         error=error,
     )
 
@@ -475,6 +497,41 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
             conn.close()
 
 
+def _obtener_envios_para_alertas() -> list:
+    """Trae todos los envíos con incidencias y la fecha de su último estado actual."""
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT
+                e.nro_guia,
+                e.estado_actual,
+                e.fecha_creacion,
+                COALESCE(
+                    (SELECT MAX(h.fecha_hora)
+                     FROM historial_estados h
+                     WHERE h.id_envio = e.id_envio AND h.estado = e.estado_actual),
+                    e.fecha_creacion
+                ) AS fecha_estado,
+                (SELECT COUNT(*) FROM intentos_entrega i WHERE i.id_envio = e.id_envio) AS cantidad_intentos,
+                (SELECT i.motivo_fallo FROM intentos_entrega i
+                 WHERE i.id_envio = e.id_envio AND i.tipo_intento = 'fallido'
+                 ORDER BY i.fecha_hora DESC, i.id_intento DESC LIMIT 1) AS motivo_fallo
+            FROM envios e
+            WHERE e.estado_actual IN ('recibido', 'en_ruta', 'fallido')
+            ORDER BY fecha_estado ASC
+        """)
+        return cursor.fetchall()
+    except Exception as e:
+        logger.error("Error al obtener envíos para alertas operativas: %s", e)
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
     """Obtiene el detalle de envíos para el reporte operativo."""
     conn = None
@@ -529,7 +586,7 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
     for envio in envios or []:
         estado = str(envio.get("estado_actual") or "").lower()
         guia = envio.get("nro_guia") or "Sin guía"
-        fecha = envio.get("fecha_creacion")
+        fecha = envio.get("fecha_estado") or envio.get("fecha_creacion")
         if isinstance(fecha, str):
             try:
                 fecha = datetime.fromisoformat(fecha)
@@ -537,7 +594,14 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
                 fecha = None
 
         if estado == "fallido":
-            alertas.append({"tipo": "danger", "guia": guia, "mensaje": "Entrega fallida: requiere seguimiento."})
+            cantidad_intentos = int(envio.get("cantidad_intentos") or 0)
+            motivo = str(envio.get("motivo_fallo") or "").replace("_", " ").strip().capitalize()
+            detalle = f" Motivo: {motivo}." if motivo else ""
+            alertas.append({
+                "tipo": "danger",
+                "guia": guia,
+                "mensaje": f"Entrega fallida tras {cantidad_intentos} intento(s): requiere reintento o devolución.{detalle}",
+            })
         elif estado == "recibido" and fecha and ahora - fecha >= timedelta(hours=24):
             alertas.append({"tipo": "warning", "guia": guia, "mensaje": "Envío recibido hace más de 24 horas sin despacho."})
         elif estado == "en_ruta" and fecha and ahora - fecha >= timedelta(days=2):
@@ -555,7 +619,7 @@ def _enviar_alertas_gmail(alertas: list[dict]) -> None:
     """Envía un resumen de alertas mediante una cuenta Gmail con contraseña de aplicación."""
     destinatarios = _obtener_destinatarios_alertas()
     if not EmailConfig.USER or not EmailConfig.PASSWORD or not destinatarios:
-        raise ValueError("Configurá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL para enviar alertas.")
+        raise ValueError("Completá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL en el archivo .env. GMAIL_APP_PASSWORD debe ser una contraseña de aplicación de Google.")
 
     mensaje = EmailMessage()
     mensaje["Subject"] = f"FormoPack: {len(alertas)} alerta(s) operativa(s)"
@@ -691,6 +755,54 @@ def _obtener_timeline(nro_guia: str):
                 ORDER BY fecha_hora ASC
             """, (envio["id_envio"],))
             historial = cursor.fetchall()
+
+            ubicacion_gps = None
+            if envio.get("id_hoja_ruta") and envio.get("estado_actual") == "en_ruta":
+                try:
+                    cursor.execute("""
+                        SELECT latitud, longitud, precision_m, fecha_actualizacion
+                        FROM ubicaciones_hojas_ruta
+                        WHERE id_hoja_ruta = %s
+                          AND fecha_actualizacion >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+                    """, (envio["id_hoja_ruta"],))
+                    ubicacion_gps = cursor.fetchone()
+                except Exception as exc:
+                    if getattr(exc, "errno", None) != 1146:
+                        raise
+                    logger.warning("Falta aplicar scripts/migracion_ubicaciones_gps.sql para mostrar GPS en vivo")
+
+            if not ubicacion_gps and envio.get("estado_actual") in {"entregado", "fallido"}:
+                cursor.execute("""
+                    SELECT coordenadas_gps, fecha_hora AS fecha_actualizacion
+                    FROM intentos_entrega
+                    WHERE id_envio = %s AND coordenadas_gps IS NOT NULL
+                    ORDER BY fecha_hora DESC, id_intento DESC
+                    LIMIT 1
+                """, (envio["id_envio"],))
+                intento_gps = cursor.fetchone()
+                if intento_gps:
+                    try:
+                        latitud, longitud = (float(valor.strip()) for valor in intento_gps["coordenadas_gps"].split(",", 1))
+                        if -90 <= latitud <= 90 and -180 <= longitud <= 180:
+                            ubicacion_gps = {
+                                "latitud": latitud,
+                                "longitud": longitud,
+                                "precision_m": None,
+                                "fecha_actualizacion": intento_gps["fecha_actualizacion"],
+                            }
+                    except (AttributeError, TypeError, ValueError):
+                        logger.warning("Coordenadas GPS inválidas para el envío %s", envio["nro_guia"])
+
+            if ubicacion_gps:
+                envio["ubicacion_gps"] = {
+                    "latitud": float(ubicacion_gps["latitud"]),
+                    "longitud": float(ubicacion_gps["longitud"]),
+                    "precision_m": float(ubicacion_gps["precision_m"]) if ubicacion_gps.get("precision_m") is not None else None,
+                    "en_vivo": envio.get("estado_actual") == "en_ruta",
+                    "fecha_actualizacion": ubicacion_gps["fecha_actualizacion"].isoformat()
+                    if hasattr(ubicacion_gps["fecha_actualizacion"], "isoformat")
+                    else str(ubicacion_gps["fecha_actualizacion"]),
+                }
 
         return envio, historial
     except Exception as e:

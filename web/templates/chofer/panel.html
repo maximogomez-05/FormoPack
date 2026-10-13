@@ -28,8 +28,8 @@
         <h2><i class="fa-solid fa-truck"></i> {{ hoja.patente }}</h2>
         <p>Capacidad {{ hoja.capacidad_kg }} kg · Emitida {{ hoja.fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
         {% set total_envios = hoja.envios|length %}
-        {% set completados = hoja.envios|selectattr('estado_actual', 'in', ['entregado', 'fallido'])|list|length %}
-        <p style="margin-top: 5px; font-weight: bold; color: var(--primary-color);">{{ completados }} de {{ total_envios }} entregas completadas</p>
+        {% set resueltos = hoja.envios|selectattr('estado_actual', 'in', ['entregado', 'devolucion', 'siniestro'])|list|length %}
+        <p style="margin-top: 5px; font-weight: bold; color: var(--primary-color);">{{ resueltos }} de {{ total_envios }} envíos resueltos</p>
       </div>
       {% if hoja.envios|selectattr('estado_actual', 'equalto', 'en_ruta')|list|length == 0 and hoja.envios|selectattr('estado_actual', 'equalto', 'en_planta')|list|length > 0 %}
       <form method="POST" action="{{ url_for('chofer.iniciar_hoja', id_hoja_ruta=hoja.id_hoja_ruta) }}">
@@ -37,6 +37,15 @@
       </form>
       {% endif %}
     </div>
+
+    {% if hoja.envios|selectattr('estado_actual', 'equalto', 'en_ruta')|list|length > 0 %}
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border);">
+      <button type="button" class="btn btn-secondary" data-gps-toggle data-route-id="{{ hoja.id_hoja_ruta }}" data-gps-url="{{ url_for('chofer.actualizar_ubicacion', id_hoja_ruta=hoja.id_hoja_ruta) }}">
+        <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> Compartir ubicación en ruta
+      </button>
+      <span id="gps-status-{{ hoja.id_hoja_ruta }}" style="color:var(--text-muted);font-size:12px;" aria-live="polite">La ubicación solo se comparte cuando lo activás.</span>
+    </div>
+    {% endif %}
 
     <div class="driver-deliveries">
       {% for envio in hoja.envios %}
@@ -46,19 +55,22 @@
           <div class="delivery-meta"><strong>{{ envio.nro_guia }}</strong><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual|replace('_', ' ') }}</span></div>
           <h3>{{ envio.localidad_destino }}</h3>
           <p>{{ envio.direccion_destino }} · {{ envio.distancia_km|round(1) }} km</p>
-          {% if envio.tipo_intento %}<small>Último intento: {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}</small>{% endif %}
+          {% if envio.tipo_intento %}<small>Intento {{ envio.cantidad_intentos }} · {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}{% if envio.ultimo_motivo_fallo %} · Motivo: {{ envio.ultimo_motivo_fallo|replace('_', ' ')|capitalize }}{% endif %}</small>{% endif %}
         </div>
-        {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
-        <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
-        {% if envio.estado_actual == 'fallido' %}
-        <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
-          <input type="hidden" name="motivo_devolucion" value="Entrega fallida sin reintento exitoso">
-          <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
-        </form>
-        {% endif %}
-        {% else %}
-        <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
-        {% endif %}
+        <div class="delivery-actions">
+          {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
+          <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
+          {% if envio.estado_actual == 'fallido' %}
+          <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
+            <label class="form-label" for="motivo-devolucion-{{ envio.id_envio }}">Motivo de devolución</label>
+            <textarea id="motivo-devolucion-{{ envio.id_envio }}" name="motivo_devolucion" class="form-control" rows="2" required placeholder="Indicá por qué vuelve a origen"></textarea>
+            <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
+          </form>
+          {% endif %}
+          {% else %}
+          <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
+          {% endif %}
+        </div>
       </article>
       {% endfor %}
     </div>
@@ -282,6 +294,67 @@ function abrirEntrega(hoja, envio, guia) {
   modal.hidden = false; 
   obtenerUbicacion(); 
 }
+
+const gpsWatches = new Map();
+document.querySelectorAll('[data-gps-toggle]').forEach(button => {
+  button.addEventListener('click', () => {
+    const routeId = button.dataset.routeId;
+    const status = document.getElementById(`gps-status-${routeId}`);
+    const activeWatch = gpsWatches.get(routeId);
+
+    if (activeWatch !== undefined) {
+      navigator.geolocation.clearWatch(activeWatch.watchId);
+      gpsWatches.delete(routeId);
+      button.innerHTML = '<i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> Compartir ubicación en ruta';
+      status.textContent = 'Compartir ubicación detenido.';
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      status.textContent = 'Este dispositivo o navegador no ofrece GPS.';
+      return;
+    }
+    if (!window.isSecureContext) {
+      status.textContent = 'El GPS requiere HTTPS; abrí el sitio con conexión segura.';
+      return;
+    }
+
+    status.textContent = 'Esperando permiso y señal GPS…';
+    let ultimaActualizacion = 0;
+    const watchId = navigator.geolocation.watchPosition(async position => {
+      if (Date.now() - ultimaActualizacion < 20000) return;
+      ultimaActualizacion = Date.now();
+      status.textContent = 'Enviando ubicación…';
+      try {
+        const response = await fetch(button.dataset.gpsUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latitud: position.coords.latitude,
+            longitud: position.coords.longitude,
+            precision_m: position.coords.accuracy
+          })
+        });
+        if (!response.ok) throw new Error('No se pudo sincronizar');
+        const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        status.textContent = `Ubicación actualizada ${hora} · precisión ±${Math.round(position.coords.accuracy)} m`;
+      } catch (error) {
+        status.textContent = 'Sin conexión con el servidor. Se reintentará al recibir otro punto GPS.';
+      }
+    }, error => {
+      const mensajes = {
+        1: 'Permiso de ubicación denegado. Habilitalo en el navegador para compartir el GPS.',
+        2: 'No se pudo determinar la ubicación del dispositivo.',
+        3: 'Se agotó el tiempo para obtener GPS; se volverá a intentar.'
+      };
+      status.textContent = mensajes[error.code] || 'No se pudo obtener la ubicación.';
+    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+
+    gpsWatches.set(routeId, { watchId });
+    button.innerHTML = '<i class="fa-solid fa-location-dot" aria-hidden="true"></i> Detener ubicación';
+  });
+});
 
 function cerrarEntrega() { 
   modal.hidden = true; 

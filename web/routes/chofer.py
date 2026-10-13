@@ -45,6 +45,30 @@ def iniciar_hoja(id_hoja_ruta: int):
     return redirect(url_for("chofer.panel"))
 
 
+@chofer_bp.route("/chofer/hojas/<int:id_hoja_ruta>/ubicacion", methods=["POST"])
+@login_required
+@rol_requerido("chofer")
+def actualizar_ubicacion(id_hoja_ruta: int):
+    """Recibe el punto GPS más reciente de la hoja activa del chofer."""
+    data = request.get_json(silent=True) or {}
+    try:
+        latitud = float(data["latitud"])
+        longitud = float(data["longitud"])
+        precision = data.get("precision_m")
+        precision_m = float(precision) if precision is not None else None
+        ChoferController().actualizar_ubicacion_ruta(
+            session["usuario_id"], id_hoja_ruta, latitud, longitud, precision_m,
+        )
+        return jsonify({"ok": True})
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Coordenadas GPS inválidas."}), 400
+    except ValidationError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except DatabaseQueryError:
+        logger.exception("No se pudo guardar la ubicación de la hoja %s", id_hoja_ruta)
+        return jsonify({"ok": False, "error": "No se pudo guardar la ubicación."}), 500
+
+
 @chofer_bp.route("/chofer/hojas/<int:id_hoja_ruta>/envios/<int:id_envio>/entrega", methods=["POST"])
 @login_required
 @rol_requerido("chofer")

@@ -9,8 +9,10 @@ from app.models.envio import Envio
 from app.models.cliente import Cliente
 
 
+
 class TestServicioNotificacion(unittest.TestCase):
     def setUp(self):
+
         self.servicio = ServicioNotificacion()
         self.envio_mock = MagicMock(spec=Envio)
         self.envio_mock.nro_guia = "FPX-20231010-001"
