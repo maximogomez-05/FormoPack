@@ -28,8 +28,8 @@
         <h2><i class="fa-solid fa-truck"></i> {{ hoja.patente }}</h2>
         <p>Capacidad {{ hoja.capacidad_kg }} kg · Emitida {{ hoja.fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
         {% set total_envios = hoja.envios|length %}
-        {% set completados = hoja.envios|selectattr('estado_actual', 'in', ['entregado', 'fallido'])|list|length %}
-        <p style="margin-top: 5px; font-weight: bold; color: var(--primary-color);">{{ completados }} de {{ total_envios }} entregas completadas</p>
+        {% set resueltos = hoja.envios|selectattr('estado_actual', 'in', ['entregado', 'devolucion', 'siniestro'])|list|length %}
+        <p style="margin-top: 5px; font-weight: bold; color: var(--primary-color);">{{ resueltos }} de {{ total_envios }} envíos resueltos</p>
       </div>
       {% if hoja.envios|selectattr('estado_actual', 'equalto', 'en_ruta')|list|length == 0 and hoja.envios|selectattr('estado_actual', 'equalto', 'en_planta')|list|length > 0 %}
       <form method="POST" action="{{ url_for('chofer.iniciar_hoja', id_hoja_ruta=hoja.id_hoja_ruta) }}">
@@ -46,19 +46,22 @@
           <div class="delivery-meta"><strong>{{ envio.nro_guia }}</strong><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual|replace('_', ' ') }}</span></div>
           <h3>{{ envio.localidad_destino }}</h3>
           <p>{{ envio.direccion_destino }} · {{ envio.distancia_km|round(1) }} km</p>
-          {% if envio.tipo_intento %}<small>Último intento: {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}</small>{% endif %}
+          {% if envio.tipo_intento %}<small>Intento {{ envio.cantidad_intentos }} · {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}{% if envio.ultimo_motivo_fallo %} · Motivo: {{ envio.ultimo_motivo_fallo|replace('_', ' ')|capitalize }}{% endif %}</small>{% endif %}
         </div>
-        {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
-        <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
-        {% if envio.estado_actual == 'fallido' %}
-        <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
-          <input type="hidden" name="motivo_devolucion" value="Entrega fallida sin reintento exitoso">
-          <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
-        </form>
-        {% endif %}
-        {% else %}
-        <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
-        {% endif %}
+        <div class="delivery-actions">
+          {% if envio.estado_actual in ['en_ruta', 'en_planta', 'recibido', 'fallido'] %}
+          <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
+          {% if envio.estado_actual == 'fallido' %}
+          <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
+            <label class="form-label" for="motivo-devolucion-{{ envio.id_envio }}">Motivo de devolución</label>
+            <textarea id="motivo-devolucion-{{ envio.id_envio }}" name="motivo_devolucion" class="form-control" rows="2" required placeholder="Indicá por qué vuelve a origen"></textarea>
+            <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
+          </form>
+          {% endif %}
+          {% else %}
+          <span class="delivery-result"><i class="fa-solid fa-check"></i> Cerrada</span>
+          {% endif %}
+        </div>
       </article>
       {% endfor %}
     </div>

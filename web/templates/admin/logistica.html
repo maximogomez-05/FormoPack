@@ -99,10 +99,75 @@
 <div class="card" style="margin-top: 22px;" data-aos="fade-up">
   <div class="card-header">
     <span class="card-title"><i class="fa-solid fa-map-location-dot"></i> Mapa de Operaciones (Formosa)</span>
-    <small style="color: var(--text-muted); font-weight: normal;">Vista satelital de planta y zonas de entrega</small>
+    <small style="color: var(--text-muted); font-weight: normal;">Vista operativa de planta, rutas y entregas pendientes</small>
   </div>
-  <div class="card-body" style="padding: 0;">
-    <div id="mapa-rutas" style="height: 350px; width: 100%; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; z-index: 1;"></div>
+  <div class="card-body" style="padding: 16px;">
+    <div class="logistica-map-grid">
+      <div class="logistica-map-shell">
+        <div id="mapa-rutas"></div>
+      </div>
+
+      <div class="logistica-map-side">
+        <div class="logistica-side-panel logistica-side-panel--primary">
+          <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+            <i class="fa-solid fa-truck-fast"></i> Ruta activa
+          </div>
+          {% if hojas_activas %}
+            {% set hoja = hojas_activas[0] %}
+            <div style="font-weight:700; font-size: 1.1rem; color: var(--primary); margin-bottom: 6px;">{{ hoja.nro_despacho }}</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size: 13px; color: var(--text-muted);">
+              <div><strong>Chofer:</strong><br>{{ hoja.chofer_nombre }}</div>
+              <div><strong>Vehículo:</strong><br>{{ hoja.patente }}</div>
+              <div><strong>Entregas:</strong><br>{{ hoja.cantidad_envios }}</div>
+              <div><strong>Máx. km:</strong><br>{{ hoja.max_distancia|round(1) }} km</div>
+            </div>
+            <div style="margin-top: 10px; color: #0f766e; font-size: 12px; font-weight: 600;">
+              <i class="fa-solid fa-clock"></i> Emisión: {{ hoja.fecha_emision.strftime('%d/%m %H:%M') if hoja.fecha_emision else '—' }}
+            </div>
+          {% else %}
+            <div style="color: var(--text-muted); font-size: 14px; line-height: 1.6;">
+              No hay un despacho activo en este momento. Podés crear una hoja de ruta desde la sección superior.
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="logistica-side-panel logistica-side-panel--legend">
+          <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+            <i class="fa-solid fa-layer-group"></i> Leyenda operativa
+          </div>
+          <div style="display:flex; flex-direction:column; gap: 8px; font-size:13px; color: var(--text-color);">
+            <div><span style="display:inline-block; width: 10px; height:10px; border-radius:50%; background:#2563eb; margin-right:8px;"></span>Planta</div>
+            <div><span style="display:inline-block; width: 10px; height:10px; border-radius:50%; background:#f59e0b; margin-right:8px;"></span>Pendientes</div>
+            <div><span style="display:inline-block; width: 10px; height:10px; border-radius:50%; background:#22c55e; margin-right:8px;"></span>En tránsito</div>
+            <div><span style="display:inline-block; width: 10px; height:10px; border-radius:50%; background:#ef4444; margin-right:8px;"></span>Demora / problema</div>
+          </div>
+        </div>
+
+        <div class="logistica-side-panel logistica-side-panel--deliveries">
+          <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+            <i class="fa-solid fa-box-open"></i> Próximas entregas
+          </div>
+          {% if entregas %}
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              {% for envio in entregas[:4] %}
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; background:#f8fafc; border:1px solid rgba(15,23,42,0.05);">
+                  <div>
+                    <div style="font-size:12px; color: var(--text-muted);">{{ envio.nro_guia }}</div>
+                    <div style="font-weight:600; font-size:13px;">{{ envio.localidad_destino }}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-size:11px; color: var(--text-muted);">{{ envio.distancia_km|round(1) }} km</div>
+                    <span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div style="color: var(--text-muted); font-size: 14px;">No hay entregas pendientes para mostrar en el mapa.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -228,6 +293,76 @@
   {% endif %}
 </div>
 
+<style>
+  .logistica-map-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.8fr);
+    gap: 18px;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .logistica-map-shell {
+    min-height: 540px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #f8fafc;
+    position: relative;
+  }
+
+  #mapa-rutas {
+    width: 100%;
+    height: 100%;
+    min-height: 540px;
+    display: block;
+  }
+
+  .logistica-map-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 100%;
+    align-self: stretch;
+  }
+
+  .logistica-side-panel {
+    width: 100%;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: #fff;
+    overflow: visible;
+    word-break: break-word;
+  }
+
+  .logistica-side-panel--primary {
+    background: linear-gradient(135deg, #f8fbff, #eef5ff);
+  }
+
+  .logistica-side-panel--deliveries {
+    flex: 1;
+    min-height: 170px;
+  }
+
+  @media (max-width: 980px) {
+    .logistica-map-grid {
+      grid-template-columns: 1fr;
+      height: auto;
+    }
+
+    .logistica-map-shell,
+    #mapa-rutas {
+      min-height: 380px;
+      height: 380px;
+    }
+
+    .logistica-map-side {
+      min-height: 0;
+    }
+  }
+</style>
+
 {% endblock %}
 
 {% block scripts %}
@@ -237,38 +372,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-  // Inicializar mapa centrado en la Provincia de Formosa
-  var map = L.map('mapa-rutas').setView([-24.8, -60.0], 7);
-
-  // Cargar tiles (capa base de OpenStreetMap)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-  }).addTo(map);
-
-  // Marcador de la Planta Central (Formosa Capital)
-  var iconoPlanta = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41]
-  });
-
-  L.marker([-26.18489, -58.17313], {icon: iconoPlanta}).addTo(map)
-      .bindPopup('<b>Planta Central FormoPack</b><br>Formosa Capital')
-      .openPopup();
-
-  // Dibujar un círculo representando el radio de cobertura local
-  L.circle([-26.18489, -58.17313], {
-      color: '#004481',
-      fillColor: '#004481',
-      fillOpacity: 0.1,
-      radius: 4000
-  }).addTo(map);
-
-  // Coordenadas reales de las localidades de Formosa
+  const mapaDatos = {{ entregas | tojson | safe }};
   const coordenadasLocalidades = {
     'Formosa': [-26.1848, -58.1731],
     'Clorinda': [-25.2848, -57.7185],
@@ -281,12 +385,50 @@
     'Comandante Fontana': [-25.3340, -59.6830],
     'Herradura': [-26.4851, -58.3117],
     'General San Martín': [-26.2333, -59.5833],
-    'Misión Laishí': [-26.2333, -58.6000]
+    'Misión Laishí': [-26.2333, -58.6000],
+    'San Martín': [-26.2333, -59.5833],
+    'San Pedro': [-22.8539, -59.4200],
+    'Pozo del Tigre': [-25.2806, -58.6984],
+    'Palma Sola': [-25.3920, -58.9482]
   };
 
-  // Ícono para las entregas
-  var iconoEnvio = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  const estadoColor = {
+    'recibido': '#f59e0b',
+    'en_planta': '#2563eb',
+    'en_ruta': '#22c55e',
+    'entregado': '#10b981',
+    'fallido': '#ef4444',
+    'devolucion': '#b91c1c',
+    'siniestro': '#7c3aed',
+    'default': '#64748b'
+  };
+
+  const map = L.map('mapa-rutas', { zoomControl: true }).setView([-24.8, -60.0], 7);
+
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      map.invalidateSize();
+    }, 150);
+  });
+
+  window.addEventListener('resize', function () {
+    setTimeout(function () {
+      map.invalidateSize();
+    }, 100);
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  setTimeout(function () {
+    map.invalidateSize();
+  }, 200);
+
+  const plantaCoords = [-26.18489, -58.17313];
+  const plantaIcon = L.icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41],
@@ -294,30 +436,56 @@
     shadowSize: [41, 41]
   });
 
-  // Generar los marcadores usando la localidad_destino real
-  {% if entregas|length > 0 %}
-    {% for envio in entregas %}
-      (function() {
-        // Normalizamos el nombre (quitamos espacios extra)
-        const localidadStr = '{{ envio.localidad_destino }}'.trim();
-        let coords = coordenadasLocalidades[localidadStr];
-        
-        // Si no tenemos la coordenada exacta de la localidad, la centramos en Formosa Capital
-        if (!coords) {
-            coords = [-26.1848, -58.1731];
-        }
+  L.marker(plantaCoords, { icon: plantaIcon }).addTo(map)
+    .bindPopup('<b>Planta Central FormoPack</b><br>Formosa Capital');
 
-        // Le damos un desplazamiento (offset) microscópico aleatorio para que los pines en la misma ciudad no se tapen exactamente uno encima del otro
-        const latOffset = (Math.random() - 0.5) * 0.015;
-        const lngOffset = (Math.random() - 0.5) * 0.015;
-        const finalLat = coords[0] + latOffset;
-        const finalLng = coords[1] + lngOffset;
+  L.circle(plantaCoords, {
+    color: '#2563eb',
+    fillColor: '#2563eb',
+    fillOpacity: 0.1,
+    radius: 45000
+  }).addTo(map);
 
-        L.marker([finalLat, finalLng], {icon: iconoEnvio}).addTo(map)
-            .bindPopup('<b style="color:#c62828;">Destino: ' + localidadStr + '</b><br>Guía: {{ envio.nro_guia }}');
-      })();
-    {% endfor %}
-  {% endif %}
+  const puntos = Array.isArray(mapaDatos) ? mapaDatos : [];
+  puntos.forEach((envio, index) => {
+    const localidad = String(envio.localidad_destino || 'Formosa').trim();
+    const coords = coordenadasLocalidades[localidad] || plantaCoords;
+    const estado = String(envio.estado_actual || 'recibido').toLowerCase();
+    const color = estadoColor[estado] || estadoColor.default;
+
+    const latOffset = ((index % 3) - 1) * 0.006;
+    const lngOffset = (((index + 1) % 2) - 0.5) * 0.007;
+
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: `<span style="display:inline-block; width:14px; height:14px; border-radius:50%; border:2px solid #fff; background:${color}; box-shadow:0 2px 8px rgba(0,0,0,0.25);"></span>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      popupAnchor: [0, -8]
+    });
+
+    L.marker([coords[0] + latOffset, coords[1] + lngOffset], { icon }).addTo(map)
+      .bindPopup(`
+        <div style="min-width:160px;">
+          <strong style="color:${color};">${localidad}</strong><br>
+          Guía: ${envio.nro_guia || '-'}<br>
+          Estado: ${envio.estado_actual || 'recibido'}<br>
+          Distancia: ${(Number(envio.distancia_km) || 0).toFixed(1)} km
+        </div>
+      `);
+  });
+
+  if (puntos.length > 1) {
+    const bounds = L.latLngBounds([
+      plantaCoords,
+      ...puntos.map((envio) => {
+        const localidad = String(envio.localidad_destino || 'Formosa').trim();
+        const coords = coordenadasLocalidades[localidad] || plantaCoords;
+        return coords;
+      })
+    ]);
+    map.fitBounds(bounds.pad(0.25));
+  }
 
   function toggleAll(source) {
     const checkboxes = document.querySelectorAll('.chk-envio');

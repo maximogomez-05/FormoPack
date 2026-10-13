@@ -155,6 +155,11 @@ class LogisticaController:
                     "UPDATE envios SET id_hoja_ruta = %s, estado_actual = 'en_planta' WHERE id_envio = %s",
                     (id_hoja_ruta, id_envio)
                 )
+                cursor.execute(
+                    """INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
+                       VALUES (%s, %s, %s, %s)""",
+                    (id_envio, EstadosEnvio.EN_PLANTA, "Sucursal Origen", "Envío asignado a una hoja de ruta."),
+                )
             cursor.execute(
                 "UPDATE vehiculos SET estado = 'en_ruta' WHERE id_vehiculo = %s",
                 (id_vehiculo,),

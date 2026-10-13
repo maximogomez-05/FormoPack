@@ -239,12 +239,25 @@ class EnvioController:
         conn = None
         try:
             conn = self._db.get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT id_envio FROM envios WHERE id_envio = %s FOR UPDATE",
+                (id_envio,),
+            )
+            if not cursor.fetchone():
+                raise ValidationError(field="envio", reason="El envío no existe")
+
+            cursor.execute(
+                "SELECT id_pago FROM pagos WHERE id_envio = %s LIMIT 1",
+                (id_envio,),
+            )
+            if cursor.fetchone():
+                raise ValidationError(field="envio", reason="Este envío ya tiene un pago registrado")
+
             cursor.execute(sql, (
                 id_envio, id_turno, monto, tipo_pago, monto_entregado,
                 id_transaccion_qr, billetera_virtual,
             ))
-            conn.commit()
             id_pago = cursor.lastrowid
             
             vuelto = round(max(0, monto_entregado - monto), 2) if tipo_pago == "efectivo" else 0.0
@@ -280,6 +293,10 @@ class EnvioController:
                 "vuelto": vuelto,
             }
 
+        except ValidationError:
+            if conn:
+                conn.rollback()
+            raise
         except Exception as e:
             if conn:
                 conn.rollback()

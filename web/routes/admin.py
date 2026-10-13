@@ -60,7 +60,7 @@ def dashboard():
     metricas = _obtener_metricas()
     historico = _obtener_historico_metricas()
     ultimos_envios = _obtener_ultimos_envios(limite=10)
-    alertas = construir_alertas_operativas(ultimos_envios)
+    alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
@@ -108,7 +108,7 @@ def descargar_reporte_envios():
 @rol_requerido("administrador")
 def enviar_alertas_email():
     """Envía por Gmail las alertas operativas actuales (RF 5.5)."""
-    alertas = construir_alertas_operativas(_obtener_ultimos_envios(limite=50))
+    alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
     if not alertas:
         flash("No hay alertas pendientes para enviar.", "info")
         return redirect(url_for("admin.dashboard"))
@@ -475,6 +475,41 @@ def _obtener_ultimos_envios(limite: int = 10) -> list:
             conn.close()
 
 
+def _obtener_envios_para_alertas() -> list:
+    """Trae todos los envíos con incidencias y la fecha de su último estado actual."""
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT
+                e.nro_guia,
+                e.estado_actual,
+                e.fecha_creacion,
+                COALESCE(
+                    (SELECT MAX(h.fecha_hora)
+                     FROM historial_estados h
+                     WHERE h.id_envio = e.id_envio AND h.estado = e.estado_actual),
+                    e.fecha_creacion
+                ) AS fecha_estado,
+                (SELECT COUNT(*) FROM intentos_entrega i WHERE i.id_envio = e.id_envio) AS cantidad_intentos,
+                (SELECT i.motivo_fallo FROM intentos_entrega i
+                 WHERE i.id_envio = e.id_envio AND i.tipo_intento = 'fallido'
+                 ORDER BY i.fecha_hora DESC, i.id_intento DESC LIMIT 1) AS motivo_fallo
+            FROM envios e
+            WHERE e.estado_actual IN ('recibido', 'en_ruta', 'fallido')
+            ORDER BY fecha_estado ASC
+        """)
+        return cursor.fetchall()
+    except Exception as e:
+        logger.error("Error al obtener envíos para alertas operativas: %s", e)
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
     """Obtiene el detalle de envíos para el reporte operativo."""
     conn = None
@@ -529,7 +564,7 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
     for envio in envios or []:
         estado = str(envio.get("estado_actual") or "").lower()
         guia = envio.get("nro_guia") or "Sin guía"
-        fecha = envio.get("fecha_creacion")
+        fecha = envio.get("fecha_estado") or envio.get("fecha_creacion")
         if isinstance(fecha, str):
             try:
                 fecha = datetime.fromisoformat(fecha)
@@ -537,7 +572,14 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
                 fecha = None
 
         if estado == "fallido":
-            alertas.append({"tipo": "danger", "guia": guia, "mensaje": "Entrega fallida: requiere seguimiento."})
+            cantidad_intentos = int(envio.get("cantidad_intentos") or 0)
+            motivo = str(envio.get("motivo_fallo") or "").replace("_", " ").strip().capitalize()
+            detalle = f" Motivo: {motivo}." if motivo else ""
+            alertas.append({
+                "tipo": "danger",
+                "guia": guia,
+                "mensaje": f"Entrega fallida tras {cantidad_intentos} intento(s): requiere reintento o devolución.{detalle}",
+            })
         elif estado == "recibido" and fecha and ahora - fecha >= timedelta(hours=24):
             alertas.append({"tipo": "warning", "guia": guia, "mensaje": "Envío recibido hace más de 24 horas sin despacho."})
         elif estado == "en_ruta" and fecha and ahora - fecha >= timedelta(days=2):
@@ -555,7 +597,7 @@ def _enviar_alertas_gmail(alertas: list[dict]) -> None:
     """Envía un resumen de alertas mediante una cuenta Gmail con contraseña de aplicación."""
     destinatarios = _obtener_destinatarios_alertas()
     if not EmailConfig.USER or not EmailConfig.PASSWORD or not destinatarios:
-        raise ValueError("Configurá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL para enviar alertas.")
+        raise ValueError("Completá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL en el archivo .env. GMAIL_APP_PASSWORD debe ser una contraseña de aplicación de Google.")
 
     mensaje = EmailMessage()
     mensaje["Subject"] = f"FormoPack: {len(alertas)} alerta(s) operativa(s)"

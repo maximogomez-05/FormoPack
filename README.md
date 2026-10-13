@@ -43,7 +43,8 @@ Si querés levantar este proyecto en una computadora nueva o pasárselo a un pro
 2. **Configurar las Variables de Entorno (.env):**
    - En la carpeta raíz del proyecto, hacé una copia del archivo `.env.example` y nombralo `.env`.
    - Abrí el `.env` y asegurate de que los datos de tu Base de Datos coincidan (usuario `root`, sin contraseña, puerto `3306`).
-   - Opcional: Configurá las credenciales de Mercado Pago y Gmail si querés probar esas funciones.
+   - Para enviar alertas por Gmail, completá `GMAIL_USER`, `GMAIL_APP_PASSWORD` y `ALERTAS_EMAIL` usando los nombres de `.env.example`. La contraseña debe ser una contraseña de aplicación de Google; requiere tener habilitada la verificación en dos pasos. No uses ni compartas tu contraseña habitual.
+   - Mercado Pago es opcional; completá sus credenciales solo si querés probar esa integración.
 
 3. **Crear Entorno Virtual e Instalar Dependencias:**
    Abrí la terminal en la carpeta del proyecto y ejecutá:
