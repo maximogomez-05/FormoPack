@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class ChoferController:
     """Consulta rutas propias y registra evidencias de entrega."""
 
-    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido"}
+    ESTADOS_ENTREGA = {"en_ruta", "fallido"}
     ESTADOS_FINALES = {"entregado", "devolucion", "siniestro"}
 
     @staticmethod
@@ -200,6 +200,11 @@ class ChoferController:
             envio = cursor.fetchone()
             if not envio:
                 raise ValidationError(field="envio", reason="El envío no pertenece a una hoja del chofer")
+            if envio["estado_actual"] in ("en_planta", "recibido"):
+                raise ValidationError(
+                    field="envio",
+                    reason="No podés registrar el resultado de entrega porque la ruta aún no ha sido iniciada. Primero iniciá la ruta."
+                )
             if envio["estado_actual"] not in self.ESTADOS_ENTREGA:
                 raise ValidationError(field="envio", reason="El envío ya no admite un intento de entrega")
 

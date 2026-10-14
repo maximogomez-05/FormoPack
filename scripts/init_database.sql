@@ -256,6 +256,18 @@ ON DUPLICATE KEY UPDATE
     cobertura_estandar = VALUES(cobertura_estandar),
     porcentaje_excedente = VALUES(porcentaje_excedente);
 
+-- Usuarios iniciales de prueba (contraseñas con hash Bcrypt)
+-- admin@formopack.com / admin123
+-- recepcion@formopack.com / recep456
+-- chofer@formopack.com / chofer789
+INSERT INTO usuarios (nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo) VALUES
+    ('Administrador Sistema', 'admin@formopack.com', '$2b$12$2RijUv8m0fZ5XAVEfg6I..zvCToVW8dmtmD3KJFzAP3c1s1m3erPS', 'administrador', NULL, 1),
+    ('Maria Recepcionista', 'recepcion@formopack.com', '$2b$12$FKOiYKNciRZJkko/.c.u0emTbfo8BddiG5QYVuIUGYkUOntOUAJqi', 'recepcionista', NULL, 1),
+    ('Carlos Chofer', 'chofer@formopack.com', '$2b$12$hKw3va/yuDZddKdx8fti..orvEm3327VLE5Q0wLmRl/Cl4f.k31ZC', 'chofer', 'LI-123456', 1)
+ON DUPLICATE KEY UPDATE
+    credenciales_hash = VALUES(credenciales_hash),
+    tipo_usuario = VALUES(tipo_usuario);
+
 -- ============================================================
 -- FIN DEL SCRIPT DDL
 -- ============================================================

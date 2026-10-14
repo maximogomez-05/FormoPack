@@ -370,6 +370,9 @@ def test_registro_devolucion_fallida():
     assert ChoferController.es_estado_terminal("devolucion") is True
     assert "devolucion" not in ChoferController.ESTADOS_ENTREGA
     assert "fallido" in ChoferController.ESTADOS_ENTREGA
+    assert "en_ruta" in ChoferController.ESTADOS_ENTREGA
+    assert "en_planta" not in ChoferController.ESTADOS_ENTREGA
+    assert "recibido" not in ChoferController.ESTADOS_ENTREGA
     assert ChoferController.es_hoja_ruta_completada(["entregado", "devolucion"]) is True
     assert ChoferController.es_hoja_ruta_completada(["entregado", "fallido"]) is False
     assert ChoferController.es_hoja_ruta_completada([]) is False

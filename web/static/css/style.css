@@ -537,8 +537,8 @@ tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
 .delivery-done { border-color:#c8e6c9; background:#f1f8e9; }
 .delivery-done .delivery-order { background: #c8e6c9; color: #2e7d32; }
 .delivery-failed { border-color:#ffcdd2; background:#ffebee; }
-.delivery-failed .delivery-order { background: #ffcdd2; color: #c62828; }
 .delivery-result { color:var(--success); font-size:13px; font-weight:700; }
+.delivery-pending { color:#d97706; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; background:#fffbeb; padding:6px 12px; border-radius:var(--radius-input); border:1px solid #fde68a; }
 .empty-driver { text-align:center; padding:70px 20px; }
 .empty-driver > i { color:var(--primary); font-size:48px; margin-bottom:16px; }
 .empty-driver h2 { margin-bottom:8px; font-weight: 600; }
