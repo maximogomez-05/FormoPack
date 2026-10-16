@@ -686,6 +686,62 @@ def mp_iniciar_pago(nro_guia: str):
     return redirect(url_for('recepcion.cobrar_envio', nro_guia=nro_guia))
 
 
+@recepcion_bp.route('/mp/verificar/<nro_guia>')
+@login_required
+@rol_requerido('administrador', 'recepcionista')
+def mp_verificar_pago(nro_guia: str):
+    """RF 6.3: Endpoint de polling para verificación en vivo de pago MP.
+
+    El frontend llama a este endpoint cada 3 segundos desde la pantalla QR.
+    Devuelve JSON indicando si el pago fue aprobado.
+    """
+    from flask import jsonify as FlaskJson
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id_pago, id_transaccion_ext FROM pagos p JOIN envios e ON e.id_envio = p.id_envio WHERE e.nro_guia = %s LIMIT 1",
+            (nro_guia,)
+        )
+        pago_bd = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if pago_bd:
+            # Ya está registrado en la BD (cobro confirmado)
+            return FlaskJson({"aprobado": True, "metodo": "bd", "payment_id": pago_bd.get("id_transaccion_ext", "")})
+
+        # No está en BD, consultamos a la API de MP si MP está configurado
+        if not MercadoPagoConfig.esta_configurado():
+            return FlaskJson({"aprobado": False, "metodo": "sin_mp"})
+
+        mp = MercadoPagoService()
+        sdk = mp._sdk
+        filtros = {
+            "external_reference": nro_guia,
+            "sort": "date_created",
+            "criteria": "desc",
+        }
+        resultado = sdk.payment().search(filtros)
+        response = resultado.get("response", {})
+        pagos = response.get("results", [])
+
+        for p in pagos:
+            if str(p.get("status", "")) == "approved":
+                payment_id = str(p.get("id", ""))
+                monto = float(p.get("transaction_amount", 0))
+                # Registrar automáticamente
+                _registrar_pago_mp(nro_guia=nro_guia, payment_id=payment_id, monto=monto)
+                return FlaskJson({"aprobado": True, "metodo": "api_mp", "payment_id": payment_id})
+
+        return FlaskJson({"aprobado": False, "metodo": "api_mp"})
+
+    except Exception as e:
+        logger.error("Error en mp_verificar_pago para %s: %s", nro_guia, e)
+        return FlaskJson({"aprobado": False, "metodo": "error", "error": "Error interno"}), 500
+
+
 @recepcion_bp.route('/mp/success')
 def mp_success():
     """Mercado Pago redirige aquí cuando el pago fue APROBADO."""

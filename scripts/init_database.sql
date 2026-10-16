@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS hojas_de_ruta (
     fecha_emision   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     id_chofer       INT(11)         NOT NULL,
     id_vehiculo     INT(11)         NOT NULL,
+    estado          ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta',
+    fecha_cierre    DATETIME                  DEFAULT NULL,
     PRIMARY KEY (id_hoja_ruta),
     UNIQUE KEY uk_hojas_nro_despacho (nro_despacho),
     CONSTRAINT fk_hojas_chofer    FOREIGN KEY (id_chofer)   REFERENCES usuarios(id_usuario),
