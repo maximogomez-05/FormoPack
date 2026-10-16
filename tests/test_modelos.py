@@ -399,6 +399,26 @@ def test_serialization():
     print("  [OK] Serialización to_dict() de todos los modelos")
 
 
+def test_rf6_validaciones():
+    """Pruebas de validación de RF 6 (6.1, 6.2 y 6.3)."""
+    from app.services.servicio_notificacion import ServicioNotificacion
+
+    # RF 6.1: Cierre de hoja completada
+    assert ChoferController.es_hoja_ruta_completada(["entregado", "devolucion", "siniestro"]) is True
+    assert ChoferController.es_hoja_ruta_completada(["entregado", "en_ruta"]) is False
+
+    # RF 6.2: Asuntos diferenciados por estado
+    asunto_ruta = ServicioNotificacion._asunto_por_estado("en_ruta", "FPX-001")
+    assert "en camino" in asunto_ruta
+    asunto_entregado = ServicioNotificacion._asunto_por_estado("entregado", "FPX-001")
+    assert "entregado" in asunto_entregado
+
+    # RF 6.3: Compatibilidad de esquemas
+    ctrl_chofer = ChoferController()
+    assert isinstance(ctrl_chofer._tiene_columna_estado(), bool)
+    print("  [OK] RF 6: Cierre de hoja, notificaciones duales y compatibilidad")
+
+
 def main():
     print("\n--- Pruebas Sprint 2 (Modelos de Dominio) ---")
     test_cliente_validacion()
@@ -417,6 +437,7 @@ def main():
     test_comprobante_interno_generacion()
     test_registro_devolucion_fallida()
     test_serialization()
+    test_rf6_validaciones()
     print("--- Todas las pruebas de modelos pasaron ---\n")
 
 

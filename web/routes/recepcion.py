@@ -696,6 +696,7 @@ def mp_verificar_pago(nro_guia: str):
     Devuelve JSON indicando si el pago fue aprobado.
     """
     from flask import jsonify as FlaskJson
+    conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -707,6 +708,7 @@ def mp_verificar_pago(nro_guia: str):
         pago_bd = cursor.fetchone()
         cursor.close()
         conn.close()
+        conn = None
 
         if pago_bd:
             # Ya está registrado en la BD (cobro confirmado)
@@ -740,6 +742,9 @@ def mp_verificar_pago(nro_guia: str):
     except Exception as e:
         logger.error("Error en mp_verificar_pago para %s: %s", nro_guia, e)
         return FlaskJson({"aprobado": False, "metodo": "error", "error": "Error interno"}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 @recepcion_bp.route('/mp/success')

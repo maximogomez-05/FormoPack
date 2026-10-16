@@ -43,6 +43,7 @@ class ServicioNotificacion:
         remitente_email = None
         destinatario_email = None
         destinatario_nombre = None
+        conn = None
         try:
             from app.core.database import DatabaseManager
             db = DatabaseManager.get_instance()
@@ -59,8 +60,12 @@ class ServicioNotificacion:
                 destinatario_nombre = row_dest.get("nombre_completo", "")
             cur.close()
             conn.close()
+            conn = None
         except Exception as e:
             logger.warning("No se pudo obtener datos de clientes para notificación: %s", e)
+        finally:
+            if conn:
+                conn.close()
 
         # --- Mensajes personalizados por estado y rol ---
         mensajes_destinatario = {

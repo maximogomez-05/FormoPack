@@ -271,5 +271,12 @@ ON DUPLICATE KEY UPDATE
     tipo_usuario = VALUES(tipo_usuario);
 
 -- ============================================================
+-- MIGRACIONES IDEMPOTENTES (compatibilidad con BDs existentes)
+-- ============================================================
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS email VARCHAR(100) DEFAULT NULL;
+ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS estado ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta';
+ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS fecha_cierre DATETIME DEFAULT NULL;
+
+-- ============================================================
 -- FIN DEL SCRIPT DDL
 -- ============================================================

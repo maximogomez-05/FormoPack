@@ -37,18 +37,37 @@ class ChoferController:
     def __init__(self) -> None:
         self.db = DatabaseManager.get_instance()
 
+    def _tiene_columna_estado(self) -> bool:
+        """Compatibilidad con esquemas sin columna estado en hojas_de_ruta."""
+        conn = None
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SHOW COLUMNS FROM hojas_de_ruta LIKE 'estado'")
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+        finally:
+            if conn:
+                conn.close()
+
     def obtener_panel(self, id_chofer: int) -> dict[str, Any]:
         """Devuelve hojas activas y sus envios para el chofer autenticado."""
         conn = self.db.get_connection()
         cursor = conn.cursor(dictionary=True)
         try:
+            if self._tiene_columna_estado():
+                filtro_hojas = "AND (hr.estado = 'abierta' OR hr.fecha_emision >= DATE_SUB(NOW(), INTERVAL 24 HOUR))"
+            else:
+                filtro_hojas = ""
+
             cursor.execute(
-                """SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
+                f"""SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
                           v.patente, v.capacidad_kg
                    FROM hojas_de_ruta hr
                    JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
                    WHERE hr.id_chofer = %s
-                     AND (hr.estado = 'abierta' OR hr.fecha_emision >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
+                     {filtro_hojas}
                    ORDER BY hr.fecha_emision DESC""",
                 (id_chofer,),
             )
@@ -353,11 +372,12 @@ class ChoferController:
         )
         estados = [fila["estado_actual"] for fila in cursor.fetchall()]
         if self.es_hoja_ruta_completada(estados):
-            # Marcar hoja como cerrada con timestamp
-            cursor.execute(
-                "UPDATE hojas_de_ruta SET estado = 'cerrada', fecha_cierre = NOW() WHERE id_hoja_ruta = %s AND estado = 'abierta'",
-                (id_hoja_ruta,),
-            )
+            # Marcar hoja como cerrada con timestamp si la columna existe en el esquema
+            if self._tiene_columna_estado():
+                cursor.execute(
+                    "UPDATE hojas_de_ruta SET estado = 'cerrada', fecha_cierre = NOW() WHERE id_hoja_ruta = %s AND estado = 'abierta'",
+                    (id_hoja_ruta,),
+                )
             # Devolver el vehículo a disponible
             cursor.execute(
                 """UPDATE vehiculos v
