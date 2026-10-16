@@ -324,12 +324,21 @@ class EnvioController:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(sql, (nro_guia.strip(),))
             fila = cursor.fetchone()
-            cursor.close()
 
             if not fila:
+                cursor.close()
                 raise EnvioNotFoundError(nro_guia=nro_guia)
 
-            return Envio.from_db_row(fila)
+            envio = Envio.from_db_row(fila)
+
+            # Cargar bultos asociados al envío
+            cursor.execute("SELECT * FROM bultos WHERE id_envio = %s ORDER BY id_bulto ASC", (fila["id_envio"],))
+            bultos_filas = cursor.fetchall()
+            for b_row in bultos_filas:
+                envio.agregar_bulto(Bulto.from_db_row(b_row))
+
+            cursor.close()
+            return envio
 
         except EnvioNotFoundError:
             raise

@@ -12,9 +12,8 @@
     </div>
 </div>
 
-<!-- Modal para Nuevo Usuario -->
 <div id="modalNuevoUsuario" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-    <div class="modal-content card" style="background-color: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px;">
+    <div class="modal-content card" style="background-color: #fff; margin: 40px auto; padding: 20px; width: 92%; max-width: 500px; border-radius: 8px;">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <span class="card-title">Crear Nuevo Usuario</span>
             <span style="cursor: pointer; font-size: 1.5rem;" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">&times;</span>
@@ -48,7 +47,7 @@
     </div>
 </div>
 
-<div class="usuarios-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+<div class="usuarios-grid">
     {% for u in usuarios %}
     <div class="card" style="display: flex; flex-direction: column; align-items: center; padding: 20px; text-align: center;">
         <div class="avatar-circle" style="width: 60px; height: 60px; border-radius: 50%; background-color: var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">

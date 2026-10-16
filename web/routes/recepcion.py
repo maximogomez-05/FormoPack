@@ -230,6 +230,20 @@ def nuevo_envio():
                     "es_fragil": es_fragil,
                 })
 
+            # Validar seguro y valor declarado
+            id_seguro_raw = form.get("id_seguro")
+            valor_declarado_raw = form.get("valor_declarado", 0) or 0
+            try:
+                valor_declarado = float(valor_declarado_raw)
+            except (ValueError, TypeError):
+                valor_declarado = 0.0
+
+            id_seguro = int(id_seguro_raw) if id_seguro_raw else None
+
+            if id_seguro and valor_declarado <= 0:
+                flash("Si selecciona una cobertura de seguro, debe indicar el Valor Declarado de la mercadería (mayor a $0).", "warning")
+                return redirect(request.url)
+
             # Crear envío
             envio_ctrl = EnvioController()
             resultado = envio_ctrl.crear_envio(
@@ -239,8 +253,8 @@ def nuevo_envio():
                 direccion_destino=form.get("direccion_destino", "").strip(),
                 bultos_data=bultos_data,
                 modalidad_pago=form.get("modalidad_pago", "efectivo"),
-                valor_declarado=float(form.get("valor_declarado", 0) or 0),
-                id_seguro=int(form.get("id_seguro")) if form.get("id_seguro") else None,
+                valor_declarado=valor_declarado,
+                id_seguro=id_seguro,
             )
 
             flash(
@@ -287,6 +301,8 @@ def cobrar_envio(nro_guia: str):
         flash(f"No se encontró el envío con guía {nro_guia}.", "danger")
         return redirect(url_for("recepcion.cotizador"))
 
+    envio_dict, detalle = _obtener_detalle_envio(nro_guia)
+
     qr_base64 = None
     qr_id = None
 
@@ -326,11 +342,11 @@ def cobrar_envio(nro_guia: str):
         billetera = request.form.get("billetera_virtual", "MercadoPago")
         if monto < float(envio.costo_total):
             flash("El importe cobrado no puede ser inferior al total del envío.", "warning")
-            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id)
         turno_activo = _obtener_turno_activo(session.get("usuario_id"))
         if not turno_activo:
             flash("Debe abrir un turno de caja antes de registrar el cobro.", "warning")
-            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id)
 
         if tipo_pago == "digital":
             qr_id = request.form.get("id_transaccion_qr") or request.form.get("qr_id")
@@ -344,6 +360,8 @@ def cobrar_envio(nro_guia: str):
                 return render_template(
                     "recepcion/cobro.html",
                     envio=envio,
+                    detalle=detalle,
+                    envio_dict=envio_dict,
                     qr_base64=qr_base64,
                     qr_id=qr_id,
                 )
@@ -371,6 +389,8 @@ def cobrar_envio(nro_guia: str):
     return render_template(
         "recepcion/cobro.html",
         envio=envio,
+        detalle=detalle,
+        envio_dict=envio_dict,
         qr_base64=qr_base64,
         qr_id=qr_id,
     )
@@ -634,6 +654,26 @@ def _obtener_detalle_envio(nro_guia: str):
                 (envio["id_envio"],),
             )
             detalle["comprobante"] = cursor.fetchone()
+
+            # Desglose de seguro y flete
+            detalle["seguro"] = None
+            detalle["costo_seguro"] = 0.0
+            costo_total = float(envio.get("costo_total", 0) or 0)
+            detalle["subtotal_flete"] = costo_total
+
+            if envio.get("id_seguro"):
+                cursor.execute("SELECT * FROM seguros WHERE id_seguro = %s LIMIT 1", (envio["id_seguro"],))
+                seg_row = cursor.fetchone()
+                if seg_row:
+                    detalle["seguro"] = seg_row
+                    vd = float(envio.get("valor_declarado", 0) or 0)
+                    cobertura = float(seg_row["cobertura_estandar"])
+                    pct = float(seg_row["porcentaje_excedente"])
+                    if vd > cobertura:
+                        detalle["costo_seguro"] = round((vd - cobertura) * (pct / 100.0), 2)
+                    else:
+                        detalle["costo_seguro"] = 0.0
+                    detalle["subtotal_flete"] = round(costo_total - detalle["costo_seguro"], 2)
 
         return envio, detalle
     finally:

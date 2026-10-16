@@ -3,18 +3,18 @@
 {% block title %}Cobro Mercado Pago — FormoPack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;" data-aos="zoom-in">
-  <div class="card" style="max-width: 480px; width: 100%; border-top: 4px solid #009ee3;" id="mp-card">
+<div style="display: flex; justify-content: center; align-items: center; min-height: 75vh; padding: 12px 0;" data-aos="zoom-in">
+  <div class="card" style="max-width: 480px; width: 100%; border-top: 4px solid #009ee3; margin: 0 auto;" id="mp-card">
 
     <!-- ESTADO: Esperando pago -->
     <div id="estado-esperando">
-      <div class="card-header text-center" style="background: #f0faff; border-bottom: 1px solid #e0e6ef;">
+      <div class="card-header text-center" style="background: #f0faff; border-bottom: 1px solid #e0e6ef; justify-content: center; flex-direction: column;">
         <img src="https://http2.mlstatic.com/frontend-assets/ui-navigation/5.19.5/mercadopago/logo__large.png"
-             alt="Mercado Pago" style="max-width:180px; margin: 10px 0;">
+             alt="Mercado Pago" style="max-width:180px; margin: 10px auto;">
         <h3 style="margin-bottom: 0; color: #006699; font-weight: 800;">Pago Seguro</h3>
       </div>
 
-      <div class="card-body text-center" style="padding: 30px;">
+      <div class="card-body text-center" style="padding: 24px 16px;">
         <h4 style="margin-bottom: 5px;">Guía: {{ envio.nro_guia }}</h4>
         <h2 style="font-size: 32px; font-weight: 800; color: #333; margin-bottom: 20px;">
           ${{ "%.2f"|format(envio.costo_total) }}
@@ -33,11 +33,11 @@
           Esperando confirmación de pago...
         </div>
 
-        <div class="d-flex" style="gap: 10px;">
-          <a href="{{ url_for('recepcion.cobrar_envio', nro_guia=envio.nro_guia) }}" class="btn btn-secondary flex-fill">
+        <div class="form-actions-bar" style="margin-top: 20px;">
+          <a href="{{ url_for('recepcion.cobrar_envio', nro_guia=envio.nro_guia) }}" class="btn btn-secondary" style="flex: 1 1 auto; text-align: center; justify-content: center;">
             <i class="fa-solid fa-arrow-left"></i> Volver
           </a>
-          <a href="{{ url_checkout }}" target="_blank" class="btn btn-primary flex-fill" style="background:#009ee3; border-color:#009ee3;">
+          <a href="{{ url_checkout }}" target="_blank" class="btn btn-primary" style="background:#009ee3; border-color:#009ee3; flex: 1 1 auto; text-align: center; justify-content: center;">
             Abrir en browser <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
         </div>

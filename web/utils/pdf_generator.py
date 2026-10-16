@@ -222,20 +222,33 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
     monto_pago = float(pago.get("monto", 0)) if pago else 0
     tipo_pago = (pago.get("tipo_pago", "efectivo")).upper() if pago else "—"
 
+    subtotal_flete = float(detalle.get("subtotal_flete", costo_total))
+    costo_seguro = float(detalle.get("costo_seguro", 0.0))
+    valor_declarado = float(envio.get("valor_declarado", 0.0) or 0.0)
+
     datos_total = [
-        ["Subtotal:", f"${costo_total:.2f}"],
+        ["Subtotal Flete:", f"${subtotal_flete:.2f}"],
+    ]
+    if costo_seguro > 0:
+        datos_total.append([f"Seguro (Val. Dec. ${valor_declarado:.2f}):", f"+${costo_seguro:.2f}"])
+    elif envio.get("id_seguro"):
+        datos_total.append(["Seguro:", "Incluido en cobertura base"])
+
+    datos_total.extend([
+        ["Total del Servicio:", f"${costo_total:.2f}"],
         ["Tipo de cobro:", tipo_pago],
         ["TOTAL COBRADO:", f"${monto_pago:.2f}"],
-    ]
+    ])
 
     tabla_total = Table(datos_total, colWidths=[12 * cm, 4 * cm])
+    total_idx = len(datos_total) - 1
     tabla_total.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 2), (-1, 2), 13),
-        ("TEXTCOLOR", (0, 2), (-1, 2), colors.HexColor("#e94560")),
+        ("FONTNAME", (0, total_idx), (-1, total_idx), "Helvetica-Bold"),
+        ("FONTSIZE", (0, total_idx), (-1, total_idx), 13),
+        ("TEXTCOLOR", (0, total_idx), (-1, total_idx), colors.HexColor("#e94560")),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     elementos.append(tabla_total)

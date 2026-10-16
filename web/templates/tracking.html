@@ -4,10 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Seguimiento de Envíos — FormoPack</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=5) }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body { background: var(--bg-body); padding: 40px 20px; }
+    @media (max-width: 480px) {
+      body { padding: 20px 12px; }
+    }
     .tracking-container { max-width: 600px; margin: 0 auto; }
     .tracking-header { text-align: center; margin-bottom: 32px; }
     .tracking-logo { font-size: 32px; color: var(--primary); }
@@ -81,10 +84,9 @@
   <!-- Buscador -->
   <div class="card" style="margin-bottom:24px; padding: 20px;">
     <form method="GET" action="{{ url_for('admin.tracking_publico') }}">
-      <div style="display:flex;gap:12px; align-items: stretch; flex-wrap: wrap;">
+      <div class="tracking-search-bar">
         <input type="text" name="guia" class="form-control search-input"
                placeholder="🔍 Ingrese su número de seguimiento (Ej: FPX-2026...)"
-               style="flex: 1; min-width: 250px;"
                value="{{ nro_guia or '' }}" required maxlength="25" pattern="[A-Za-z0-9\-]+">
         <button type="submit" class="btn btn-primary btn-search">
           Consultar Envío
@@ -120,7 +122,7 @@
     </div>
     {% endif %}
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+    <div class="page-grid-2col" style="margin-bottom:24px;">
       <div>
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> Origen (Remitente)</div>
         <div style="font-weight:600;font-size:13px;margin-top:4px;">{{ envio.remitente }}</div>
