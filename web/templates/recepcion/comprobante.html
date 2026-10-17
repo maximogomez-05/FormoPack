@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="max-width:700px;margin:0 auto;">
-  <div class="card" style="padding:40px;">
+  <div class="card comprobante-card">
     <!-- Encabezado -->
     <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid var(--primary);margin-bottom:24px;">
       <i class="fa-solid fa-cube fa-2x" style="color:var(--primary);"></i>
@@ -25,7 +25,7 @@
 
     {% if envio %}
     <!-- Datos del envío -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+    <div class="comprobante-partes-grid">
       <div style="background:#f8f9fa;padding:16px;border-radius:4px;border:1px solid var(--border);">
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;"><i class="fa-solid fa-user"></i> Datos del Remitente</div>
         <div style="font-weight:600;font-size:14px;">{{ envio.remitente }}</div>
@@ -52,24 +52,26 @@
     {% if detalle.bultos %}
     <div style="margin-bottom:24px;">
       <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Detalle de Paquetería ({{ detalle.bultos|length }} Bultos)</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Ítem</th><th>Peso Físico</th><th>Volumétrico</th><th>Peso Aforado</th><th>Manejo Especial</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for b in detalle.bultos %}
-          <tr>
-            <td>0{{ loop.index }}</td>
-            <td>{{ b.peso_real }} kg</td>
-            <td>{{ b.peso_volumetrico }} kg</td>
-            <td><strong style="color:var(--primary);">{{ [b.peso_real, b.peso_volumetrico]|max }} kg</strong></td>
-            <td>{% if b.es_fragil %}<span style="color:var(--warning);font-weight:600;">FRÁGIL</span>{% else %}<span style="color:var(--text-muted);">Estándar</span>{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Ítem</th><th>Peso Físico</th><th>Volumétrico</th><th>Peso Aforado</th><th>Manejo Especial</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in detalle.bultos %}
+            <tr>
+              <td>0{{ loop.index }}</td>
+              <td>{{ b.peso_real }} kg</td>
+              <td>{{ b.peso_volumetrico }} kg</td>
+              <td><strong style="color:var(--primary);">{{ [b.peso_real, b.peso_volumetrico]|max }} kg</strong></td>
+              <td>{% if b.es_fragil %}<span style="color:var(--warning);font-weight:600;">FRÁGIL</span>{% else %}<span style="color:var(--text-muted);">Estándar</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
     {% endif %}
 
@@ -84,6 +86,25 @@
       <span>Modalidad de Abono</span>
       <span><span class="badge badge-{{ envio.modalidad_pago }}">{{ envio.modalidad_pago }}</span></span>
     </div>
+    {% if detalle.subtotal_flete %}
+    <div class="desglose-row">
+      <span>Flete de Transporte</span>
+      <span>${{ "%.2f"|format(detalle.subtotal_flete) }}</span>
+    </div>
+    {% endif %}
+    {% if detalle.seguro %}
+    <div class="desglose-row">
+      <span><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Seguro (Val. Dec. ${{ "%.0f"|format(envio.valor_declarado) }})</span>
+      <span>
+        {% if detalle.costo_seguro > 0 %}
+          <strong style="color:var(--success);">+${{ "%.2f"|format(detalle.costo_seguro) }}</strong>
+          <span style="font-size:11px;color:var(--text-muted);">(Exc. {{ detalle.seguro.porcentaje_excedente }}% sobre ${{ "%.0f"|format(detalle.seguro.cobertura_estandar) }})</span>
+        {% else %}
+          <span style="color:var(--text-muted);font-size:12px;">Incluido en base ($0.00)</span>
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
     {% if detalle.pago %}
     <div class="desglose-row">
       <span>Importe Abonado</span>
@@ -98,19 +119,21 @@
   </div>
 
   <!-- Acciones -->
-  <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;">
-    <a href="{{ url_for('recepcion.descargar_pdf', nro_guia=nro_guia) }}" class="btn btn-primary btn-lg">
+  <div class="comprobante-actions">
+    <a href="{{ url_for('recepcion.descargar_pdf', nro_guia=nro_guia) }}" class="btn btn-primary btn-lg comprobante-btn-main">
       <i class="fa-solid fa-file-arrow-down"></i> Exportar Documento PDF
     </a>
-    <a href="{{ url_for('recepcion.descargar_documentos_despacho', nro_guia=nro_guia) }}" class="btn btn-secondary">
-      <i class="fa-solid fa-copy"></i> Remito x3
-    </a>
-    <a href="{{ url_for('recepcion.descargar_etiqueta', nro_guia=nro_guia) }}" class="btn btn-secondary">
-      <i class="fa-solid fa-barcode"></i> Etiqueta
-    </a>
-    <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-secondary">
-      <i class="fa-solid fa-plus"></i> Ingresar Nuevo Envío
-    </a>
+    <div class="comprobante-actions-secondary">
+      <a href="{{ url_for('recepcion.descargar_documentos_despacho', nro_guia=nro_guia) }}" class="btn btn-secondary">
+        <i class="fa-solid fa-copy"></i> Remito x3
+      </a>
+      <a href="{{ url_for('recepcion.descargar_etiqueta', nro_guia=nro_guia) }}" class="btn btn-secondary">
+        <i class="fa-solid fa-barcode"></i> Etiqueta
+      </a>
+      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-secondary">
+        <i class="fa-solid fa-plus"></i> Ingresar Nuevo Envío
+      </a>
+    </div>
   </div>
 </div>
 {% endblock %}

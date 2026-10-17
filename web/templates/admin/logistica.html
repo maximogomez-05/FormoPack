@@ -10,7 +10,7 @@
 </div>
 {% endif %}
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+<div class="page-grid-2col">
   <div class="card">
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus"></i> Registrar vehículo</span></div>
     <form method="POST" action="{{ url_for('admin.registrar_vehiculo') }}">
@@ -127,7 +127,7 @@
           {% if hojas_activas %}
             {% set hoja = hojas_activas[0] %}
             <div style="font-weight:700; font-size: 1.1rem; color: var(--primary); margin-bottom: 6px;">{{ hoja.nro_despacho }}</div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size: 13px; color: var(--text-muted);">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; font-size: 13px; color: var(--text-muted);">
               <div><strong>Chofer:</strong><br>{{ hoja.chofer_nombre }}</div>
               <div><strong>Vehículo:</strong><br>{{ hoja.patente }}</div>
               <div><strong>Entregas:</strong><br>{{ hoja.cantidad_envios }}</div>

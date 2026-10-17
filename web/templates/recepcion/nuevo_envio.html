@@ -4,7 +4,7 @@
 
 {% block content %}
 <form method="POST" id="form-envio">
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+<div class="page-grid-2col">
 
   <!-- Columna izquierda -->
   <div>
@@ -77,7 +77,7 @@
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-truck-fast"></i> Logística y Facturación</span></div>
       <div class="form-group">
         <label class="form-label">Localidad de Destino (*)</label>
-        <select name="id_localidad_destino" class="form-control" required>
+        <select name="id_localidad_destino" id="id_localidad_destino" class="form-control" required onchange="recalcularCotizacionEnVivo();">
           <option value="">Seleccione destino...</option>
           {% for loc in localidades %}
           <option value="{{ loc.id_localidad }}">{{ loc.nombre }} ({{ loc.distancia_km }} km)</option>
@@ -99,19 +99,20 @@
         </div>
         <div class="form-group">
           <label class="form-label">Cobertura (Seguro)</label>
-          <select name="id_seguro" class="form-control">
-            <option value="">Sin seguro adicional</option>
+          <select name="id_seguro" id="id_seguro" class="form-control" onchange="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
+            <option value="" data-base="0" data-pct="0">Sin seguro adicional (cobertura básica)</option>
             {% for seg in seguros %}
-            <option value="{{ seg.id_seguro }}">
-              Base: ${{ "%.0f"|format(seg.cobertura_estandar) }}
+            <option value="{{ seg.id_seguro }}" data-base="{{ seg.cobertura_estandar }}" data-pct="{{ seg.porcentaje_excedente }}">
+              Base: ${{ "%.0f"|format(seg.cobertura_estandar) }} (Excedente: {{ seg.porcentaje_excedente }}%)
             </option>
             {% endfor %}
           </select>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Valor Declarado de la Mercadería ($)</label>
-        <input type="number" name="valor_declarado" class="form-control" min="0" max="9999999" step="0.01" placeholder="0.00">
+        <label class="form-label" id="lbl_valor_declarado">Valor Declarado de la Mercadería ($)</label>
+        <input type="number" name="valor_declarado" id="valor_declarado" class="form-control" min="0" max="9999999" step="0.01" placeholder="0.00" oninput="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
+        <div id="seguro-helper" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:4px;"></div>
       </div>
     </div>
 
@@ -130,24 +131,37 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Peso Real (kg) (*)</label>
-              <input type="number" name="peso_real[]" class="form-control" min="0.01" step="0.01" required>
+              <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" step="0.01" required oninput="recalcularCotizacionEnVivo();">
             </div>
             <div class="form-group">
               <label class="form-label">Peso Vol. (kg)</label>
-              <input type="number" name="peso_volumetrico[]" class="form-control" min="0" step="0.01" value="0">
+              <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-            <input type="checkbox" name="es_fragil[]" value="on">
+            <input type="checkbox" name="es_fragil[]" value="on" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
             <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
           </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cotización Estimada en Tiempo Real -->
+    <div class="card" id="card-cotizacion-live" style="margin-top:16px;border:1px solid var(--border);background:#fcfcfc;">
+      <div class="card-header" style="padding-bottom:8px;">
+        <span class="card-title" style="font-size:13px;text-transform:uppercase;"><i class="fa-solid fa-calculator"></i> Cotización en Tiempo Real</span>
+        <span id="live-loc-badge" class="badge badge-info" style="font-size:11px;display:none;"></span>
+      </div>
+      <div id="live-desglose" style="padding:12px 16px;">
+        <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">
+          <i class="fa-solid fa-calculator" style="margin-right:6px;"></i> Complete destino y peso para visualizar el cálculo del flete y seguro en vivo.
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px;">
+<div class="form-actions-bar">
   <a href="{{ url_for('recepcion.cotizador') }}" class="btn btn-secondary">Cancelar</a>
   <button type="submit" class="btn btn-primary btn-lg">
     <i class="fa-solid fa-check"></i> Confirmar y Generar Guía
@@ -170,24 +184,161 @@ function agregarBulto() {
       <span class="bulto-numero">Bulto ${nb < 10 ? '0'+nb : nb}</span>
       <div>
         <span style="font-size:11px;color:var(--primary);font-weight:600;">Desc. Multibulto 50%</span>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.bulto-item').remove()" style="margin-left:8px;"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.bulto-item').remove(); recalcularCotizacionEnVivo();" style="margin-left:8px;"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Peso Real (kg) (*)</label>
-        <input type="number" name="peso_real[]" class="form-control" min="0.01" step="0.01" required>
+        <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" step="0.01" required oninput="recalcularCotizacionEnVivo();">
       </div>
       <div class="form-group">
         <label class="form-label">Peso Vol. (kg)</label>
-        <input type="number" name="peso_volumetrico[]" class="form-control" min="0" step="0.01" value="0">
+        <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
       </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-      <input type="checkbox" name="es_fragil[]" value="on">
+      <input type="checkbox" name="es_fragil[]" value="on" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
       <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
     </label>`;
   c.appendChild(d);
+  recalcularCotizacionEnVivo();
+}
+
+function actualizarSeguroInfo() {
+  const sel = document.getElementById('id_seguro');
+  const opt = sel.options[sel.selectedIndex];
+  const base = parseFloat(opt.dataset.base || 0);
+  const pct = parseFloat(opt.dataset.pct || 0);
+  const inpVal = document.getElementById('valor_declarado');
+  const helper = document.getElementById('seguro-helper');
+  const lbl = document.getElementById('lbl_valor_declarado');
+
+  if (!sel.value) {
+    inpVal.required = false;
+    lbl.innerHTML = 'Valor Declarado de la Mercadería ($)';
+    helper.style.display = 'none';
+    return;
+  }
+
+  inpVal.required = true;
+  lbl.innerHTML = 'Valor Declarado de la Mercadería ($) (*)';
+  const val = parseFloat(inpVal.value || 0);
+
+  helper.style.display = 'block';
+  if (val <= 0) {
+    helper.className = 'alert alert-warning';
+    helper.style.padding = '8px 12px';
+    helper.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Requerido:</strong> Ingrese el valor declarado de la mercadería para calcular la cobertura (Base $${base.toLocaleString('es-AR')}).`;
+  } else if (val <= base) {
+    helper.className = 'alert alert-info';
+    helper.style.padding = '8px 12px';
+    helper.innerHTML = `<i class="fa-solid fa-shield-halved"></i> <strong>Cobertura Base:</strong> El valor de $${val.toLocaleString('es-AR')} está 100% cubierto dentro de la base ($${base.toLocaleString('es-AR')}) sin cargo adicional ($0.00).`;
+  } else {
+    const exc = val - base;
+    const costo = exc * (pct / 100.0);
+    helper.className = 'alert alert-success';
+    helper.style.padding = '8px 12px';
+    helper.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Excedente Asegurado:</strong> Supera la base en $${exc.toLocaleString('es-AR')}. Recargo del ${pct}% = <strong>+$${costo.toFixed(2)}</strong> aplicable a la factura.`;
+  }
+}
+
+let debounceTimer = null;
+function recalcularCotizacionEnVivo() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    const locSel = document.getElementById('id_localidad_destino');
+    const idLocalidad = locSel ? locSel.value : '';
+    if (!idLocalidad) {
+      document.getElementById('live-desglose').innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">
+          <i class="fa-solid fa-location-dot" style="margin-right:6px;"></i> Seleccione una localidad de destino para calcular la cotización.
+        </div>`;
+      return;
+    }
+
+    const bultoItems = document.querySelectorAll('.bulto-item');
+    const bultos = [];
+    bultoItems.forEach(item => {
+      const pr = parseFloat(item.querySelector('.peso-real')?.value || 0);
+      const pv = parseFloat(item.querySelector('.peso-vol')?.value || 0);
+      const ef = item.querySelector('.es-fragil')?.checked || false;
+      if (pr > 0 || pv > 0) {
+        bultos.push({ peso_real: pr, peso_volumetrico: pv, es_fragil: ef });
+      }
+    });
+
+    if (bultos.length === 0) {
+      document.getElementById('live-desglose').innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0;">
+          <i class="fa-solid fa-weight-hanging" style="margin-right:6px;"></i> Ingrese el peso de al menos un bulto para calcular la cotización.
+        </div>`;
+      return;
+    }
+
+    const idSeguro = document.getElementById('id_seguro').value || null;
+    const valDec = parseFloat(document.getElementById('valor_declarado').value || 0);
+
+    try {
+      const resp = await fetch('/cotizador/calcular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bultos: bultos,
+          id_localidad: parseInt(idLocalidad),
+          valor_declarado: valDec,
+          id_seguro: idSeguro ? parseInt(idSeguro) : null,
+        }),
+      });
+
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      let html = `<div style="margin-bottom:8px;">`;
+      data.detalle_bultos.forEach(b => {
+        html += `
+          <div class="desglose-row" style="font-size:12px;padding:3px 0;">
+            <span>Bulto ${b.bulto_nro < 10 ? '0'+b.bulto_nro : b.bulto_nro} (Aforo: ${b.peso_aforo}kg) ${b.descuento_multibulto !== '0%' ? `<span style="color:var(--primary);font-size:11px;font-weight:600;">[-${b.descuento_multibulto}]</span>` : ''}</span>
+            <span>$${b.tarifa_final.toFixed(2)}</span>
+          </div>`;
+      });
+      html += `</div><hr class="divider" style="margin:6px 0;">`;
+      html += `
+        <div class="desglose-row" style="font-size:12px;">
+          <span>Subtotal Flete</span>
+          <span>$${data.subtotal_flete.toFixed(2)}</span>
+        </div>`;
+
+      if (data.costo_seguro > 0) {
+        html += `
+          <div class="desglose-row" style="font-size:12px;color:var(--success);">
+            <span><i class="fa-solid fa-shield-halved"></i> Cobertura Seguro</span>
+            <span style="font-weight:700;">+$${data.costo_seguro.toFixed(2)}</span>
+          </div>`;
+      } else if (idSeguro) {
+        html += `
+          <div class="desglose-row" style="font-size:12px;color:var(--text-muted);">
+            <span><i class="fa-solid fa-shield-halved"></i> Cobertura Seguro (Base)</span>
+            <span>Incluido ($0.00)</span>
+          </div>`;
+      }
+
+      html += `
+        <div class="desglose-row" style="margin-top:10px;border-top:2px solid var(--border);padding-top:8px;">
+          <span style="font-weight:700;font-size:13px;text-transform:uppercase;">TOTAL A FACTURAR</span>
+          <span style="font-size:20px;font-weight:700;color:var(--primary);">$${data.costo_total.toFixed(2)}</span>
+        </div>`;
+
+      document.getElementById('live-desglose').innerHTML = html;
+      const locBadge = document.getElementById('live-loc-badge');
+      if (locBadge) {
+        locBadge.style.display = 'inline-block';
+        locBadge.textContent = `${data.localidad_destino} (${data.distancia_km} km)`;
+      }
+    } catch (e) {
+      console.error("Error al calcular cotización en vivo:", e);
+    }
+  }, 250);
 }
 
 async function buscarCliente(prefix) {
@@ -211,7 +362,10 @@ async function buscarCliente(prefix) {
 // Pre-llenar campos desde los parámetros enviados por el cotizador
 (function preCargarDesdeCotizador() {
   const p = new URLSearchParams(window.location.search);
-  if (!p.has('id_localidad') && !p.has('peso_real')) return; // Nada que pre-cargar
+  if (!p.has('id_localidad') && !p.has('peso_real')) {
+    actualizarSeguroInfo();
+    return;
+  }
 
   // Localidad y campos simples
   const sel = document.querySelector('[name="id_localidad_destino"]');
@@ -249,6 +403,9 @@ async function buscarCliente(prefix) {
       b.querySelector('[name="es_fragil[]"]').checked = fragiles.includes(i);
     }
   }
+
+  actualizarSeguroInfo();
+  recalcularCotizacionEnVivo();
 })();
 
 // Advertencia de cambios sin guardar (Data Loss Prevention)

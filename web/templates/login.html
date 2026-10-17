@@ -13,6 +13,7 @@
       align-items: center;
       justify-content: center;
       background: linear-gradient(135deg, #0a192f 0%, #004481 60%, #0a2a4a 100%);
+      padding: 16px;
     }
     .login-card {
       background: #fff;
@@ -21,6 +22,11 @@
       width: 100%;
       max-width: 400px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    @media (max-width: 480px) {
+      .login-card {
+        padding: 32px 20px;
+      }
     }
     .login-logo { text-align: center; margin-bottom: 32px; }
     .login-logo-icon { font-size: 44px; color: var(--primary); }

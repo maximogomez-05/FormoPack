@@ -8,7 +8,7 @@
   <!-- Favicon corporativo SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><path fill='%23004481' d='M256 16L79.8 93.6C75.7 95.4 73 99.5 73 104v304c0 4.5 2.7 8.6 6.8 10.4L256 496l176.2-77.6c4.1-1.8 6.8-5.9 6.8-10.4V104c0-4.5-2.7-8.6-6.8-10.4L256 16zm135.2 367L256 442.5 120.8 383V163.6l121.7 54.1c8.4 3.7 18.5 3.7 26.9 0l121.7-54.1V383z'/></svg>">
   <!-- CSS Principal -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=3) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=5) }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
@@ -16,13 +16,18 @@
 <div class="layout">
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
-    <a href="{{ url_for('auth.dashboard') }}" class="sidebar-brand">
-      <i class="fa-solid fa-cube brand-icon"></i>
-      <div>
-        <div class="brand-name">FormoPack</div>
-        <div class="brand-sub">Sistema Logístico</div>
-      </div>
-    </a>
+    <div class="sidebar-header-wrapper">
+      <a href="{{ url_for('auth.dashboard') }}" class="sidebar-brand">
+        <i class="fa-solid fa-cube brand-icon"></i>
+        <div>
+          <div class="brand-name">FormoPack</div>
+          <div class="brand-sub">Sistema Logístico</div>
+        </div>
+      </a>
+      <button type="button" class="sidebar-close-btn" id="sidebar-close" aria-label="Cerrar menú lateral">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
 
     <nav class="sidebar-nav">
       <!-- Recepción -->
@@ -84,6 +89,7 @@
       </a>
     </div>
   </aside>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
   <!-- MAIN CONTENT -->
   <div class="main-content" data-aos="fade-up">
@@ -135,12 +141,62 @@
     }, 5000);
   });
   
-  // Mobile sidebar toggle
+  // Mobile sidebar controls
   const toggleBtn = document.getElementById('sidebar-toggle');
-  const sidebar = document.querySelector('.sidebar');
-  if(toggleBtn && sidebar) {
-    toggleBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
+  const closeBtn = document.getElementById('sidebar-close');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const sidebar = document.getElementById('sidebar');
+
+  function openSidebar() {
+    if (sidebar) {
+      sidebar.classList.add('open');
+      document.body.classList.add('sidebar-active-body');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+    }
   }
+
+  function closeSidebar() {
+    if (sidebar) {
+      sidebar.classList.remove('open');
+      document.body.classList.remove('sidebar-active-body');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (sidebar.classList.contains('open')) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeSidebar);
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', closeSidebar);
+  }
+
+  // Auto-close on link navigation on mobile
+  document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth <= 768) {
+        closeSidebar();
+      }
+    });
+  });
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar && sidebar.classList.contains('open')) {
+      closeSidebar();
+    }
+  });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));

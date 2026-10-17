@@ -230,6 +230,20 @@ def nuevo_envio():
                     "es_fragil": es_fragil,
                 })
 
+            # Validar seguro y valor declarado
+            id_seguro_raw = form.get("id_seguro")
+            valor_declarado_raw = form.get("valor_declarado", 0) or 0
+            try:
+                valor_declarado = float(valor_declarado_raw)
+            except (ValueError, TypeError):
+                valor_declarado = 0.0
+
+            id_seguro = int(id_seguro_raw) if id_seguro_raw else None
+
+            if id_seguro and valor_declarado <= 0:
+                flash("Si selecciona una cobertura de seguro, debe indicar el Valor Declarado de la mercadería (mayor a $0).", "warning")
+                return redirect(request.url)
+
             # Crear envío
             envio_ctrl = EnvioController()
             resultado = envio_ctrl.crear_envio(
@@ -239,8 +253,8 @@ def nuevo_envio():
                 direccion_destino=form.get("direccion_destino", "").strip(),
                 bultos_data=bultos_data,
                 modalidad_pago=form.get("modalidad_pago", "efectivo"),
-                valor_declarado=float(form.get("valor_declarado", 0) or 0),
-                id_seguro=int(form.get("id_seguro")) if form.get("id_seguro") else None,
+                valor_declarado=valor_declarado,
+                id_seguro=id_seguro,
             )
 
             flash(
@@ -287,6 +301,8 @@ def cobrar_envio(nro_guia: str):
         flash(f"No se encontró el envío con guía {nro_guia}.", "danger")
         return redirect(url_for("recepcion.cotizador"))
 
+    envio_dict, detalle = _obtener_detalle_envio(nro_guia)
+
     qr_base64 = None
     qr_id = None
 
@@ -326,11 +342,11 @@ def cobrar_envio(nro_guia: str):
         billetera = request.form.get("billetera_virtual", "MercadoPago")
         if monto < float(envio.costo_total):
             flash("El importe cobrado no puede ser inferior al total del envío.", "warning")
-            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id)
         turno_activo = _obtener_turno_activo(session.get("usuario_id"))
         if not turno_activo:
             flash("Debe abrir un turno de caja antes de registrar el cobro.", "warning")
-            return render_template("recepcion/cobro.html", envio=envio, qr_base64=qr_base64, qr_id=qr_id)
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id)
 
         if tipo_pago == "digital":
             qr_id = request.form.get("id_transaccion_qr") or request.form.get("qr_id")
@@ -344,6 +360,8 @@ def cobrar_envio(nro_guia: str):
                 return render_template(
                     "recepcion/cobro.html",
                     envio=envio,
+                    detalle=detalle,
+                    envio_dict=envio_dict,
                     qr_base64=qr_base64,
                     qr_id=qr_id,
                 )
@@ -371,6 +389,8 @@ def cobrar_envio(nro_guia: str):
     return render_template(
         "recepcion/cobro.html",
         envio=envio,
+        detalle=detalle,
+        envio_dict=envio_dict,
         qr_base64=qr_base64,
         qr_id=qr_id,
     )
@@ -635,6 +655,26 @@ def _obtener_detalle_envio(nro_guia: str):
             )
             detalle["comprobante"] = cursor.fetchone()
 
+            # Desglose de seguro y flete
+            detalle["seguro"] = None
+            detalle["costo_seguro"] = 0.0
+            costo_total = float(envio.get("costo_total", 0) or 0)
+            detalle["subtotal_flete"] = costo_total
+
+            if envio.get("id_seguro"):
+                cursor.execute("SELECT * FROM seguros WHERE id_seguro = %s LIMIT 1", (envio["id_seguro"],))
+                seg_row = cursor.fetchone()
+                if seg_row:
+                    detalle["seguro"] = seg_row
+                    vd = float(envio.get("valor_declarado", 0) or 0)
+                    cobertura = float(seg_row["cobertura_estandar"])
+                    pct = float(seg_row["porcentaje_excedente"])
+                    if vd > cobertura:
+                        detalle["costo_seguro"] = round((vd - cobertura) * (pct / 100.0), 2)
+                    else:
+                        detalle["costo_seguro"] = 0.0
+                    detalle["subtotal_flete"] = round(costo_total - detalle["costo_seguro"], 2)
+
         return envio, detalle
     finally:
         cursor.close()
@@ -684,6 +724,67 @@ def mp_iniciar_pago(nro_guia: str):
         flash('Ocurrió un error inesperado con Mercado Pago.', 'danger')
 
     return redirect(url_for('recepcion.cobrar_envio', nro_guia=nro_guia))
+
+
+@recepcion_bp.route('/mp/verificar/<nro_guia>')
+@login_required
+@rol_requerido('administrador', 'recepcionista')
+def mp_verificar_pago(nro_guia: str):
+    """RF 6.3: Endpoint de polling para verificación en vivo de pago MP.
+
+    El frontend llama a este endpoint cada 3 segundos desde la pantalla QR.
+    Devuelve JSON indicando si el pago fue aprobado.
+    """
+    from flask import jsonify as FlaskJson
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id_pago, id_transaccion_ext FROM pagos p JOIN envios e ON e.id_envio = p.id_envio WHERE e.nro_guia = %s LIMIT 1",
+            (nro_guia,)
+        )
+        pago_bd = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        conn = None
+
+        if pago_bd:
+            # Ya está registrado en la BD (cobro confirmado)
+            return FlaskJson({"aprobado": True, "metodo": "bd", "payment_id": pago_bd.get("id_transaccion_ext", "")})
+
+        # No está en BD, consultamos a la API de MP si MP está configurado
+        if not MercadoPagoConfig.esta_configurado():
+            return FlaskJson({"aprobado": False, "metodo": "sin_mp"})
+
+        mp = MercadoPagoService()
+        sdk = mp._sdk
+        filtros = {
+            "external_reference": nro_guia,
+            "sort": "date_created",
+            "criteria": "desc",
+        }
+        resultado = sdk.payment().search(filtros)
+        response = resultado.get("response", {})
+        pagos = response.get("results", [])
+
+        for p in pagos:
+            if str(p.get("status", "")) == "approved":
+                payment_id = str(p.get("id", ""))
+                monto = float(p.get("transaction_amount", 0))
+                # Registrar automáticamente
+                _registrar_pago_mp(nro_guia=nro_guia, payment_id=payment_id, monto=monto)
+                return FlaskJson({"aprobado": True, "metodo": "api_mp", "payment_id": payment_id})
+
+        return FlaskJson({"aprobado": False, "metodo": "api_mp"})
+
+    except Exception as e:
+        logger.error("Error en mp_verificar_pago para %s: %s", nro_guia, e)
+        return FlaskJson({"aprobado": False, "metodo": "error", "error": "Error interno"}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 @recepcion_bp.route('/mp/success')

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class ChoferController:
     """Consulta rutas propias y registra evidencias de entrega."""
 
-    ESTADOS_ENTREGA = {"recibido", "en_planta", "en_ruta", "fallido"}
+    ESTADOS_ENTREGA = {"en_ruta", "fallido"}
     ESTADOS_FINALES = {"entregado", "devolucion", "siniestro"}
 
     @staticmethod
@@ -37,17 +37,37 @@ class ChoferController:
     def __init__(self) -> None:
         self.db = DatabaseManager.get_instance()
 
+    def _tiene_columna_estado(self) -> bool:
+        """Compatibilidad con esquemas sin columna estado en hojas_de_ruta."""
+        conn = None
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SHOW COLUMNS FROM hojas_de_ruta LIKE 'estado'")
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+        finally:
+            if conn:
+                conn.close()
+
     def obtener_panel(self, id_chofer: int) -> dict[str, Any]:
         """Devuelve hojas activas y sus envios para el chofer autenticado."""
         conn = self.db.get_connection()
         cursor = conn.cursor(dictionary=True)
         try:
+            if self._tiene_columna_estado():
+                filtro_hojas = "AND (hr.estado = 'abierta' OR hr.fecha_emision >= DATE_SUB(NOW(), INTERVAL 24 HOUR))"
+            else:
+                filtro_hojas = ""
+
             cursor.execute(
-                """SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
+                f"""SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
                           v.patente, v.capacidad_kg
                    FROM hojas_de_ruta hr
                    JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
                    WHERE hr.id_chofer = %s
+                     {filtro_hojas}
                    ORDER BY hr.fecha_emision DESC""",
                 (id_chofer,),
             )
@@ -253,6 +273,11 @@ class ChoferController:
             envio = cursor.fetchone()
             if not envio:
                 raise ValidationError(field="envio", reason="El envío no pertenece a una hoja del chofer")
+            if envio["estado_actual"] in ("en_planta", "recibido"):
+                raise ValidationError(
+                    field="envio",
+                    reason="No podés registrar el resultado de entrega porque la ruta aún no ha sido iniciada. Primero iniciá la ruta."
+                )
             if envio["estado_actual"] not in self.ESTADOS_ENTREGA:
                 raise ValidationError(field="envio", reason="El envío ya no admite un intento de entrega")
 
@@ -393,13 +418,20 @@ class ChoferController:
             conn.close()
 
     def _liberar_vehiculo_si_hoja_completada(self, cursor, id_hoja_ruta: int) -> None:
-        """Devuelve a disponibilidad el vehículo al cerrar todos los envíos de la hoja."""
+        """RF 6.1: Cierra la hoja de ruta y libera el vehículo cuando todos los envíos finalizaron."""
         cursor.execute(
             "SELECT estado_actual FROM envios WHERE id_hoja_ruta = %s",
             (id_hoja_ruta,),
         )
         estados = [fila["estado_actual"] for fila in cursor.fetchall()]
         if self.es_hoja_ruta_completada(estados):
+            # Marcar hoja como cerrada con timestamp si la columna existe en el esquema
+            if self._tiene_columna_estado():
+                cursor.execute(
+                    "UPDATE hojas_de_ruta SET estado = 'cerrada', fecha_cierre = NOW() WHERE id_hoja_ruta = %s AND estado = 'abierta'",
+                    (id_hoja_ruta,),
+                )
+            # Devolver el vehículo a disponible
             cursor.execute(
                 """UPDATE vehiculos v
                    JOIN hojas_de_ruta hr ON hr.id_vehiculo = v.id_vehiculo
@@ -407,6 +439,7 @@ class ChoferController:
                    WHERE hr.id_hoja_ruta = %s AND v.estado = 'en_ruta'""",
                 (id_hoja_ruta,),
             )
+            logger.info("RF 6.1: Hoja de ruta %d cerrada automáticamente. Vehículo liberado.", id_hoja_ruta)
 
     @staticmethod
     def validar_foto(nombre: str | None, permitido: set[str]) -> bool:

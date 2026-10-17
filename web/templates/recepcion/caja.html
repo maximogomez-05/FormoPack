@@ -4,7 +4,7 @@
 
 {% block content %}
 {% if turno %}
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="metrics-grid">
   <div class="metric-card green">
     <i class="fa-solid fa-money-bill-wave metric-icon"></i>
     <div class="metric-value">${{ "%.2f"|format(turno.ef_real) }}</div>

@@ -17,16 +17,96 @@
       </div>
       <div style="color:var(--text-muted);font-size:12px;margin-bottom:20px;text-transform:uppercase;">Identificador de Guía</div>
 
+      {% if envio_dict %}
       <div class="desglose-row">
-        <span><i class="fa-solid fa-user text-muted"></i> Modalidad de Pago</span><span>{{ envio.modalidad_pago | capitalize }}</span>
+        <span><i class="fa-solid fa-user text-muted"></i> Remitente</span><span>{{ envio_dict.remitente }}</span>
       </div>
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-user-check text-muted"></i> Destinatario</span><span>{{ envio_dict.destinatario }}</span>
+      </div>
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-location-dot text-muted"></i> Destino</span>
+        <span>{{ envio_dict.localidad_destino }} — {{ envio.direccion_destino }}</span>
+      </div>
+      {% else %}
       <div class="desglose-row">
         <span><i class="fa-solid fa-location-dot text-muted"></i> Destino</span><span>{{ envio.direccion_destino }}</span>
       </div>
+      {% endif %}
       <div class="desglose-row">
-        <span><i class="fa-solid fa-boxes-stacked text-muted"></i> Cantidad de Bultos</span><span>{{ envio.cantidad_bultos }}</span>
+        <span><i class="fa-solid fa-credit-card text-muted"></i> Modalidad de Pago</span><span>{{ envio.modalidad_pago | capitalize }}</span>
       </div>
-      <div class="desglose-row" style="margin-top:16px;">
+      <div class="desglose-row">
+        <span><i class="fa-solid fa-boxes-stacked text-muted"></i> Cantidad de Bultos</span><span><strong>{{ envio.cantidad_bultos }} bulto(s)</strong></span>
+      </div>
+
+      <!-- Detalle de Bultos Individuales -->
+      {% if detalle and detalle.bultos %}
+      <div style="margin:16px 0 12px 0;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">
+          <i class="fa-solid fa-box-open"></i> Bultos a Facturar ({{ detalle.bultos|length }})
+        </div>
+        <div class="table-responsive" style="margin-bottom:0;">
+          <table class="table-compact" style="width:100%;font-size:12px;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--text-muted);">
+                <th style="padding:4px 6px;">#</th>
+                <th style="padding:4px 6px;">P. Real</th>
+                <th style="padding:4px 6px;">P. Vol.</th>
+                <th style="padding:4px 6px;">Aforo</th>
+                <th style="padding:4px 6px;">Tipo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in detalle.bultos %}
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:4px 6px;font-weight:600;">{{ loop.index }}</td>
+                <td style="padding:4px 6px;">{{ b.peso_real }} kg</td>
+                <td style="padding:4px 6px;">{{ b.peso_volumetrico }} kg</td>
+                <td style="padding:4px 6px;font-weight:600;color:var(--primary);">{{ [b.peso_real, b.peso_volumetrico]|max }} kg</td>
+                <td style="padding:4px 6px;">
+                  {% if b.es_fragil %}<span style="color:var(--warning);font-weight:600;"><i class="fa-solid fa-wine-glass"></i> Frágil</span>{% else %}<span style="color:var(--text-muted);">Estándar</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+      <hr class="divider" style="margin:14px 0 10px 0;">
+
+      <!-- Desglose Económico -->
+      {% if detalle %}
+      <div class="desglose-row">
+        <span>Subtotal Flete</span>
+        <span>${{ "%.2f"|format(detalle.subtotal_flete) }}</span>
+      </div>
+      {% if detalle.seguro %}
+        <div class="desglose-row">
+          <span>
+            <i class="fa-solid fa-shield-halved" style="color:var(--primary);margin-right:4px;"></i>
+            Seguro (Val. Dec. ${{ "%.0f"|format(envio.valor_declarado) }})
+          </span>
+          <span>
+            {% if detalle.costo_seguro > 0 %}
+              <strong style="color:var(--success);">+${{ "%.2f"|format(detalle.costo_seguro) }}</strong>
+              <div style="font-size:10px;color:var(--text-muted);text-align:right;">Exc. {{ detalle.seguro.porcentaje_excedente }}% sobre ${{ "%.0f"|format(detalle.seguro.cobertura_estandar) }}</div>
+            {% else %}
+              <span style="color:var(--text-muted);font-size:11px;">Incluido en base ($0.00)</span>
+            {% endif %}
+          </span>
+        </div>
+      {% else %}
+        <div class="desglose-row">
+          <span style="color:var(--text-muted);font-size:12px;">Seguro</span>
+          <span style="color:var(--text-muted);font-size:12px;">Sin seguro adicional</span>
+        </div>
+      {% endif %}
+      {% endif %}
+
+      <div class="desglose-row" style="margin-top:14px;border-top:2px solid var(--border);padding-top:10px;">
         <span style="font-size:14px;font-weight:700;text-transform:uppercase;">Total a Facturar</span>
         <span style="font-size:22px;font-weight:700;color:var(--primary);">${{ "%.2f"|format(envio.costo_total) }}</span>
       </div>
@@ -38,7 +118,7 @@
     <div class="card">
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-cash-register"></i> Procesamiento de Pago</span></div>
 
-      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+      <div class="payment-toggle-buttons">
         <button type="button" class="btn btn-primary" id="btn-efectivo" onclick="mostrarPago('efectivo')">
           <i class="fa-solid fa-money-bill-wave"></i> Efectivo
         </button>

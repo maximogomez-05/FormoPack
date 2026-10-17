@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS hojas_de_ruta (
     fecha_emision   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     id_chofer       INT(11)         NOT NULL,
     id_vehiculo     INT(11)         NOT NULL,
+    estado          ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta',
+    fecha_cierre    DATETIME                  DEFAULT NULL,
     PRIMARY KEY (id_hoja_ruta),
     UNIQUE KEY uk_hojas_nro_despacho (nro_despacho),
     CONSTRAINT fk_hojas_chofer    FOREIGN KEY (id_chofer)   REFERENCES usuarios(id_usuario),
@@ -268,6 +270,25 @@ INSERT INTO seguros (cobertura_estandar, porcentaje_excedente) VALUES
 ON DUPLICATE KEY UPDATE
     cobertura_estandar = VALUES(cobertura_estandar),
     porcentaje_excedente = VALUES(porcentaje_excedente);
+
+-- Usuarios iniciales de prueba (contraseñas con hash Bcrypt)
+-- admin@formopack.com / admin123
+-- recepcion@formopack.com / recep456
+-- chofer@formopack.com / chofer789
+INSERT INTO usuarios (nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo) VALUES
+    ('Administrador Sistema', 'admin@formopack.com', '$2b$12$2RijUv8m0fZ5XAVEfg6I..zvCToVW8dmtmD3KJFzAP3c1s1m3erPS', 'administrador', NULL, 1),
+    ('Maria Recepcionista', 'recepcion@formopack.com', '$2b$12$FKOiYKNciRZJkko/.c.u0emTbfo8BddiG5QYVuIUGYkUOntOUAJqi', 'recepcionista', NULL, 1),
+    ('Carlos Chofer', 'chofer@formopack.com', '$2b$12$hKw3va/yuDZddKdx8fti..orvEm3327VLE5Q0wLmRl/Cl4f.k31ZC', 'chofer', 'LI-123456', 1)
+ON DUPLICATE KEY UPDATE
+    credenciales_hash = VALUES(credenciales_hash),
+    tipo_usuario = VALUES(tipo_usuario);
+
+-- ============================================================
+-- MIGRACIONES IDEMPOTENTES (compatibilidad con BDs existentes)
+-- ============================================================
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS email VARCHAR(100) DEFAULT NULL;
+ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS estado ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta';
+ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS fecha_cierre DATETIME DEFAULT NULL;
 
 -- ============================================================
 -- FIN DEL SCRIPT DDL

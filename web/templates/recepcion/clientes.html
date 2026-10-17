@@ -3,8 +3,8 @@
 {% block page_title %}👥 Clientes Registrados{% endblock %}
 
 {% block content %}
-<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
-  <a href="{{ url_for('recepcion.nuevo_cliente') }}" class="btn btn-primary">+ Nuevo Cliente</a>
+<div class="page-actions-header">
+  <a href="{{ url_for('recepcion.nuevo_cliente') }}" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Nuevo Cliente</a>
 </div>
 <div class="card">
   <div class="table-responsive">
