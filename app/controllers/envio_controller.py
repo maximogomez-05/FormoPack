@@ -154,6 +154,14 @@ class EnvioController:
                 id_envio, EstadosEnvio.RECIBIDO, "Sucursal Origen", "Envio recibido en mostrador.",
             ))
 
+            # Generar comprobante interno de recepcion (RF 2.7)
+            nro_comprobante = ComprobanteInterno.generar_nro_comprobante(id_envio, "recepcion")
+            sql_comprobante = """
+                INSERT INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante)
+                VALUES (%s, %s, 'recepcion')
+            """
+            cursor.execute(sql_comprobante, (id_envio, nro_comprobante))
+
             conn.commit()
             cursor.close()
 

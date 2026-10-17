@@ -7,6 +7,7 @@ import io
 import logging
 import qrcode
 import base64
+from datetime import datetime
 from flask import (
     Blueprint, render_template, request,
     redirect, url_for, session, flash, jsonify, send_file,
@@ -653,7 +654,25 @@ def _obtener_detalle_envio(nro_guia: str):
                 "SELECT * FROM comprobantes_internos WHERE id_envio = %s ORDER BY fecha_emision DESC LIMIT 1",
                 (envio["id_envio"],),
             )
-            detalle["comprobante"] = cursor.fetchone()
+            comprobante_row = cursor.fetchone()
+            if not comprobante_row:
+                try:
+                    nro_comprobante = ComprobanteInterno.generar_nro_comprobante(envio["id_envio"], "recepcion")
+                    fecha_emision = envio.get("fecha_creacion") or datetime.now()
+                    cursor.execute(
+                        """INSERT IGNORE INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante, fecha_emision)
+                           VALUES (%s, %s, 'recepcion', %s)""",
+                        (envio["id_envio"], nro_comprobante, fecha_emision),
+                    )
+                    conn.commit()
+                    cursor.execute(
+                        "SELECT * FROM comprobantes_internos WHERE id_envio = %s ORDER BY fecha_emision DESC LIMIT 1",
+                        (envio["id_envio"],),
+                    )
+                    comprobante_row = cursor.fetchone()
+                except Exception as err:
+                    logger.warning("No se pudo autogenerar comprobante interno para guia %s: %s", nro_guia, err)
+            detalle["comprobante"] = comprobante_row
 
             # Desglose de seguro y flete
             detalle["seguro"] = None
