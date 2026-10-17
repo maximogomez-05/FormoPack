@@ -107,6 +107,9 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
     # ── NÚMERO DE GUÍA ──
     nro_guia = envio.get("nro_guia", "N/A")
     elementos.append(Paragraph(f"Guía: {nro_guia}", estilo_nro_guia))
+    comprobante_info = detalle.get("comprobante") if isinstance(detalle, dict) else None
+    if comprobante_info and comprobante_info.get("nro_comprobante"):
+        elementos.append(Paragraph(f"Comprobante Interno N°: {comprobante_info['nro_comprobante']}", estilo_subtitulo))
     elementos.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#dddddd")))
     elementos.append(Spacer(1, 0.4 * cm))
 

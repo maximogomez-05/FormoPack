@@ -470,6 +470,9 @@ tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
 .badge-efectivo { background: #f3e5f5; color: #6a1b9a; }
 .badge-digital { background: #e0f7fa; color: #006064; }
 .badge-mercadopago { background: #e3f2fd; color: #009ee3; }
+.badge-cuenta_corriente { background: #fff3e0; color: #e65100; }
+.badge-pagado { background: #e8f5e9; color: #1b5e20; font-weight: 600; }
+.badge-pendiente { background: #ffebee; color: #c62828; font-weight: 600; }
 /* Roles */
 .badge-administrador { background: #fbe9e7; color: #bf360c; }
 .badge-recepcionista { background: #e3f2fd; color: #1565c0; }
@@ -721,6 +724,22 @@ tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
   align-items: end;
 }
 
+/* Filtros y acciones de comprobantes */
+.comprobantes-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.comprobantes-actions-cell {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
 /* Utilidades comunes */
 .d-flex { display: flex !important; }
 .justify-content-center { justify-content: center !important; }
@@ -900,6 +919,18 @@ tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
   .liquidaciones-filter-grid .btn {
     width: 100%;
     justify-content: center;
+  }
+  .comprobantes-filter-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .comprobantes-filter-grid .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .comprobantes-actions-cell {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .driver-intro, .driver-route-head { display:block; }
