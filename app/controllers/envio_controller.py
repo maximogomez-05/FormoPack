@@ -14,6 +14,7 @@ from app.models.comprobante_interno import ComprobanteInterno
 from app.models.historial_estado import HistorialEstado
 from app.services.cotizador import Cotizador
 from app.services.generador_guia import GeneradorGuia
+from app.services.servicio_notificacion import notificar_cambio_estado_async
 from config.settings import EstadosEnvio
 from app.utils.exceptions import (
     DatabaseQueryError,
@@ -108,14 +109,22 @@ class EnvioController:
         # Cotizar
         cotizacion = self.cotizar_envio(bultos_data, id_localidad_destino, valor_declarado, id_seguro)
 
-        # Generar número de guía
-        correlativo_actual = self._obtener_correlativo_diario()
-        nro_guia = self._generador.generar_nro_guia(correlativo_actual)
-
         conn = None
+        cursor = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
+
+            # Generar número de guía de forma atómica con bloqueo de lectura
+            fecha_hoy = datetime.now().strftime("%Y%m%d")
+            patron = f"FPX-{fecha_hoy}-%"
+            cursor.execute(
+                "SELECT COUNT(*) AS total FROM envios WHERE nro_guia LIKE %s FOR UPDATE",
+                (patron,)
+            )
+            fila_corr = cursor.fetchone()
+            correlativo_actual = fila_corr[0] if fila_corr else 0
+            nro_guia = self._generador.generar_nro_guia(correlativo_actual)
 
             # Insertar envío
             sql_envio = """
@@ -163,32 +172,15 @@ class EnvioController:
             cursor.execute(sql_comprobante, (id_envio, nro_comprobante))
 
             conn.commit()
-            cursor.close()
 
             logger.info("Envio creado: guia=%s, costo=$%.2f", nro_guia, cotizacion["costo_total"])
 
-            # Notificación (RF 5.4)
-            try:
-                from app.services.servicio_notificacion import ServicioNotificacion
-                from app.models.cliente import Cliente
-                
-                # Obtener cliente remitente
-                conn_n = self._db.get_connection()
-                cur_n = conn_n.cursor(dictionary=True)
-                cur_n.execute("SELECT * FROM clientes WHERE id_cliente = %s", (id_remitente,))
-                cli_row = cur_n.fetchone()
-                cur_n.close()
-                conn_n.close()
-                
-                if cli_row:
-                    cliente = Cliente.from_db_row(cli_row)
-                    envio = self.obtener_por_guia(nro_guia)
-                    notificador = ServicioNotificacion()
-                    notificador.enviar_alerta_cambio_estado(
-                        envio, cliente, EstadosEnvio.RECIBIDO, "Envío recibido en mostrador."
-                    )
-            except Exception as e:
-                logger.warning("Error al notificar creación de envío: %s", e)
+            # Notificación asíncrona (RF 5.4 / RF 6.2)
+            notificar_cambio_estado_async(
+                id_envio,
+                nuevo_estado=EstadosEnvio.RECIBIDO,
+                observacion="Envío recibido en mostrador.",
+            )
 
             return {
                 "id_envio": id_envio,
@@ -197,13 +189,22 @@ class EnvioController:
                 "estado": EstadosEnvio.RECIBIDO,
             }
 
+        except (ValidationError, DatabaseQueryError):
+            if conn:
+                conn.rollback()
+            raise
         except Exception as e:
             if conn:
                 conn.rollback()
-            raise DatabaseQueryError(f"Error al crear envio: {e}") from e
+            logger.exception("Error interno al crear envio: %s", e)
+            raise DatabaseQueryError("No se pudo registrar el envío debido a un error en el sistema.") from e
         finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
             if conn:
-                conn.close()
+                try: conn.close()
+                except Exception: pass
 
     def registrar_pago(
         self,

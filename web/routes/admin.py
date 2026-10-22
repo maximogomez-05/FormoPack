@@ -57,18 +57,100 @@ def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un er
 @login_required
 @rol_requerido("administrador", "recepcionista")
 def dashboard():
-    """Dashboard principal con métricas del día."""
+    """Dashboard principal con métricas operativas y del día."""
+    filtros = {
+        "q": request.args.get("q", "").strip(),
+        "estado": request.args.get("estado", "").strip(),
+        "limite": request.args.get("limite", "25").strip(),
+    }
     metricas = _obtener_metricas()
     historico = _obtener_historico_metricas()
-    ultimos_envios = _obtener_ultimos_envios(limite=10)
+    ultimos_envios = _obtener_ultimos_envios(filtros=filtros)
     alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
+
+    estados_disponibles = [
+        {"codigo": "recibido", "nombre": "Recibido"},
+        {"codigo": "en_planta", "nombre": "En Planta"},
+        {"codigo": "en_ruta", "nombre": "En Ruta"},
+        {"codigo": "entregado", "nombre": "Entregado"},
+        {"codigo": "fallido", "nombre": "Fallido"},
+        {"codigo": "devolucion", "nombre": "Devolución"},
+        {"codigo": "siniestro", "nombre": "Siniestro"},
+    ]
+
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
         historico=historico,
         ultimos_envios=ultimos_envios,
         alertas=alertas,
+        filtros=filtros,
+        estados_disponibles=estados_disponibles,
     )
+
+
+@admin_bp.route("/envios/<int:id_envio>/actualizar-estado", methods=["POST"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def actualizar_estado_envio(id_envio: int):
+    """Permite al personal administrativo actualizar el estado de cualquier envío (antiguo o reciente)."""
+    nuevo_estado = request.form.get("nuevo_estado", "").strip().lower()
+    ubicacion = request.form.get("ubicacion", "").strip() or "Planta Central FormoPack"
+    observacion = request.form.get("observacion", "").strip() or f"Estado actualizado a '{nuevo_estado}' manualmente."
+
+    estados_validos = {"recibido", "en_planta", "en_ruta", "entregado", "fallido", "devolucion", "siniestro"}
+    if nuevo_estado not in estados_validos:
+        flash(f"El estado '{nuevo_estado}' no es válido.", "danger")
+        return redirect(request.referrer or url_for("admin.dashboard"))
+
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT id_envio, nro_guia, estado_actual FROM envios WHERE id_envio = %s", (id_envio,))
+        envio = cursor.fetchone()
+        if not envio:
+            flash("El envío solicitado no existe.", "danger")
+            return redirect(request.referrer or url_for("admin.dashboard"))
+
+        estado_anterior = envio["estado_actual"]
+        nro_guia = envio["nro_guia"]
+
+        # Actualizar envío
+        es_dev = 1 if nuevo_estado == "devolucion" else 0
+        cursor.execute("""
+            UPDATE envios 
+            SET estado_actual = %s,
+                es_devolucion = CASE WHEN %s = 1 THEN 1 ELSE es_devolucion END
+            WHERE id_envio = %s
+        """, (nuevo_estado, es_dev, id_envio))
+
+        # Registrar en historial_estados para trazabilidad
+        cursor.execute("""
+            INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
+            VALUES (%s, %s, %s, %s)
+        """, (id_envio, nuevo_estado, ubicacion, observacion))
+
+        conn.commit()
+        cursor.close()
+
+        # Notificar por email asíncrono si está configurado
+        from app.services.servicio_notificacion import notificar_cambio_estado_async
+        notificar_cambio_estado_async(id_envio=id_envio, nuevo_estado=nuevo_estado, observacion=observacion)
+
+        flash(f"Envío {nro_guia}: estado actualizado de '{estado_anterior}' a '{nuevo_estado}' exitosamente.", "success")
+    except Exception as exc:
+        if conn:
+            conn.rollback()
+        logger.error("Error al actualizar estado del envío #%s: %s", id_envio, exc)
+        flash("Ocurrió un error al actualizar el estado del envío.", "danger")
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(request.referrer or url_for("admin.dashboard"))
 
 
 @admin_bp.route("/reportes/envios.csv", methods=["GET"])
@@ -290,6 +372,145 @@ def tracking_publico():
         resumen_tracking=resumen_tracking,
         error=error,
     )
+
+
+@admin_bp.route("/tracking/descargar-comprobante")
+def descargar_comprobante_tracking():
+    """Genera y descarga un comprobante PDF simplificado desde el tracking público."""
+    nro_guia = request.args.get("guia", "").strip().upper()
+    tipo = request.args.get("tipo", "entrega")  # 'entrega' o 'custodia'
+    if not nro_guia:
+        return "Guía no proporcionada", 400
+
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT e.*, cr.nombre_completo AS remitente, cd.nombre_completo AS destinatario,
+                   l.nombre AS localidad_destino
+            FROM envios e
+            JOIN clientes cr ON e.id_remitente = cr.id_cliente
+            JOIN clientes cd ON e.id_destinatario = cd.id_cliente
+            JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            WHERE e.nro_guia = %s
+        """, (nro_guia,))
+        envio = cursor.fetchone()
+        if not envio:
+            return "Envío no encontrado", 404
+
+        # Solo permitir descarga si está entregado o en custodia (fallido con >=3 intentos)
+        cantidad_intentos = 0
+        if envio["estado_actual"] == "fallido":
+            cursor.execute(
+                "SELECT COUNT(*) AS total FROM intentos_entrega WHERE id_envio = %s",
+                (envio["id_envio"],)
+            )
+            row = cursor.fetchone()
+            cantidad_intentos = int(row["total"]) if row else 0
+
+        puede_descargar = (
+            envio["estado_actual"] == "entregado"
+            or (envio["estado_actual"] == "fallido" and cantidad_intentos >= 3 and tipo == "custodia")
+        )
+        if not puede_descargar:
+            return "El comprobante no está disponible para este estado", 403
+
+        cursor.close()
+
+        # Generar un comprobante de texto plano con formato profesional
+        from datetime import datetime as _dt
+        ahora = _dt.now().strftime("%d/%m/%Y %H:%M")
+
+        if tipo == "custodia":
+            contenido = _generar_credencial_custodia(envio, cantidad_intentos, ahora)
+            nombre_archivo = f"credencial_retiro_{nro_guia}.txt"
+        else:
+            contenido = _generar_comprobante_entrega(envio, ahora)
+            nombre_archivo = f"comprobante_entrega_{nro_guia}.txt"
+
+        return Response(
+            contenido,
+            mimetype="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"},
+        )
+
+    except Exception as e:
+        logger.error("Error al generar comprobante de tracking: %s", e)
+        return "Error al generar el comprobante", 500
+    finally:
+        if conn:
+            conn.close()
+
+
+def _generar_comprobante_entrega(envio: dict, fecha_emision: str) -> str:
+    """Genera el texto del comprobante de entrega para descarga."""
+    lineas = [
+        "═" * 52,
+        "         COMPROBANTE DE ENTREGA — FormoPack Express",
+        "═" * 52,
+        "",
+        f"  Guía:            {envio['nro_guia']}",
+        f"  Fecha emisión:   {fecha_emision}",
+        f"  Estado:          ENTREGADO",
+        "",
+        "─" * 52,
+        "  DATOS DEL ENVÍO",
+        "─" * 52,
+        f"  Remitente:       {envio['remitente']}",
+        f"  Destinatario:    {envio['destinatario']}",
+        f"  Destino:         {envio.get('direccion_destino', 'N/A')}",
+        f"  Localidad:       {envio['localidad_destino']}",
+        f"  Costo total:     ${float(envio.get('costo_total', 0)):,.2f}",
+        "",
+        "─" * 52,
+        "  Este comprobante es un documento interno de",
+        "  control (no fiscal). Conserve para sus registros.",
+        "─" * 52,
+        "",
+        "  FormoPack Express — Formosa, Argentina",
+        "  Soporte: soporte@formopack.com",
+        "═" * 52,
+    ]
+    return "\n".join(lineas)
+
+
+def _generar_credencial_custodia(envio: dict, intentos: int, fecha_emision: str) -> str:
+    """Genera la credencial de retiro en almacén para paquetes en custodia."""
+    lineas = [
+        "═" * 56,
+        "      CREDENCIAL DE RETIRO EN ALMACÉN — FormoPack",
+        "═" * 56,
+        "",
+        f"  Guía:              {envio['nro_guia']}",
+        f"  Fecha emisión:     {fecha_emision}",
+        f"  Estado:            EN CUSTODIA (tras {intentos} intentos fallidos)",
+        "",
+        "─" * 56,
+        "  DATOS DEL PAQUETE",
+        "─" * 56,
+        f"  Remitente:         {envio['remitente']}",
+        f"  Destinatario:      {envio['destinatario']}",
+        f"  Localidad destino: {envio['localidad_destino']}",
+        "",
+        "─" * 56,
+        "  INSTRUCCIONES DE RETIRO",
+        "─" * 56,
+        "  ● Presentarse en el almacén de FormoPack Express",
+        "    con DNI del destinatario y esta credencial.",
+        "  ● Dirección: Av. Principal 1250, Formosa Capital",
+        "  ● Horario: Lunes a Viernes 8:00 a 17:00 hs",
+        "  ● El paquete se mantendrá en custodia por",
+        "    15 días hábiles desde el último intento.",
+        "",
+        "─" * 56,
+        "  Documento interno de control (no fiscal).",
+        "  Soporte: soporte@formopack.com | Tel: 0370-4XXXXXX",
+        "═" * 56,
+    ]
+    return "\n".join(lineas)
 
 @admin_bp.route('/usuarios')
 @login_required  
@@ -542,28 +763,58 @@ def exportar_comprobantes_csv():
 # Helpers internos
 # ──────────────────────────────────────────
 def _obtener_metricas() -> dict:
-    """Obtiene métricas del día desde la BD."""
+    """Obtiene métricas operativas y del día desde la BD."""
     conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Envíos de hoy
+        # 1. Envíos registrados hoy y facturación total creada hoy
         cursor.execute("""
             SELECT
-                COUNT(*) AS total_envios,
-                COALESCE(SUM(costo_total), 0) AS facturado_total,
-                COALESCE(SUM(CASE WHEN estado_actual = 'recibido' THEN 1 ELSE 0 END), 0) AS recibidos,
-                COALESCE(SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
-                COALESCE(SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
-                COALESCE(SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END), 0) AS en_ruta
+                COUNT(*) AS total_envios_hoy,
+                COALESCE(SUM(costo_total), 0) AS facturado_hoy
             FROM envios
             WHERE DATE(fecha_creacion) = CURDATE()
         """)
-        metricas = cursor.fetchone() or {}
+        m_hoy = cursor.fetchone() or {}
 
-        # Caja del día
+        # 2. Estados operacionales REALES de todos los paquetes activos en sistema:
+        # - en_ruta: todos los envíos actualmente en reparto (independientemente del día de creación)
+        # - fallidos: entregas fallidas activas / incidencias pendientes de resolución
+        # - en_planta: paquetes clasificados en centro de distribución
+        # - recibidos: paquetes recibidos en mostrador pendientes de asignación
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END), 0) AS en_ruta,
+                COALESCE(SUM(CASE WHEN estado_actual IN ('fallido', 'devolucion', 'siniestro') THEN 1 ELSE 0 END), 0) AS fallidos,
+                COALESCE(SUM(CASE WHEN estado_actual = 'en_planta' THEN 1 ELSE 0 END), 0) AS en_planta,
+                COALESCE(SUM(CASE WHEN estado_actual = 'recibido' THEN 1 ELSE 0 END), 0) AS recibidos,
+                COUNT(*) AS total_acumulado
+            FROM envios
+        """)
+        m_estados = cursor.fetchone() or {}
+
+        # 3. Envíos Entregados HOY (realmente entregados en la fecha actual, buscando en historial o fecha_creacion)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT id_envio) AS entregados_hoy
+            FROM historial_estados
+            WHERE estado = 'entregado' AND DATE(fecha_hora) = CURDATE()
+        """)
+        r_ent = cursor.fetchone() or {}
+        entregados_hoy = int(r_ent.get("entregados_hoy", 0))
+
+        if entregados_hoy == 0:
+            cursor.execute("""
+                SELECT COUNT(*) AS c
+                FROM envios
+                WHERE estado_actual = 'entregado' AND DATE(fecha_creacion) = CURDATE()
+            """)
+            r2 = cursor.fetchone() or {}
+            entregados_hoy = int(r2.get("c", 0))
+
+        # 4. Caja del día (pagos cobrados hoy)
         cursor.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN tipo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS efectivo_hoy,
@@ -575,12 +826,14 @@ def _obtener_metricas() -> dict:
         caja = cursor.fetchone() or {}
 
         return {
-            "total_envios": int(metricas.get("total_envios", 0)),
-            "facturado_total": float(metricas.get("facturado_total", 0)),
-            "recibidos": int(metricas.get("recibidos", 0)),
-            "entregados": int(metricas.get("entregados", 0)),
-            "fallidos": int(metricas.get("fallidos", 0)),
-            "en_ruta": int(metricas.get("en_ruta", 0)),
+            "total_envios": int(m_hoy.get("total_envios_hoy", 0)),
+            "facturado_total": float(m_hoy.get("facturado_hoy", 0)),
+            "recibidos": int(m_estados.get("recibidos", 0)),
+            "en_planta": int(m_estados.get("en_planta", 0)),
+            "entregados": entregados_hoy,
+            "fallidos": int(m_estados.get("fallidos", 0)),
+            "en_ruta": int(m_estados.get("en_ruta", 0)),
+            "total_acumulado": int(m_estados.get("total_acumulado", 0)),
             "efectivo_hoy": float(caja.get("efectivo_hoy", 0)),
             "digital_hoy": float(caja.get("digital_hoy", 0)),
             "pagos_hoy": int(caja.get("pagos_hoy", 0)),
@@ -589,7 +842,8 @@ def _obtener_metricas() -> dict:
         logger.error("Error al obtener métricas: %s", e)
         return {
             "total_envios": 0, "facturado_total": 0,
-            "recibidos": 0, "entregados": 0, "fallidos": 0, "en_ruta": 0,
+            "recibidos": 0, "en_planta": 0, "entregados": 0, "fallidos": 0, "en_ruta": 0,
+            "total_acumulado": 0,
             "efectivo_hoy": 0, "digital_hoy": 0, "pagos_hoy": 0,
         }
     finally:
@@ -597,30 +851,63 @@ def _obtener_metricas() -> dict:
             conn.close()
 
 
-def _obtener_ultimos_envios(limite: int = 10) -> list:
-    """Obtiene los últimos envíos registrados."""
+def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> list:
+    """Obtiene envíos registrados con soporte de búsqueda, filtro por estado y límite configurable."""
     conn = None
     try:
+        filtros = filtros or {}
+        q = filtros.get("q", "").strip()
+        estado = filtros.get("estado", "").strip()
+        limite_val = filtros.get("limite", limite)
+        try:
+            limite_num = int(limite_val) if limite_val not in ("todos", "0", "") else 500
+        except ValueError:
+            limite_num = 25
+
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
+
+        where_clauses = []
+        params = []
+
+        if q:
+            where_clauses.append("""
+                (e.nro_guia LIKE %s OR cr.nombre_completo LIKE %s OR cd.nombre_completo LIKE %s OR l.nombre LIKE %s)
+            """)
+            wildcard = f"%{q}%"
+            params.extend([wildcard, wildcard, wildcard, wildcard])
+
+        if estado:
+            where_clauses.append("e.estado_actual = %s")
+            params.append(estado)
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        sql = f"""
             SELECT
+                e.id_envio,
                 e.nro_guia,
                 e.estado_actual,
                 e.costo_total,
                 e.modalidad_pago,
                 e.fecha_creacion,
+                e.direccion_destino,
                 cr.nombre_completo AS remitente,
                 cd.nombre_completo AS destinatario,
-                l.nombre AS localidad_destino
+                l.nombre AS localidad_destino,
+                EXISTS (SELECT 1 FROM pagos p WHERE p.id_envio = e.id_envio) AS esta_pagado
             FROM envios e
             JOIN clientes cr ON e.id_remitente = cr.id_cliente
             JOIN clientes cd ON e.id_destinatario = cd.id_cliente
             JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            {where_sql}
             ORDER BY e.fecha_creacion DESC
             LIMIT %s
-        """, (limite,))
+        """
+        params.append(limite_num)
+
+        cursor.execute(sql, tuple(params))
         return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener envíos: %s", e)
@@ -768,31 +1055,129 @@ def _enviar_alertas_gmail(alertas: list[dict]) -> None:
 
 
 def _obtener_historico_metricas() -> list:
-    """Obtiene siete días de actividad para el dashboard gerencial."""
+    """Obtiene siete días continuos de actividad para el dashboard gerencial."""
     conn = None
     try:
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
         cursor = conn.cursor(dictionary=True)
+
+        # 1. Envíos creados y facturados agrupados por fecha de creación
         cursor.execute("""
             SELECT
                 DATE(fecha_creacion) AS dia,
                 COUNT(*) AS total_envios,
-                COALESCE(SUM(CASE WHEN estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
-                COALESCE(SUM(CASE WHEN estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
                 COALESCE(SUM(costo_total), 0) AS facturado
             FROM envios
             WHERE fecha_creacion >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
             GROUP BY DATE(fecha_creacion)
-            ORDER BY dia ASC
         """)
-        return cursor.fetchall()
+        filas_creaciones = cursor.fetchall()
+        mapa_creaciones = {}
+        for f in filas_creaciones:
+            dia_val = f.get("dia")
+            if dia_val:
+                dia_str = dia_val.strftime("%Y-%m-%d") if hasattr(dia_val, "strftime") else str(dia_val)
+                mapa_creaciones[dia_str] = f
+
+        # 2. Entregas reales ocurridas por fecha (desde historial_estados o envios)
+        cursor.execute("""
+            SELECT
+                DATE(fecha_hora) AS dia,
+                COUNT(DISTINCT id_envio) AS entregados
+            FROM historial_estados
+            WHERE estado = 'entregado' AND fecha_hora >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(fecha_hora)
+        """)
+        filas_entregas = cursor.fetchall()
+        mapa_entregas = {}
+        for f in filas_entregas:
+            dia_val = f.get("dia")
+            if dia_val:
+                dia_str = dia_val.strftime("%Y-%m-%d") if hasattr(dia_val, "strftime") else str(dia_val)
+                mapa_entregas[dia_str] = int(f.get("entregados", 0))
+
+        # 3. Incidencias/fallidos reales ocurridos por fecha (desde historial_estados)
+        cursor.execute("""
+            SELECT
+                DATE(fecha_hora) AS dia,
+                COUNT(DISTINCT id_envio) AS fallidos
+            FROM historial_estados
+            WHERE estado IN ('fallido', 'devolucion', 'siniestro') AND fecha_hora >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(fecha_hora)
+        """)
+        filas_fallidos = cursor.fetchall()
+        mapa_fallidos = {}
+        for f in filas_fallidos:
+            dia_val = f.get("dia")
+            if dia_val:
+                dia_str = dia_val.strftime("%Y-%m-%d") if hasattr(dia_val, "strftime") else str(dia_val)
+                mapa_fallidos[dia_str] = int(f.get("fallidos", 0))
+
+        # Generar los 7 días consecutivos hasta hoy para evitar huecos en la gráfica
+        hoy = datetime.now().date()
+        resultado = []
+        for i in range(6, -1, -1):
+            dia_i = hoy - timedelta(days=i)
+            dia_str = dia_i.strftime("%Y-%m-%d")
+            c_info = mapa_creaciones.get(dia_str, {})
+            resultado.append({
+                "dia": dia_i,
+                "total_envios": int(c_info.get("total_envios", 0)),
+                "facturado": float(c_info.get("facturado", 0.0)),
+                "entregados": mapa_entregas.get(dia_str, 0),
+                "fallidos": mapa_fallidos.get(dia_str, 0),
+            })
+        return resultado
     except Exception as e:
         logger.error("Error al obtener histórico del dashboard: %s", e)
         return []
     finally:
         if conn:
             conn.close()
+
+
+def _explicacion_amigable(estado: str, observacion: str, fecha_hora, ubicacion: str) -> str:
+    """Convierte datos técnicos de tracking en explicaciones amigables para el cliente."""
+    hora_str = ""
+    if fecha_hora:
+        try:
+            if hasattr(fecha_hora, "strftime"):
+                hora_str = fecha_hora.strftime("%H:%M hs")
+            else:
+                from datetime import datetime as _dt
+                parsed = _dt.strptime(str(fecha_hora), "%Y-%m-%d %H:%M:%S")
+                hora_str = parsed.strftime("%H:%M hs")
+        except (ValueError, TypeError):
+            hora_str = ""
+
+    obs_lower = (observacion or "").lower()
+
+    if estado == "recibido":
+        return f"Tu paquete fue recibido en nuestra sucursal{' a las ' + hora_str if hora_str else ''}. Ya está en nuestro sistema y será preparado para despacho."
+    elif estado == "en_planta":
+        return f"Tu envío se encuentra en nuestro centro de distribución{' desde las ' + hora_str if hora_str else ''}, siendo clasificado y preparado para la salida."
+    elif estado == "en_ruta":
+        return f"¡Tu paquete está en camino! Salió a reparto{' a las ' + hora_str if hora_str else ''}{' por ' + ubicacion if ubicacion and ubicacion != 'Sucursal Origen' else ''}."
+    elif estado == "entregado":
+        return f"✓ Paquete entregado exitosamente{' a las ' + hora_str if hora_str else ''}{' en ' + ubicacion if ubicacion and ubicacion != 'Sucursal Origen' else ''}."
+    elif estado == "fallido":
+        motivos_amigables = {
+            "destinatario_ausente": "Visitamos tu domicilio pero no encontramos a nadie",
+            "direccion_incorrecta": "No pudimos localizar la dirección indicada",
+            "rechazado": "El destinatario rechazó la recepción del paquete",
+            "zona_inaccesible": "No pudimos acceder a la zona de entrega",
+        }
+        for clave, msg in motivos_amigables.items():
+            if clave in obs_lower:
+                return f"{msg}{' a las ' + hora_str if hora_str else ''}. Coordinaremos un nuevo intento."
+        return f"Intentamos entregar tu paquete{' a las ' + hora_str if hora_str else ''} pero no fue posible completar la entrega. Coordinaremos un nuevo intento."
+    elif estado == "devolucion":
+        return "Tu paquete está siendo devuelto al remitente original."
+    elif estado == "siniestro":
+        return "Se registró una incidencia con tu envío. Nuestro equipo está trabajando para resolverlo."
+    else:
+        return observacion or "Movimiento registrado en sistema."
 
 
 def construir_timeline(envio: dict | None, historial: list[dict]) -> list[dict]:
@@ -805,19 +1190,26 @@ def construir_timeline(envio: dict | None, historial: list[dict]) -> list[dict]:
         fecha_hora = item.get("fecha_hora") or item.get("fecha")
         if fecha_hora is None:
             continue
+        estado = str(item.get("estado") or envio.get("estado_actual") or "recibido").lower()
+        observacion_original = item.get("observacion") or "Movimiento registrado en sistema."
+        ubicacion = item.get("ubicacion") or "Sucursal Origen"
         eventos.append({
-            "estado": str(item.get("estado") or envio.get("estado_actual") or "recibido").lower(),
+            "estado": estado,
             "fecha_hora": fecha_hora,
-            "ubicacion": item.get("ubicacion") or "Sucursal Origen",
-            "observacion": item.get("observacion") or "Movimiento registrado en sistema.",
+            "ubicacion": ubicacion,
+            "observacion": observacion_original,
+            "descripcion_amigable": _explicacion_amigable(estado, observacion_original, fecha_hora, ubicacion),
         })
 
     if not eventos:
+        estado_base = str(envio.get("estado_actual") or "recibido").lower()
+        fecha_base = envio.get("fecha_creacion") or "2000-01-01 00:00:00"
         eventos.append({
-            "estado": str(envio.get("estado_actual") or "recibido").lower(),
-            "fecha_hora": envio.get("fecha_creacion") or "2000-01-01 00:00:00",
+            "estado": estado_base,
+            "fecha_hora": fecha_base,
             "ubicacion": "Sucursal Origen",
             "observacion": "Envío registrado en sistema.",
+            "descripcion_amigable": _explicacion_amigable(estado_base, "Envío registrado en sistema.", fecha_base, "Sucursal Origen"),
         })
 
     eventos.sort(key=lambda item: str(item["fecha_hora"]))
@@ -832,6 +1224,8 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
             "ultima_actualizacion": None,
             "ubicacion_actual": "Sin información",
             "progreso": "sin_datos",
+            "en_custodia": False,
+            "cantidad_intentos": 0,
         }
 
     timeline = construir_timeline(envio, historial)
@@ -850,11 +1244,17 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
     else:
         progreso = "registrado"
 
+    # Contar intentos fallidos para determinar custodia
+    cantidad_intentos = int(envio.get("cantidad_intentos", 0))
+    en_custodia = estado_actual == "fallido" and cantidad_intentos >= 3
+
     return {
         "estado": estado_actual,
         "ultima_actualizacion": ultimo_evento.get("fecha_hora"),
         "ubicacion_actual": ultimo_evento.get("ubicacion") or "Sucursal Origen",
         "progreso": progreso,
+        "en_custodia": en_custodia,
+        "cantidad_intentos": cantidad_intentos,
     }
 
 
@@ -888,6 +1288,14 @@ def _obtener_timeline(nro_guia: str):
                 ORDER BY fecha_hora ASC
             """, (envio["id_envio"],))
             historial = cursor.fetchall()
+
+            # Contar intentos de entrega para determinar custodia
+            cursor.execute(
+                "SELECT COUNT(*) AS total FROM intentos_entrega WHERE id_envio = %s",
+                (envio["id_envio"],)
+            )
+            intentos_row = cursor.fetchone()
+            envio["cantidad_intentos"] = int(intentos_row["total"]) if intentos_row else 0
 
             ubicacion_gps = None
             if envio.get("id_hoja_ruta") and envio.get("estado_actual") == "en_ruta":
@@ -946,8 +1354,8 @@ def _obtener_timeline(nro_guia: str):
             conn.close()
 
 
-def _obtener_comprobantes_admin(filtros: dict) -> list[dict]:
-    """Recupera los comprobantes de servicios con filtros avanzados y sincronización automática."""
+def _obtener_comprobantes_admin(filtros: dict, limite: int | None = None, offset: int = 0) -> list[dict]:
+    """Recupera los comprobantes de servicios con filtros avanzados y paginación segura."""
     conn = None
     try:
         db = DatabaseManager.get_instance()
@@ -1052,6 +1460,13 @@ def _obtener_comprobantes_admin(filtros: dict) -> list[dict]:
             sql += " AND NOT EXISTS (SELECT 1 FROM pagos p WHERE p.id_envio = e.id_envio)"
 
         sql += " ORDER BY c.fecha_emision DESC, c.id_comprobante DESC"
+
+        max_rows = limite if limite is not None else filtros.get("limite")
+        if max_rows:
+            sql += " LIMIT %s OFFSET %s"
+            params.extend([max(1, min(int(max_rows), 2000)), max(0, int(filtros.get("offset", offset)))])
+        elif not filtros.get("sin_limite"):
+            sql += " LIMIT 500"
 
         cursor.execute(sql, tuple(params))
         filas = cursor.fetchall() or []

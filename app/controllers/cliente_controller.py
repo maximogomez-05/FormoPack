@@ -24,19 +24,29 @@ class ClienteController:
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
 
+    _columna_email_cache: Optional[bool] = None
+
     def _tiene_columna_email(self) -> bool:
-        """Compatibilidad con esquemas antiguos sin columna email."""
+        """Compatibilidad con esquemas antiguos sin columna email (con caché en memoria)."""
+        if ClienteController._columna_email_cache is not None:
+            return ClienteController._columna_email_cache
         conn = None
+        cursor = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SHOW COLUMNS FROM clientes LIKE 'email'")
-            return cursor.fetchone() is not None
+            ClienteController._columna_email_cache = (cursor.fetchone() is not None)
+            return ClienteController._columna_email_cache
         except Exception:
             return False
         finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
             if conn:
-                conn.close()
+                try: conn.close()
+                except Exception: pass
 
     def registrar_cliente(
         self,
@@ -162,29 +172,36 @@ class ClienteController:
             if conn:
                 conn.close()
 
-    def listar_clientes(self, limite: int = 50) -> list[Cliente]:
-        """Lista los clientes registrados en el sistema.
+    def listar_clientes(self, limite: int = 50, offset: int = 0) -> list[Cliente]:
+        """Lista los clientes registrados en el sistema con paginación.
 
         Args:
-            limite: Cantidad máxima de resultados.
+            limite: Cantidad máxima de resultados (1-500).
+            offset: Desplazamiento para paginación.
 
         Returns:
             Lista de instancias de Cliente.
         """
-        sql = "SELECT * FROM clientes ORDER BY nombre_completo ASC LIMIT %s"
+        limite_seguro = max(1, min(limite, 500))
+        offset_seguro = max(0, offset)
+        sql = "SELECT * FROM clientes ORDER BY nombre_completo ASC LIMIT %s OFFSET %s"
         conn = None
+        cursor = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute(sql, (limite,))
+            cursor.execute(sql, (limite_seguro, offset_seguro))
             filas = cursor.fetchall()
-            cursor.close()
             return [Cliente.from_db_row(f) for f in filas]
         except Exception as e:
             raise DatabaseQueryError(f"Error al listar clientes: {e}") from e
         finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
             if conn:
-                conn.close()
+                try: conn.close()
+                except Exception: pass
 
     def obtener_o_crear(self, dni: str, nombre_completo: str, telefono: str, email: Optional[str] = None) -> Cliente:
         """Obtiene un cliente existente por DNI, o lo crea si no existe.

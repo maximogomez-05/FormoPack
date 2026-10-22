@@ -83,10 +83,8 @@ def test_conexion_bd() -> bool:
         db2 = DatabaseManager.get_instance()
         assert db1 is db2
         print("  [OK] Conexión MySQL y Singleton")
-        return True
     except DatabaseConnectionError:
         print("  [INFO] Conexión MySQL omitida (servidor no disponible)")
-        return False
 
 
 def test_login_con_bd():
@@ -106,8 +104,8 @@ def main():
     test_factory_usuario()
     test_validacion_login()
 
-    if test_conexion_bd():
-        test_login_con_bd()
+    test_conexion_bd()
+    test_login_con_bd()
 
     print("--- Pruebas finalizadas ---\n")
 

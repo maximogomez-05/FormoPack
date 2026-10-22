@@ -1,7 +1,8 @@
 """Conexión a MySQL con patrón Singleton y Connection Pool."""
 
 import logging
-from typing import Optional
+from contextlib import contextmanager
+from typing import Generator, Any, Optional
 from mysql.connector import pooling, Error as MySQLError
 from mysql.connector.connection import MySQLConnection
 from mysql.connector.pooling import MySQLConnectionPool
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Administrador de conexiones MySQL (Singleton)."""
+    """Administrador de conexiones MySQL (Singleton con soporte de Context Manager)."""
 
     _instance: Optional["DatabaseManager"] = None
     _pool: Optional[MySQLConnectionPool] = None
@@ -23,6 +24,17 @@ class DatabaseManager:
             cls._instance = super().__new__(cls)
             cls._instance._initialize_pool()
         return cls._instance
+
+    @classmethod
+    def set_instance(cls, instance: Optional["DatabaseManager"]) -> None:
+        """Permite inyectar un mock o instancia personalizada para pruebas unitarias."""
+        cls._instance = instance
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reinicia la instancia única para aislar pruebas."""
+        cls._instance = None
+        cls._pool = None
 
     def _initialize_pool(self) -> None:
         """Inicializa el pool de conexiones MySQL."""
@@ -59,6 +71,46 @@ class DatabaseManager:
         except MySQLError as e:
             logger.error("Error al obtener conexión del pool: %s", e)
             raise DatabaseConnectionError(f"Pool agotado o servidor no disponible: {e}") from e
+
+    @contextmanager
+    def connection(self) -> Generator[MySQLConnection, None, None]:
+        """Context manager para conexiones MySQL seguras.
+
+        Garantiza commit automático al finalizar el bloque con éxito,
+        rollback automático en caso de error, y cierre/retorno de la conexión
+        al pool en el bloque finally.
+        """
+        conn = self.get_connection()
+        try:
+            yield conn
+            try:
+                conn.commit()
+            except Exception:
+                pass
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    @contextmanager
+    def cursor(self, dictionary: bool = True) -> Generator[Any, None, None]:
+        """Context manager para obtener un cursor con gestión automática de conexión."""
+        with self.connection() as conn:
+            cur = conn.cursor(dictionary=dictionary)
+            try:
+                yield cur
+            finally:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
 
     def test_connection(self) -> bool:
         """Prueba la conexión al servidor."""

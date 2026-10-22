@@ -16,6 +16,7 @@ from app.utils.exceptions import (
     UserInactiveError, ValidationError,
     DatabaseConnectionError,
 )
+from web.extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def landing():
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     """Pantalla de inicio de sesión."""
     # Si ya está logueado, redirigir directo
@@ -110,10 +112,8 @@ def login():
 def dashboard():
     """Redirige al dashboard según el rol del usuario."""
     rol = session.get("rol", "")
-    if rol == "administrador":
+    if rol in ("administrador", "recepcionista"):
         return redirect(url_for("admin.dashboard"))
-    elif rol == "recepcionista":
-        return redirect(url_for("recepcion.inicio"))
     elif rol == "chofer":
         return redirect(url_for("chofer.panel"))
     return redirect(url_for("auth.login"))
@@ -127,3 +127,66 @@ def logout():
     session.clear()
     flash(f"Sesión cerrada. ¡Hasta luego, {nombre}!", "info")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/recuperar-password", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
+def recuperar_password():
+    """Solicitud de código de 6 dígitos para recuperación de contraseña."""
+    if "usuario_id" in session:
+        return redirect(url_for("auth.dashboard"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        try:
+            auth = AuthController()
+            fila, codigo = auth.solicitar_recuperacion(email)
+            session["recuperar_email"] = email
+
+            from config.settings import EmailConfig
+            if not EmailConfig.USER or not EmailConfig.PASSWORD:
+                flash(f"Se generó el código de recuperación para {email}. Código de verificación de prueba: {codigo} (Válido por 15 minutos).", "info")
+            else:
+                flash(f"Enviamos un código de 6 dígitos a {email}. Revisá tu casilla de correo.", "success")
+            return redirect(url_for("auth.restablecer_password"))
+        except ValidationError as e:
+            flash(str(e.message), "danger")
+        except UserInactiveError as e:
+            flash(str(e.message), "warning")
+        except Exception as e:
+            logger.exception("Error al solicitar recuperación de contraseña para %s", email)
+            flash("Ocurrió un error inesperado al procesar la solicitud. Intentá de nuevo.", "danger")
+
+    return render_template("auth/recuperar_password.html")
+
+
+@auth_bp.route("/restablecer-password", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def restablecer_password():
+    """Verificación de código de 6 dígitos y asignación de nueva contraseña."""
+    if "usuario_id" in session:
+        return redirect(url_for("auth.dashboard"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        codigo = request.form.get("codigo", "").strip()
+        nueva_password = request.form.get("nueva_password", "")
+        confirmar_password = request.form.get("confirmar_password", "")
+
+        try:
+            auth = AuthController()
+            auth.restablecer_password(email, codigo, nueva_password, confirmar_password)
+            session.pop("recuperar_email", None)
+            flash("¡Tu contraseña ha sido restablecida exitosamente! Ya podés ingresar con tu nueva clave.", "success")
+            return redirect(url_for("auth.landing"))
+        except ValidationError as e:
+            flash(str(e.message), "danger")
+        except UserInactiveError as e:
+            flash(str(e.message), "warning")
+        except Exception as e:
+            logger.exception("Error al restablecer contraseña para %s", email)
+            flash("Ocurrió un error inesperado al actualizar la contraseña.", "danger")
+
+    email_precargado = session.get("recuperar_email", request.args.get("email", ""))
+    return render_template("auth/restablecer_password.html", email=email_precargado)
+

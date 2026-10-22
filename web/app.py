@@ -28,27 +28,48 @@ def create_app() -> Flask:
     """Factory de la aplicación Flask."""
     app = Flask(__name__, template_folder="templates", static_folder="static")
 
-    # Configuración de sesión
+    # Configuración de sesión segura
+    session_dir = os.path.join(ROOT, ".flask_session")
+    os.makedirs(session_dir, exist_ok=True)
+    from cachelib.file import FileSystemCache
+
     app.config["SECRET_KEY"] = AppConfig.SECRET_KEY
-    app.config["SESSION_TYPE"] = "filesystem"
-    app.config["SESSION_FILE_DIR"] = os.path.join(ROOT, ".flask_session")
+    app.config["SESSION_TYPE"] = "cachelib"
+    app.config["SESSION_CACHELIB"] = FileSystemCache(cache_dir=session_dir, threshold=1000)
     app.config["SESSION_PERMANENT"] = False
-    app.config["SESSION_USE_SIGNER"] = True
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    if not AppConfig.DEBUG:
+        app.config["SESSION_COOKIE_SECURE"] = True
+
     app.config["POD_UPLOAD_DIR"] = os.path.join(ROOT, "web", "static", "uploads", "pod")
     app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+    
+    # CSRF Protection (RF Seguridad)
+    app.config["WTF_CSRF_ENABLED"] = not app.config.get("TESTING", False)
+    app.config["WTF_CSRF_TIME_LIMIT"] = 7200
 
     Session(app)
+
+    from web.extensions import csrf, limiter
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     # Registrar blueprints (rutas)
     from web.routes.auth import auth_bp
     from web.routes.recepcion import recepcion_bp
     from web.routes.admin import admin_bp
     from web.routes.chofer import chofer_bp
+    from web.routes.soporte import soporte_bp
+
+    # Eximir de CSRF APIs públicas de clientes sin sesión/JSON
+    csrf.exempt(soporte_bp)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(recepcion_bp, url_prefix="/recepcion")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(chofer_bp)
+    app.register_blueprint(soporte_bp, url_prefix="/soporte")
 
     # Ruta raíz → redirige según contexto
     @app.route("/")
@@ -59,6 +80,21 @@ def create_app() -> Flask:
     def service_worker():
         """Sirve el worker desde la raíz para que controle /chofer."""
         return send_from_directory(os.path.join(ROOT, "web", "static"), "service-worker.js")
+
+    # Manejadores de Rate Limiting y CSRF
+    from flask_wtf.csrf import CSRFError
+    from flask import flash
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        logger.warning("Error de validación CSRF: %s", getattr(e, "description", e))
+        flash("La sesión de seguridad del formulario expiró o no es válida. Por favor, intentá nuevamente.", "warning")
+        return redirect(request.referrer or url_for("auth.landing"))
+
+    @app.errorhandler(429)
+    def handle_ratelimit_error(e):
+        flash("Demasiados intentos de acceso. Por favor, aguardá un minuto antes de reintentar.", "danger")
+        return redirect(url_for("auth.landing")), 429
 
     # ──────────────────────────────────────────
     # Filtros de Seguridad (Anti-Caché y Headers)

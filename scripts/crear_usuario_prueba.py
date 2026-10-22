@@ -1,4 +1,10 @@
-"""Carga de usuarios iniciales de prueba en la base de datos."""
+"""Carga de usuarios iniciales de prueba en la base de datos.
+
+ADVERTENCIA DE SEGURIDAD (PRODUCCIÓN):
+Estas credenciales (admin123, recep456, chofer789) son EXCLUSIVAMENTE para pruebas locales
+y desarrollo. Antes de desplegar en producción es OBLIGATORIO cambiar las contraseñas
+por claves robustas y seguras.
+"""
 
 import sys
 import os

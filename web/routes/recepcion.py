@@ -717,7 +717,7 @@ def mp_iniciar_pago(nro_guia: str):
         envio, _ = _obtener_detalle_envio(nro_guia)
         if not envio:
             flash('No se encontró el envío.', 'danger')
-            return redirect(url_for('recepcion.dashboard'))
+            return redirect(url_for('admin.dashboard'))
 
         mp = MercadoPagoService()
         preferencia = mp.crear_preferencia(
@@ -834,7 +834,7 @@ def mp_success():
             logger.error("Error al procesar MP success para payment_id %s: %s", payment_id, e)
 
     flash('El pago fue procesado. Verificá el estado en el sistema.', 'info')
-    return redirect(url_for('recepcion.dashboard'))
+    return redirect(url_for('admin.dashboard'))
 
 
 @recepcion_bp.route('/mp/failure')
@@ -847,7 +847,7 @@ def mp_failure_pending():
     flash('El pago no fue completado o está pendiente de acreditación. Podés reintentar o usar otro método.', 'warning')
     if external_reference:
         return redirect(url_for('recepcion.cobrar_envio', nro_guia=external_reference))
-    return redirect(url_for('recepcion.dashboard'))
+    return redirect(url_for('admin.dashboard'))
 
 
 @recepcion_bp.route('/mp/webhook', methods=['POST'])

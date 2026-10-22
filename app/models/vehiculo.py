@@ -16,14 +16,16 @@ class Vehiculo:
         patente: str,
         capacidad_kg: float,
         estado: str = "disponible",
+        validar: bool = True,
     ) -> None:
         self._id_vehiculo = id_vehiculo
-        self._patente = patente.strip()
+        self._patente = (patente or "").strip()
         self._capacidad_kg = float(capacidad_kg)
-        self._estado = estado.lower()
-        self.validar_datos(self._patente, self._capacidad_kg)
-        if self._estado not in self.ESTADOS_VALIDOS:
-            raise ValidationError(field="estado", reason=f"Estado de vehículo no válido: '{estado}'")
+        self._estado = (estado or "disponible").lower()
+        if validar:
+            self.validar_datos(self._patente, self._capacidad_kg)
+            if self._estado not in self.ESTADOS_VALIDOS:
+                raise ValidationError(field="estado", reason=f"Estado de vehículo no válido: '{estado}'")
 
     @property
     def id_vehiculo(self) -> int:
@@ -74,9 +76,10 @@ class Vehiculo:
     def from_db_row(cls, row: dict) -> "Vehiculo":
         return cls(
             id_vehiculo=row["id_vehiculo"],
-            patente=row["patente"],
-            capacidad_kg=float(row.get("capacidad_kg", 0)),
+            patente=row.get("patente", ""),
+            capacidad_kg=float(row.get("capacidad_kg", 0) or 0),
             estado=row.get("estado", "disponible"),
+            validar=False,
         )
 
     def __repr__(self) -> str:

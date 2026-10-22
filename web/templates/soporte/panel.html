@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Chats de Soporte — FormoPack Express{% endblock %}
+{% block page_title %}Atención al Cliente — Chats en Vivo{% endblock %}
+
+{% block content %}
+<div class="soporte-panel-wrap">
+  <!-- Encabezado de la sección -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h2 style="font-size:22px; font-weight:800; color:var(--text-primary); margin:0;">
+        <i class="fa-solid fa-headset text-primary me-2"></i> Mesa de Ayuda y Soporte
+      </h2>
+      <p style="color:var(--text-muted); font-size:13px; margin:4px 0 0;">
+        Atención en tiempo real para clientes y consultas de envíos.
+      </p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="badge bg-light text-dark border p-2" id="live-indicator">
+        <i class="fa-solid fa-circle text-success me-1" style="font-size:8px;"></i> Sistema de chat activo
+      </span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.location.reload();" title="Actualizar lista">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Alerta si el operador ya tiene un chat asignado -->
+  {% if chat_activo %}
+  <div class="alert alert-info d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4" style="background:#e8f4fd; border-left:4px solid #004481; border-radius:8px;">
+    <div class="d-flex align-items-center gap-3">
+      <div style="width:40px; height:40px; border-radius:50%; background:#004481; color:white; display:grid; place-items:center; font-size:18px;">
+        <i class="fa-solid fa-comments"></i>
+      </div>
+      <div>
+        <strong style="color:#00284d; font-size:14px;">Estás atendiendo una conversación activa:</strong>
+        <div style="font-size:13px; color:#335c80;">
+          Cliente: <strong>{{ chat_activo.cliente_nombre }}</strong>
+          {% if chat_activo.nro_guia %} · Guía: <code>{{ chat_activo.nro_guia }}</code>{% endif %}
+          · <span class="badge bg-primary">En progreso</span>
+        </div>
+        <small style="color:#577e9e;">Recordá: solo podés atender un cliente a la vez. Al terminarla, se eliminará para liberar espacio.</small>
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('soporte.ver_chat', id_chat=chat_activo.id_chat) }}" class="btn btn-primary btn-sm">
+        <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Ir a mi chat
+      </a>
+      <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=chat_activo.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar y eliminar este chat?');" style="margin:0;">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+          <i class="fa-solid fa-check me-1"></i> Finalizar
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tarjetas resumen de métricas -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm" style="border-radius:10px; border-left:4px solid #f59e0b !important;">
+        <div class="card-body p-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:#b45309;">Sin atender (Pendientes)</div>
+            <div style="font-size:26px; font-weight:800; color:#1e293b;">{{ sin_atender|length }}</div>
+            <small class="text-muted">Clientes esperando ser respondidos</small>
+          </div>
+          <div style="width:48px; height:48px; border-radius:10px; background:#fef3c7; color:#d97706; display:grid; place-items:center; font-size:22px;">
+            <i class="fa-solid fa-bell"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm" style="border-radius:10px; border-left:4px solid #10b981 !important;">
+        <div class="card-body p-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:#047857;">En progreso</div>
+            <div style="font-size:26px; font-weight:800; color:#1e293b;">{{ en_progreso|length }}</div>
+            <small class="text-muted">Conversaciones activas en atención</small>
+          </div>
+          <div style="width:48px; height:48px; border-radius:10px; background:#d1fae5; color:#059669; display:grid; place-items:center; font-size:22px;">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 1: CHATS SIN ATENDER -->
+  <div class="card border-0 shadow-sm mb-4" style="border-radius:12px; overflow:hidden;">
+    <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-warning text-dark px-2 py-1" style="font-size:12px; font-weight:700;">
+          {{ sin_atender|length }}
+        </span>
+        <h3 style="font-size:16px; font-weight:700; margin:0; color:#1e293b;">
+          Chats sin atender
+        </h3>
+      </div>
+      <small class="text-muted"><i class="fa-regular fa-clock me-1"></i> Se asignan por orden de llegada</small>
+    </div>
+    <div class="card-body p-0">
+      {% if sin_atender %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead style="background:#f8fafc; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+            <tr>
+              <th style="padding:12px 18px;">Cliente</th>
+              <th>Guía asociada</th>
+              <th>Primer mensaje / Consulta</th>
+              <th>Inicio</th>
+              <th class="text-end" style="padding-right:18px;">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in sin_atender %}
+            <tr>
+              <td style="padding:14px 18px;">
+                <div class="d-flex align-items-center gap-2">
+                  <div style="width:32px; height:32px; border-radius:50%; background:#e2e8f0; color:#475569; display:grid; place-items:center; font-weight:700; font-size:12px;">
+                    {{ c.cliente_nombre[0]|upper }}
+                  </div>
+                  <div>
+                    <strong style="color:#0f172a; display:block;">{{ c.cliente_nombre }}</strong>
+                    {% if c.cliente_email %}
+                    <small class="text-muted">{{ c.cliente_email }}</small>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                {% if c.nro_guia %}
+                <a href="{{ url_for('admin.tracking_publico', guia=c.nro_guia) }}" target="_blank" class="badge bg-light text-primary border text-decoration-none">
+                  <i class="fa-solid fa-box me-1"></i> {{ c.nro_guia }}
+                </a>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td style="max-width:320px;">
+                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#334155;">
+                  "{{ c.ultimo_mensaje or 'Consulta iniciada' }}"
+                </div>
+                <small class="text-muted">{{ c.total_mensajes }} mensaje(s)</small>
+              </td>
+              <td>
+                <span style="color:#64748b;">
+                  {% if c.fecha_creacion and c.fecha_creacion.strftime is defined %}
+                    {{ c.fecha_creacion.strftime('%H:%M hs') }}
+                  {% else %}
+                    {{ c.fecha_creacion }}
+                  {% endif %}
+                </span>
+              </td>
+              <td class="text-end" style="padding-right:18px;">
+                {% if chat_activo and chat_activo.id_chat != c.id_chat %}
+                <button class="btn btn-sm btn-secondary disabled" title="Ya estás atendiendo otro chat. Finalizalo primero.">
+                  <i class="fa-solid fa-lock me-1"></i> Ocupado
+                </button>
+                {% else %}
+                <form method="POST" action="{{ url_for('soporte.tomar_chat', id_chat=c.id_chat) }}" style="display:inline-block; margin:0;">
+                  <button type="submit" class="btn btn-sm btn-primary" style="font-weight:600;">
+                    <i class="fa-solid fa-headset me-1"></i> Atender chat
+                  </button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 px-3">
+        <div style="width:54px; height:54px; border-radius:50%; background:#f1f5f9; color:#94a3b8; display:grid; place-items:center; font-size:22px; margin:0 auto 12px;">
+          <i class="fa-solid fa-circle-check text-success"></i>
+        </div>
+        <h4 style="font-size:15px; font-weight:700; color:#334155; margin:0 0 4px;">No hay chats pendientes</h4>
+        <p class="text-muted mb-0" style="font-size:13px;">Todos los clientes fueron atendidos o no hay consultas activas en este momento.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- SECCIÓN 2: CHATS EN PROGRESO -->
+  <div class="card border-0 shadow-sm" style="border-radius:12px; overflow:hidden;">
+    <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-success text-white px-2 py-1" style="font-size:12px; font-weight:700;">
+          {{ en_progreso|length }}
+        </span>
+        <h3 style="font-size:16px; font-weight:700; margin:0; color:#1e293b;">
+          Chats en progreso (Atendidos)
+        </h3>
+      </div>
+      <small class="text-muted"><i class="fa-solid fa-shield-halved me-1"></i> Un operador por chat a la vez</small>
+    </div>
+    <div class="card-body p-0">
+      {% if en_progreso %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+          <thead style="background:#f8fafc; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+            <tr>
+              <th style="padding:12px 18px;">Cliente</th>
+              <th>Guía</th>
+              <th>Atendido por</th>
+              <th>Último mensaje</th>
+              <th class="text-end" style="padding-right:18px;">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in en_progreso %}
+            {% set es_mio = (c.id_usuario_atendiendo == session.usuario_id) %}
+            <tr style="{% if es_mio %}background:#f0f9ff;{% endif %}">
+              <td style="padding:14px 18px;">
+                <div class="d-flex align-items-center gap-2">
+                  <div style="width:32px; height:32px; border-radius:50%; background:#dbeafe; color:#1d4ed8; display:grid; place-items:center; font-weight:700; font-size:12px;">
+                    {{ c.cliente_nombre[0]|upper }}
+                  </div>
+                  <div>
+                    <strong style="color:#0f172a; display:block;">{{ c.cliente_nombre }}</strong>
+                    {% if es_mio %}
+                    <span class="badge bg-primary" style="font-size:10px;">Tu conversación</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                {% if c.nro_guia %}
+                <a href="{{ url_for('admin.tracking_publico', guia=c.nro_guia) }}" target="_blank" class="badge bg-light text-primary border text-decoration-none">
+                  {{ c.nro_guia }}
+                </a>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge bg-light text-dark border">
+                  <i class="fa-solid fa-user-tie text-muted me-1"></i> {{ c.nombre_usuario_atendiendo or 'Operador' }}
+                </span>
+              </td>
+              <td style="max-width:280px;">
+                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#475569;">
+                  {{ c.ultimo_mensaje or 'En conversación...' }}
+                </div>
+              </td>
+              <td class="text-end" style="padding-right:18px;">
+                <div class="d-flex justify-content-end gap-2">
+                  <a href="{{ url_for('soporte.ver_chat', id_chat=c.id_chat) }}" class="btn btn-sm {% if es_mio %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                    <i class="fa-solid fa-comment-dots me-1"></i> {% if es_mio %}Continuar{% else %}Ver{% endif %}
+                  </a>
+                  {% if es_mio %}
+                  <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=c.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar y eliminar este chat? Se liberará el espacio en base de datos.');" style="margin:0;">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Finalizar conversación">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 px-3 text-muted" style="font-size:13px;">
+        No hay chats en progreso actualmente.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  // Actualización automática cada 15 segundos para recibir nuevos chats
+  setInterval(() => {
+    fetch("{{ url_for('soporte.panel') }}", { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(() => {
+        // Recargar si no estamos escribiendo en ningún input
+        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
+  }, 15000);
+</script>
+{% endblock %}

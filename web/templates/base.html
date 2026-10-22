@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <title>{% block title %}FormoPack Express{% endblock %}</title>
   <!-- Favicon corporativo SVG -->
@@ -30,9 +31,12 @@
     </div>
 
     <nav class="sidebar-nav">
-      <!-- Recepción -->
+      <!-- Operaciones y Panel -->
       {% if session.rol in ['recepcionista', 'administrador'] %}
       <div class="nav-section">Operaciones</div>
+      <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+        <i class="fa-solid fa-chart-line nav-icon"></i> Panel de Control
+      </a>
       <a href="{{ url_for('recepcion.cotizador') }}" class="nav-link {% if request.endpoint == 'recepcion.cotizador' %}active{% endif %}">
         <i class="fa-solid fa-calculator nav-icon"></i> Cotizador
       </a>
@@ -50,9 +54,6 @@
       <!-- Administración -->
       {% if session.rol == 'administrador' %}
       <div class="nav-section" style="margin-top:12px;">Administración</div>
-      <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
-        <i class="fa-solid fa-chart-line nav-icon"></i> Panel de Control
-      </a>
       <a href="{{ url_for('admin.comprobantes') }}" class="nav-link {% if request.endpoint == 'admin.comprobantes' %}active{% endif %}">
         <i class="fa-solid fa-file-invoice nav-icon"></i> Comprobantes
       </a>
@@ -64,6 +65,14 @@
       </a>
       <a href="{{ url_for('admin.liquidaciones') }}" class="nav-link {% if request.endpoint == 'admin.liquidaciones' %}active{% endif %}">
         <i class="fa-solid fa-file-invoice-dollar nav-icon"></i> Liquidaciones
+      </a>
+      {% endif %}
+
+      <!-- Soporte al Cliente -->
+      {% if session.rol in ['recepcionista', 'administrador'] %}
+      <div class="nav-section" style="margin-top:12px;">Atención</div>
+      <a href="{{ url_for('soporte.panel') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('soporte.') %}active{% endif %}">
+        <i class="fa-solid fa-headset nav-icon"></i> Chats de Soporte
       </a>
       {% endif %}
 
@@ -203,6 +212,49 @@
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+  }
+
+  // Protección CSRF automática para formularios y peticiones AJAX
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrfTokenVal = csrfMeta ? csrfMeta.getAttribute('content') : null;
+  if (csrfTokenVal) {
+    document.querySelectorAll("form[method='POST'], form[method='post']").forEach(form => {
+      if (!form.querySelector("input[name='csrf_token']")) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "csrf_token";
+        input.value = csrfTokenVal;
+        form.appendChild(input);
+      }
+    });
+
+    document.addEventListener('submit', function(e) {
+      const form = e.target;
+      if (form && form.method && form.method.toUpperCase() === 'POST') {
+        if (!form.querySelector("input[name='csrf_token']")) {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "csrf_token";
+          input.value = csrfTokenVal;
+          form.appendChild(input);
+        }
+      }
+    }, true);
+
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options.headers = options.headers || {};
+      if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
+        if (options.headers instanceof Headers) {
+          if (!options.headers.has('X-CSRFToken')) options.headers.append('X-CSRFToken', csrfTokenVal);
+        } else if (Array.isArray(options.headers)) {
+          options.headers.push(['X-CSRFToken', csrfTokenVal]);
+        } else {
+          options.headers['X-CSRFToken'] = csrfTokenVal;
+        }
+      }
+      return originalFetch(url, options);
+    };
   }
 </script>
 </body>

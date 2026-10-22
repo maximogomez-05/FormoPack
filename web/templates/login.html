@@ -59,6 +59,7 @@
     {% endwith %}
 
     <form method="POST" action="{{ url_for('auth.login') }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="form-group">
         <label class="form-label">Correo Institucional</label>
         <input type="email" name="email" class="form-control" required autofocus maxlength="100" placeholder="correo@ejemplo.com">
@@ -67,6 +68,12 @@
       <div class="form-group">
         <label class="form-label">Contraseña</label>
         <input type="password" name="password" class="form-control" required minlength="8" maxlength="72">
+      </div>
+
+      <div style="text-align: right; margin-top: -6px; margin-bottom: 16px;">
+        <a href="{{ url_for('auth.recuperar_password') }}" style="color: var(--primary); font-size: 13px; text-decoration: none; font-weight: 500;">
+          ¿Olvidaste tu contraseña?
+        </a>
       </div>
 
       <button type="submit" class="btn btn-primary w-100 mt-2" style="padding:12px;">

@@ -10,22 +10,23 @@ from app.models.seguro import Seguro
 from config.settings import CotizadorConfig
 from app.utils.exceptions import CotizacionError
 
+from decimal import Decimal, ROUND_HALF_UP
+
 logger = logging.getLogger(__name__)
 
 
+def _d(val) -> Decimal:
+    """Convierte un valor numérico a Decimal de forma segura."""
+    return Decimal(str(val))
+
+
+def _redondear_moneda(val) -> float:
+    """Redondea a 2 decimales bancarios exactos sin errores de punto flotante."""
+    return float(_d(val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 class Cotizador:
-    """Servicio de cotización de envíos.
-
-    Implementa el cálculo de tarifa evaluando:
-    1. Zona de destino (distancia KM de la localidad).
-    2. Peso de aforo de cada bulto (mayor entre real y volumétrico).
-    3. Regla Multibulto: 100% al primer bulto, 50% de descuento a los siguientes.
-    4. Recargo por fragilidad (opcional).
-    5. Costo de seguro por excedente de valor declarado.
-
-    Corresponde a la clase `Cotizador` del diagrama UML con método
-    `calcularTarifa(envio, zona, bultos)`.
-    """
+    """Servicio de cotización de envíos."""
 
     def calcular_tarifa(
         self,
@@ -34,55 +35,44 @@ class Cotizador:
         valor_declarado: float = 0.0,
         seguro: Optional[Seguro] = None,
     ) -> dict:
-        """Calcula la tarifa total del envío.
-
-        Args:
-            bultos: Lista de bultos del envío.
-            localidad: Localidad de destino.
-            valor_declarado: Valor declarado del contenido.
-            seguro: Instancia de Seguro (opcional).
-
-        Returns:
-            Diccionario con el desglose de la cotización:
-            {
-                "tarifas_por_bulto": [...],
-                "subtotal_flete": float,
-                "costo_seguro": float,
-                "costo_total": float,
-                "detalle_bultos": [...],
-            }
-
-        Raises:
-            CotizacionError: Si no hay bultos o datos inválidos.
-        """
         if not bultos:
             raise CotizacionError("El envio debe tener al menos un bulto para cotizar.")
 
         factor_zona = self._calcular_factor_zona(localidad)
+        d_factor_zona = _d(factor_zona)
+        d_tarifa_base_kg = _d(CotizadorConfig.TARIFA_BASE_KG)
+        d_tarifa_minima = _d(CotizadorConfig.TARIFA_MINIMA)
+        d_recargo_fragil = _d(CotizadorConfig.RECARGO_FRAGIL)
+        d_desc_multibulto = _d(CotizadorConfig.DESCUENTO_MULTIBULTO)
+
         tarifas_por_bulto = []
         detalle_bultos = []
 
         for indice, bulto in enumerate(bultos):
             peso_aforo = bulto.calcular_aforo()
-            tarifa_base = peso_aforo * CotizadorConfig.TARIFA_BASE_KG * factor_zona
+            d_peso_aforo = _d(peso_aforo)
+            d_tarifa_base = d_peso_aforo * d_tarifa_base_kg * d_factor_zona
 
             # Regla Multibulto: 100% al primer bulto, 50% a los siguientes
             if indice == 0:
                 descuento = 0.0
-                tarifa_final = tarifa_base
+                d_tarifa_final = d_tarifa_base
             else:
                 descuento = CotizadorConfig.DESCUENTO_MULTIBULTO
-                tarifa_final = tarifa_base * (1 - descuento)
+                d_tarifa_final = d_tarifa_base * (_d(1) - d_desc_multibulto)
 
             # Recargo por fragilidad
             recargo_fragil = 0.0
             if bulto.es_fragil:
-                recargo_fragil = tarifa_final * CotizadorConfig.RECARGO_FRAGIL
-                tarifa_final += recargo_fragil
+                d_recargo = d_tarifa_final * d_recargo_fragil
+                d_tarifa_final += d_recargo
+                recargo_fragil = _redondear_moneda(d_recargo)
 
             # Tarifa mínima por bulto
-            tarifa_final = max(tarifa_final, CotizadorConfig.TARIFA_MINIMA)
-            tarifa_final = round(tarifa_final, 2)
+            if d_tarifa_final < d_tarifa_minima:
+                d_tarifa_final = d_tarifa_minima
+
+            tarifa_final = _redondear_moneda(d_tarifa_final)
 
             tarifas_por_bulto.append(tarifa_final)
             detalle_bultos.append({
@@ -90,20 +80,20 @@ class Cotizador:
                 "peso_real": bulto.peso_real,
                 "peso_volumetrico": bulto.peso_volumetrico,
                 "peso_aforo": peso_aforo,
-                "tarifa_base": round(tarifa_base, 2),
+                "tarifa_base": _redondear_moneda(d_tarifa_base),
                 "descuento_multibulto": f"{int(descuento * 100)}%",
-                "recargo_fragil": round(recargo_fragil, 2),
+                "recargo_fragil": recargo_fragil,
                 "tarifa_final": tarifa_final,
             })
 
-        subtotal_flete = round(sum(tarifas_por_bulto), 2)
+        subtotal_flete = _redondear_moneda(sum(_d(t) for t in tarifas_por_bulto))
 
         # Cálculo de seguro
         costo_seguro = 0.0
         if seguro and valor_declarado > 0:
-            costo_seguro = seguro.calcular_costo_cobertura(valor_declarado)
+            costo_seguro = _redondear_moneda(seguro.calcular_costo_cobertura(valor_declarado))
 
-        costo_total = round(subtotal_flete + costo_seguro, 2)
+        costo_total = _redondear_moneda(_d(subtotal_flete) + _d(costo_seguro))
 
         resultado = {
             "localidad_destino": localidad.nombre,

@@ -26,6 +26,20 @@ CREATE TABLE IF NOT EXISTS usuarios (
     UNIQUE KEY uk_usuarios_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS recuperacion_contrasenas (
+    id_recuperacion INT(11)         NOT NULL AUTO_INCREMENT,
+    id_usuario      INT(11)         NOT NULL,
+    codigo          VARCHAR(10)     NOT NULL,
+    expira_en       DATETIME        NOT NULL,
+    utilizado       TINYINT(1)      NOT NULL DEFAULT 0,
+    creado_en       TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_recuperacion),
+    INDEX idx_recuperacion_usuario (id_usuario),
+    INDEX idx_recuperacion_codigo (codigo),
+    CONSTRAINT fk_recuperacion_usuario FOREIGN KEY (id_usuario)
+        REFERENCES usuarios (id_usuario) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================
 -- 2. CLIENTES (Remitentes y Destinatarios)
 -- ============================================================
@@ -236,6 +250,43 @@ CREATE TABLE IF NOT EXISTS intentos_entrega (
     INDEX idx_intentos_hoja (id_hoja_ruta),
     CONSTRAINT fk_intentos_envio      FOREIGN KEY (id_envio)      REFERENCES envios(id_envio),
     CONSTRAINT fk_intentos_hoja_ruta  FOREIGN KEY (id_hoja_ruta)  REFERENCES hojas_de_ruta(id_hoja_ruta)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 14. CHATS DE SOPORTE AL CLIENTE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chats_soporte (
+    id_chat             INT(11)         NOT NULL AUTO_INCREMENT,
+    session_id          VARCHAR(64)     NOT NULL,
+    cliente_nombre      VARCHAR(100)    NOT NULL,
+    cliente_email       VARCHAR(120)    DEFAULT NULL,
+    nro_guia            VARCHAR(30)     DEFAULT NULL,
+    estado              ENUM('sin_atender', 'en_progreso') NOT NULL DEFAULT 'sin_atender',
+    id_usuario_atendiendo INT(11)       DEFAULT NULL,
+    nombre_usuario_atendiendo VARCHAR(100) DEFAULT NULL,
+    fecha_creacion      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_chat),
+    UNIQUE KEY uk_chats_session (session_id),
+    INDEX idx_soporte_estado (estado),
+    INDEX idx_soporte_usuario (id_usuario_atendiendo),
+    CONSTRAINT fk_soporte_usuario FOREIGN KEY (id_usuario_atendiendo) REFERENCES usuarios(id_usuario) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 15. MENSAJES DE SOPORTE AL CLIENTE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mensajes_soporte (
+    id_mensaje          INT(11)         NOT NULL AUTO_INCREMENT,
+    id_chat             INT(11)         NOT NULL,
+    remitente_tipo      ENUM('cliente', 'soporte') NOT NULL,
+    remitente_nombre    VARCHAR(100)    NOT NULL,
+    mensaje             TEXT            NOT NULL,
+    fecha_envio         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_mensaje),
+    INDEX idx_msg_chat (id_chat),
+    CONSTRAINT fk_msg_chat FOREIGN KEY (id_chat) REFERENCES chats_soporte(id_chat) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

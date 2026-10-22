@@ -8,6 +8,7 @@ from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
 from app.services.ruteo import ServicioRuteo
+from app.services.servicio_notificacion import notificar_cambio_estado_async
 from app.utils.exceptions import (
     DatabaseConnectionError,
     DatabaseQueryError,
@@ -105,6 +106,10 @@ class LogisticaController:
         """Crea una nueva hoja de ruta y asigna envíos."""
         if not nro_despacho.strip() or not envios_ids:
             raise ValidationError(field="hoja_ruta", reason="El despacho y al menos un envío son obligatorios")
+
+        conn = None
+        cursor = None
+        id_hoja_ruta = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -166,52 +171,41 @@ class LogisticaController:
             )
 
             conn.commit()
-            cursor.close()
-
-            # Notificaciones (RF 5.4)
-            try:
-                from app.services.servicio_notificacion import ServicioNotificacion
-                from app.models.cliente import Cliente
-                from app.models.envio import Envio
-                
-                conn_notif = self.db.get_connection()
-                cur_notif = conn_notif.cursor(dictionary=True)
-                notificador = ServicioNotificacion()
-                
-                for id_envio in envios_ids:
-                    cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
-                    env_row = cur_notif.fetchone()
-                    if env_row:
-                        envio_obj = Envio.from_db_row(env_row)
-                        cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
-                        cli_row = cur_notif.fetchone()
-                        if cli_row:
-                            cli_obj = Cliente.from_db_row(cli_row)
-                            notificador.enviar_alerta_cambio_estado(
-                                envio_obj, cli_obj, 'en_planta', "El envío ha sido asignado a una hoja de ruta."
-                            )
-                cur_notif.close()
-                conn_notif.close()
-            except Exception as e:
-                logger.warning("Error enviando notificaciones logistica: %s", e)
-
-            # Recuperar la hoja completa
-            return self.obtener_hoja_ruta(id_hoja_ruta)
 
         except ValidationError:
-            conn.rollback()
-            cursor.close()
-            conn.close()
+            if conn:
+                try: conn.rollback()
+                except Exception: pass
             raise
         except Exception as e:
-            conn.rollback()
-            cursor.close()
-            conn.close()
+            if conn:
+                try: conn.rollback()
+                except Exception: pass
             logger.error("Error al crear hoja de ruta: %s", e)
-            raise DatabaseQueryError(f"Error al crear hoja de ruta: {e}")
+            raise DatabaseQueryError(f"Error al crear hoja de ruta: {e}") from e
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
+
+        # Notificaciones asíncronas desacopladas (RF 5.4 / RF 6.2)
+        for id_envio in envios_ids:
+            notificar_cambio_estado_async(
+                id_envio,
+                nuevo_estado=EstadosEnvio.EN_PLANTA,
+                observacion="El envío ha sido asignado a una hoja de ruta.",
+            )
+
+        # Recuperar la hoja completa con conexión independiente
+        return self.obtener_hoja_ruta(id_hoja_ruta)
 
     def obtener_hoja_ruta(self, id_hoja_ruta: int) -> Optional[HojaRuta]:
         """Obtiene una hoja de ruta con sus envíos."""
+        conn = None
+        cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -224,8 +218,6 @@ class LogisticaController:
             hoja_row = cursor.fetchone()
 
             if not hoja_row:
-                cursor.close()
-                conn.close()
                 return None
 
             # Envíos asignados
@@ -240,10 +232,7 @@ class LogisticaController:
             )
             envios = cursor.fetchall()
 
-            cursor.close()
-            conn.close()
-
-            hoja = HojaRuta(
+            return HojaRuta(
                 id_hoja_ruta=hoja_row["id_hoja_ruta"],
                 nro_despacho=hoja_row["nro_despacho"],
                 id_chofer=hoja_row["id_chofer"],
@@ -251,14 +240,24 @@ class LogisticaController:
                 fecha_emision=hoja_row.get("fecha_emision"),
                 envios=envios or []
             )
-            return hoja
 
         except Exception as e:
             logger.error("Error al obtener hoja de ruta %d: %s", id_hoja_ruta, e)
             return None
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
-    def listar_hojas_ruta(self) -> List[Dict[str, Any]]:
-        """Lista todas las hojas de ruta activas."""
+    def listar_hojas_ruta(self, limite: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        """Lista todas las hojas de ruta con soporte de paginación."""
+        conn = None
+        cursor = None
+        limite_seguro = max(1, min(limite, 500))
+        offset_seguro = max(0, offset)
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -278,19 +277,25 @@ class LogisticaController:
                 LEFT JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                 GROUP BY hr.id_hoja_ruta
                 ORDER BY hr.fecha_emision DESC
-                LIMIT 50
-            """)
-            hojas = cursor.fetchall()
-            cursor.close()
-            conn.close()
-            return hojas
+                LIMIT %s OFFSET %s
+            """, (limite_seguro, offset_seguro))
+            return cursor.fetchall()
         except Exception as e:
             logger.error("Error al listar hojas de ruta: %s", e)
-            raise DatabaseConnectionError(f"Error al listar hojas de ruta: {e}")
+            raise DatabaseConnectionError(f"Error al listar hojas de ruta: {e}") from e
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
-    def obtener_envios_mapa(self) -> List[Dict[str, Any]]:
-        """Obtiene los envíos y su última ubicación disponible para el mapa global."""
+    def obtener_envios_mapa(self, limite: int = 250) -> List[Dict[str, Any]]:
+        """Obtiene los envíos y su última ubicación para el mapa con límite de seguridad."""
         conn = None
+        cursor = None
+        limite_seguro = max(1, min(limite, 1000))
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -321,7 +326,8 @@ class LogisticaController:
                       AND e.estado_actual IN ('entregado', 'fallido', 'devolucion')
                 )
                 ORDER BY e.fecha_creacion DESC, e.id_envio DESC
-            """)
+                LIMIT %s
+            """, (limite_seguro,))
             filas = cursor.fetchall()
             resultado = []
             for fila in filas:
@@ -361,14 +367,17 @@ class LogisticaController:
                     "gps_fecha": gps_fecha.isoformat() if hasattr(gps_fecha, "isoformat") else str(gps_fecha) if gps_fecha else None,
                     "gps_en_vivo": gps_en_vivo,
                 })
-            cursor.close()
             return resultado
         except Exception as e:
             logger.error("Error al obtener envíos para mapa global: %s", e)
             raise DatabaseQueryError(f"Error al obtener envíos para mapa: {e}") from e
         finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
             if conn:
-                conn.close()
+                try: conn.close()
+                except Exception: pass
 
     # ─────────────────────────────────────────
     # RF 3.3: Ruteo por Kilometraje
@@ -383,8 +392,17 @@ class LogisticaController:
         estado = (estado_actual or "").strip().lower()
         return estado in {EstadosEnvio.RECIBIDO, EstadosEnvio.EN_PLANTA}
 
-    def obtener_entregas_pendientes(self, estado: str = EstadosEnvio.RECIBIDO) -> List[Dict[str, Any]]:
-        """Obtiene solo envíos no resueltos y sin hoja de ruta asignada."""
+    def obtener_entregas_pendientes(
+        self,
+        estado: str = EstadosEnvio.RECIBIDO,
+        limite: int = 150,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Obtiene solo envíos no resueltos y sin hoja de ruta asignada con paginación."""
+        conn = None
+        cursor = None
+        limite_seguro = max(1, min(limite, 500))
+        offset_seguro = max(0, offset)
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -405,14 +423,19 @@ class LogisticaController:
                   AND e.estado_actual NOT IN ('entregado', 'fallido', 'devolucion', 'siniestro')
                 GROUP BY e.id_envio
                 ORDER BY l.distancia_km ASC
-            """, (EstadosEnvio.RECIBIDO, EstadosEnvio.EN_PLANTA))
-            entregas = cursor.fetchall()
-            cursor.close()
-            conn.close()
-            return entregas
+                LIMIT %s OFFSET %s
+            """, (EstadosEnvio.RECIBIDO, EstadosEnvio.EN_PLANTA, limite_seguro, offset_seguro))
+            return cursor.fetchall()
         except Exception as e:
             logger.error("Error al obtener entregas pendientes: %s", e)
-            raise DatabaseConnectionError(f"Error al obtener entregas: {e}")
+            raise DatabaseConnectionError(f"Error al obtener entregas: {e}") from e
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def sugerir_ruta_optima(self, entregas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Ordena entregas por distancia para la ruta más eficiente."""
@@ -420,6 +443,10 @@ class LogisticaController:
 
     def calcular_carga_total(self, envios_ids: List[int]) -> float:
         """Calcula el peso total de un grupo de envíos."""
+        if not envios_ids:
+            return 0.0
+        conn = None
+        cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -430,9 +457,14 @@ class LogisticaController:
                 WHERE b.id_envio IN ({placeholders})
             """, envios_ids)
             resultado = cursor.fetchone()
-            cursor.close()
-            conn.close()
-            return float(resultado.get("peso_total", 0))
+            return float(resultado.get("peso_total", 0)) if resultado else 0.0
         except Exception as e:
             logger.error("Error al calcular carga: %s", e)
             return 0.0
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass

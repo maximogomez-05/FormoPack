@@ -20,12 +20,29 @@ class DatabaseConfig:
     CONNECT_TIMEOUT: int = 10
 
 
+import secrets
+import warnings
+
 class AppConfig:
     """Ajustes de la aplicación."""
     APP_NAME: str = "Formopack Express"
     VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("APP_DEBUG", "false").lower() == "true"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "secret-key")
+    
+    # Validación segura de SECRET_KEY:
+    _raw_secret = os.getenv("SECRET_KEY", "").strip()
+    if not _raw_secret or _raw_secret == "secret-key":
+        if not DEBUG:
+            raise RuntimeError("CRÍTICO: SECRET_KEY no configurada o insegura en entorno de producción (.env).")
+        warnings.warn(
+            "ADVERTENCIA: SECRET_KEY no está configurada o usa el valor por defecto. "
+            "Se generó una clave aleatoria para la sesión de desarrollo.",
+            UserWarning,
+        )
+        SECRET_KEY: str = secrets.token_hex(32)
+    else:
+        SECRET_KEY: str = _raw_secret
+
     BCRYPT_ROUNDS: int = 12
 
 

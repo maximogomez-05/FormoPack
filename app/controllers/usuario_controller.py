@@ -32,8 +32,9 @@ class UsuarioController:
             raise ValidationError(field="email", reason="Formato inválido")
         if tipo_usuario not in ('administrador', 'recepcionista', 'chofer'):
             raise ValidationError(field="tipo_usuario", reason="Tipo inválido")
-        if not password or len(password) < 8:
-            raise ValidationError(field="password", reason="Mínimo 8 caracteres")
+        
+        from app.models.usuario import Usuario
+        Usuario.validar_complejidad_password(password)
 
         conn = None
         try:

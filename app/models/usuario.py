@@ -108,8 +108,23 @@ class Usuario:
             raise ValidationError(field="tipo_usuario", reason=f"Rol no válido: '{tipo}'")
 
     @staticmethod
+    def validar_complejidad_password(password_plano: str) -> None:
+        """Valida que la contraseña cumpla los requisitos mínimos de seguridad:
+        - Mínimo 8 caracteres.
+        - Al menos una letra.
+        - Al menos un dígito o número.
+        """
+        if not password_plano or len(password_plano) < 8:
+            raise ValidationError(field="password", reason="La contraseña debe tener al menos 8 caracteres.")
+        if not any(c.isalpha() for c in password_plano):
+            raise ValidationError(field="password", reason="La contraseña debe contener al menos una letra.")
+        if not any(c.isdigit() for c in password_plano):
+            raise ValidationError(field="password", reason="La contraseña debe contener al menos un número.")
+
+    @staticmethod
     def hashear_password(password_plano: str) -> str:
         """Genera hash Bcrypt para almacenar."""
+        Usuario.validar_complejidad_password(password_plano)
         salt = bcrypt.gensalt(rounds=AppConfig.BCRYPT_ROUNDS)
         return bcrypt.hashpw(password_plano.encode("utf-8"), salt).decode("utf-8")
 

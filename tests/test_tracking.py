@@ -11,6 +11,7 @@ def test_construir_resumen_tracking():
         "nro_guia": "FPX-2026-0003",
         "estado_actual": "en_ruta",
         "fecha_creacion": "2026-01-13 07:00:00",
+        "cantidad_intentos": 0,
     }
     historial = [
         {"estado": "recibido", "fecha_hora": "2026-01-13 07:00:00", "ubicacion": "Sucursal Origen", "observacion": "Registrado"},
@@ -23,6 +24,8 @@ def test_construir_resumen_tracking():
     assert resumen["ultima_actualizacion"] == "2026-01-13 12:30:00"
     assert resumen["ubicacion_actual"] == "Ruta Norte"
     assert resumen["progreso"] == "en_tránsito"
+    assert resumen["en_custodia"] is False
+    assert resumen["cantidad_intentos"] == 0
 
 
 def test_construir_timeline_agrega_estado_inicial_si_falta():
@@ -39,6 +42,9 @@ def test_construir_timeline_agrega_estado_inicial_si_falta():
     assert timeline[0]["estado"] == "recibido"
     assert timeline[0]["ubicacion"] == "Sucursal Origen"
     assert timeline[0]["observacion"] == "Envío registrado en sistema."
+    # Verificar que se generó descripción amigable
+    assert "descripcion_amigable" in timeline[0]
+    assert "recibido" in timeline[0]["descripcion_amigable"].lower() or "paquete" in timeline[0]["descripcion_amigable"].lower()
 
 
 def test_construir_timeline_ordena_eventos_cronologicamente():
@@ -101,3 +107,95 @@ def test_alerta_fallida_incluye_intentos_y_motivo():
     assert len(alertas) == 1
     assert "2 intento(s)" in alertas[0]["mensaje"]
     assert "Destinatario ausente" in alertas[0]["mensaje"]
+
+
+def test_resumen_tracking_detecta_custodia():
+    """Cuando un envío fallido tiene ≥3 intentos, se marca como en custodia."""
+    envio = {
+        "nro_guia": "FPX-2026-CUST",
+        "estado_actual": "fallido",
+        "fecha_creacion": "2026-01-15 09:00:00",
+        "cantidad_intentos": 3,
+    }
+    historial = [
+        {"estado": "recibido", "fecha_hora": "2026-01-15 09:00:00", "ubicacion": "Sucursal Origen", "observacion": "Registrado"},
+        {"estado": "fallido", "fecha_hora": "2026-01-16 14:00:00", "ubicacion": "Ruta Norte", "observacion": "destinatario_ausente"},
+    ]
+
+    resumen = construir_resumen_tracking(envio, historial)
+
+    assert resumen["en_custodia"] is True
+    assert resumen["cantidad_intentos"] == 3
+    assert resumen["progreso"] == "fallido"
+
+
+def test_resumen_tracking_no_custodia_con_pocos_intentos():
+    """Un envío fallido con menos de 3 intentos NO es custodia."""
+    envio = {
+        "nro_guia": "FPX-2026-NOCUST",
+        "estado_actual": "fallido",
+        "fecha_creacion": "2026-01-15 09:00:00",
+        "cantidad_intentos": 1,
+    }
+    historial = [
+        {"estado": "fallido", "fecha_hora": "2026-01-16 14:00:00", "ubicacion": "Ruta Norte", "observacion": "destinatario_ausente"},
+    ]
+
+    resumen = construir_resumen_tracking(envio, historial)
+
+    assert resumen["en_custodia"] is False
+    assert resumen["cantidad_intentos"] == 1
+
+
+def test_timeline_incluye_descripcion_amigable():
+    """Cada evento del timeline debe tener una descripción amigable para el cliente."""
+    envio = {
+        "nro_guia": "FPX-2026-AMI",
+        "estado_actual": "entregado",
+        "fecha_creacion": "2026-02-01 08:00:00",
+    }
+    historial = [
+        {"estado": "recibido", "fecha_hora": "2026-02-01 08:00:00", "ubicacion": "Sucursal Origen", "observacion": "Registrado"},
+        {"estado": "en_ruta", "fecha_hora": "2026-02-01 12:00:00", "ubicacion": "Ruta Norte", "observacion": "Salida"},
+        {"estado": "entregado", "fecha_hora": "2026-02-01 16:30:00", "ubicacion": "Calle 10", "observacion": "Entregado en mano"},
+    ]
+
+    timeline = construir_timeline(envio, historial)
+
+    assert len(timeline) == 3
+    for evento in timeline:
+        assert "descripcion_amigable" in evento
+        assert len(evento["descripcion_amigable"]) > 10  # Descripción significativa
+
+    # Verificar que el evento de entrega tiene un mensaje con checkmark
+    assert "✓" in timeline[-1]["descripcion_amigable"] or "entregado" in timeline[-1]["descripcion_amigable"].lower()
+
+
+def test_timeline_descripcion_amigable_fallido_con_motivo():
+    """El timeline debe generar explicaciones amigables para entregas fallidas con motivo conocido."""
+    envio = {
+        "nro_guia": "FPX-2026-FAIL",
+        "estado_actual": "fallido",
+        "fecha_creacion": "2026-02-01 08:00:00",
+    }
+    historial = [
+        {"estado": "fallido", "fecha_hora": "2026-02-02 14:30:00", "ubicacion": "Barrio Norte",
+         "observacion": "destinatario_ausente"},
+    ]
+
+    timeline = construir_timeline(envio, historial)
+
+    assert len(timeline) == 1
+    desc = timeline[0]["descripcion_amigable"]
+    # Debe contener el mensaje amigable, no el código técnico
+    assert "domicilio" in desc.lower() or "encontramos" in desc.lower()
+    assert "14:30" in desc
+
+
+def test_resumen_no_encontrado_incluye_campos_enriquecidos():
+    """Un resumen sin envío debe incluir los nuevos campos con valores por defecto."""
+    resumen = construir_resumen_tracking(None, [])
+
+    assert resumen["estado"] == "no_encontrado"
+    assert resumen["en_custodia"] is False
+    assert resumen["cantidad_intentos"] == 0

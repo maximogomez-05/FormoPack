@@ -87,6 +87,8 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
             extension = Path(foto.filename).suffix.lower()
             if extension not in ALLOWED_PHOTO_EXTENSIONS:
                 raise ValidationError(field="foto_remito", reason="Solo se aceptan JPG, PNG o WEBP")
+            if not _validar_cabecera_imagen(foto.stream):
+                raise ValidationError(field="foto_remito", reason="El archivo no es una imagen válida")
             nombre = f"pod_{id_envio}_{uuid.uuid4().hex}{extension}"
             carpeta = Path(current_app.config["POD_UPLOAD_DIR"])
             carpeta.mkdir(parents=True, exist_ok=True)
@@ -162,3 +164,22 @@ def _eliminar_foto(foto_path: str | None) -> None:
         (Path(current_app.config["POD_UPLOAD_DIR"]).parent.parent / foto_path).unlink(missing_ok=True)
     except OSError:
         logger.warning("No se pudo eliminar evidencia temporal: %s", foto_path)
+
+
+def _validar_cabecera_imagen(stream) -> bool:
+    """Verifica firmas binarias reales de JPEG, PNG o WEBP."""
+    pos = stream.tell()
+    header = stream.read(12)
+    stream.seek(pos)
+    if not header or len(header) < 4:
+        return False
+    # JPEG: FF D8 FF
+    if header.startswith(b"\xff\xd8\xff"):
+        return True
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    # WEBP: RIFF....WEBP
+    if header.startswith(b"RIFF") and len(header) >= 12 and header[8:12] == b"WEBP":
+        return True
+    return False

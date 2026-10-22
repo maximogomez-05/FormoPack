@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.database import DatabaseManager
 from app.models.prueba_entrega import EntregaFallida, PruebaDeEntrega
+from app.services.servicio_notificacion import notificar_cambio_estado_async
 from app.utils.exceptions import DatabaseQueryError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -34,73 +35,119 @@ class ChoferController:
         """Una hoja se completa cuando todos sus envíos alcanzan un estado final."""
         return bool(estados) and all(cls.es_estado_terminal(estado) for estado in estados)
 
+    _columna_estado_cache: Optional[bool] = None
+
     def __init__(self) -> None:
         self.db = DatabaseManager.get_instance()
 
     def _tiene_columna_estado(self) -> bool:
-        """Compatibilidad con esquemas sin columna estado en hojas_de_ruta."""
+        """Compatibilidad con esquemas sin columna estado en hojas_de_ruta (con caché)."""
+        if ChoferController._columna_estado_cache is not None:
+            return ChoferController._columna_estado_cache
         conn = None
+        cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
             cursor.execute("SHOW COLUMNS FROM hojas_de_ruta LIKE 'estado'")
-            return cursor.fetchone() is not None
+            ChoferController._columna_estado_cache = (cursor.fetchone() is not None)
+            return ChoferController._columna_estado_cache
         except Exception:
             return False
         finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
             if conn:
-                conn.close()
+                try: conn.close()
+                except Exception: pass
 
     def obtener_panel(self, id_chofer: int) -> dict[str, Any]:
-        """Devuelve hojas activas y sus envios para el chofer autenticado."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        """Devuelve hojas activas y sus envíos para el chofer autenticado."""
+        conn = None
+        cursor = None
         try:
-            if self._tiene_columna_estado():
-                filtro_hojas = "AND (hr.estado = 'abierta' OR hr.fecha_emision >= DATE_SUB(NOW(), INTERVAL 24 HOUR))"
-            else:
-                filtro_hojas = ""
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
 
-            cursor.execute(
-                f"""SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
-                          v.patente, v.capacidad_kg
-                   FROM hojas_de_ruta hr
-                   JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
-                   WHERE hr.id_chofer = %s
-                     {filtro_hojas}
-                   ORDER BY hr.fecha_emision DESC""",
-                (id_chofer,),
-            )
+            # Consultas estáticas parametrizadas sin interpolación de cadenas
+            if self._tiene_columna_estado():
+                sql_hojas = """
+                    SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
+                           v.patente, v.capacidad_kg
+                    FROM hojas_de_ruta hr
+                    JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
+                    WHERE hr.id_chofer = %s
+                      AND (hr.estado = 'abierta' OR hr.fecha_emision >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
+                    ORDER BY hr.fecha_emision DESC
+                """
+            else:
+                sql_hojas = """
+                    SELECT hr.id_hoja_ruta, hr.nro_despacho, hr.fecha_emision,
+                           v.patente, v.capacidad_kg
+                    FROM hojas_de_ruta hr
+                    JOIN vehiculos v ON v.id_vehiculo = hr.id_vehiculo
+                    WHERE hr.id_chofer = %s
+                    ORDER BY hr.fecha_emision DESC
+                """
+
+            cursor.execute(sql_hojas, (id_chofer,))
             hojas = cursor.fetchall()
+
+            if not hojas:
+                return {"hojas": []}
+
+            # Optimización N+1: Batch query para todos los envíos de las hojas activas
+            placeholders = ",".join(["%s"] * len(hojas))
+            ids_hojas = [h["id_hoja_ruta"] for h in hojas]
+            cursor.execute(
+                f"""SELECT e.id_hoja_ruta, e.id_envio, e.nro_guia, e.estado_actual,
+                          e.direccion_destino, l.nombre AS localidad_destino,
+                          l.distancia_km, i.tipo_intento, i.fecha_hora AS intento_fecha,
+                          i.motivo_fallo AS ultimo_motivo_fallo,
+                          (SELECT COUNT(*) FROM intentos_entrega total
+                           WHERE total.id_envio = e.id_envio) AS cantidad_intentos
+                   FROM envios e
+                   JOIN localidades l ON l.id_localidad = e.id_localidad_destino
+                   LEFT JOIN intentos_entrega i ON i.id_intento = (
+                       SELECT MAX(i2.id_intento) FROM intentos_entrega i2
+                       WHERE i2.id_envio = e.id_envio
+                   )
+                   WHERE e.id_hoja_ruta IN ({placeholders})
+                   ORDER BY l.distancia_km ASC, e.nro_guia ASC""",
+                tuple(ids_hojas),
+            )
+            envios_todos = cursor.fetchall()
+            envios_por_hoja: dict[int, list[dict[str, Any]]] = {h_id: [] for h_id in ids_hojas}
+            for e in envios_todos:
+                h_id = e.get("id_hoja_ruta")
+                if h_id in envios_por_hoja:
+                    envios_por_hoja[h_id].append(e)
+
             for hoja in hojas:
-                cursor.execute(
-                    """SELECT e.id_envio, e.nro_guia, e.estado_actual,
-                              e.direccion_destino, l.nombre AS localidad_destino,
-                              l.distancia_km, i.tipo_intento, i.fecha_hora AS intento_fecha,
-                              i.motivo_fallo AS ultimo_motivo_fallo,
-                              (SELECT COUNT(*) FROM intentos_entrega total
-                               WHERE total.id_envio = e.id_envio) AS cantidad_intentos
-                       FROM envios e
-                       JOIN localidades l ON l.id_localidad = e.id_localidad_destino
-                       LEFT JOIN intentos_entrega i ON i.id_intento = (
-                           SELECT MAX(i2.id_intento) FROM intentos_entrega i2
-                           WHERE i2.id_envio = e.id_envio
-                       )
-                       WHERE e.id_hoja_ruta = %s
-                       ORDER BY l.distancia_km ASC, e.nro_guia ASC""",
-                    (hoja["id_hoja_ruta"],),
-                )
-                hoja["envios"] = cursor.fetchall()
+                hoja["envios"] = envios_por_hoja.get(hoja["id_hoja_ruta"], [])
             return {"hojas": hojas}
+        except ValidationError:
+            raise
+        except Exception as exc:
+            logger.exception("Error al obtener panel del chofer: %s", exc)
+            raise DatabaseQueryError("No se pudo obtener las hojas de ruta asignadas.") from exc
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def iniciar_hoja(self, id_chofer: int, id_hoja_ruta: int) -> None:
         """Pone la hoja en ruta y registra el cambio para cada envio."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        conn = None
+        cursor = None
         try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
             cursor.execute(
                 "SELECT id_hoja_ruta FROM hojas_de_ruta WHERE id_hoja_ruta = %s AND id_chofer = %s",
                 (id_hoja_ruta, id_chofer),
@@ -127,43 +174,30 @@ class ChoferController:
                 )
             conn.commit()
 
-            # --- NOTIFICACIONES (RF 5.4) ---
-            try:
-                from app.services.servicio_notificacion import ServicioNotificacion
-                from app.models.cliente import Cliente
-                from app.models.envio import Envio
-                
-                conn_notif = self.db.get_connection()
-                cur_notif = conn_notif.cursor(dictionary=True)
-                notificador = ServicioNotificacion()
-                
-                for envio in envios:
-                    cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (envio["id_envio"],))
-                    env_row = cur_notif.fetchone()
-                    if env_row:
-                        envio_obj = Envio.from_db_row(env_row)
-                        cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
-                        cli_row = cur_notif.fetchone()
-                        if cli_row:
-                            cli_obj = Cliente.from_db_row(cli_row)
-                            notificador.enviar_alerta_cambio_estado(
-                                envio_obj, cli_obj, 'en_ruta', "Ruta iniciada por el chofer."
-                            )
-                cur_notif.close()
-                conn_notif.close()
-            except Exception as e:
-                logger.warning("Error enviando notificaciones chofer en_ruta: %s", e)
+            # --- NOTIFICACIONES ASÍNCRONAS (RF 5.4 / RF 6.2) ---
+            for envio in envios:
+                notificar_cambio_estado_async(
+                    envio["id_envio"],
+                    nuevo_estado="en_ruta",
+                    observacion="Ruta iniciada por el chofer.",
+                )
 
         except ValidationError:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         except Exception as exc:
-            conn.rollback()
-            logger.exception("Error al iniciar hoja de ruta")
-            raise DatabaseQueryError(f"No se pudo iniciar la hoja de ruta: {exc}") from exc
+            if conn:
+                conn.rollback()
+            logger.exception("Error al iniciar hoja de ruta: %s", exc)
+            raise DatabaseQueryError("No se pudo iniciar la hoja de ruta.") from exc
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def actualizar_ubicacion_ruta(
         self,
@@ -177,9 +211,12 @@ class ChoferController:
         if not -90 <= latitud <= 90 or not -180 <= longitud <= 180:
             raise ValidationError(field="ubicacion", reason="Las coordenadas GPS están fuera de rango")
 
-        conn = self.db.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        conn = None
+        cursor = None
         try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
             cursor.execute(
                 """SELECT hr.id_hoja_ruta
                    FROM hojas_de_ruta hr
@@ -208,15 +245,21 @@ class ChoferController:
             )
             conn.commit()
         except ValidationError:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         except Exception as exc:
-            conn.rollback()
-            logger.exception("Error al actualizar ubicación GPS de ruta")
-            raise DatabaseQueryError(f"No se pudo actualizar la ubicación de la ruta: {exc}") from exc
+            if conn:
+                conn.rollback()
+            logger.exception("Error al actualizar ubicación GPS de ruta: %s", exc)
+            raise DatabaseQueryError("No se pudo actualizar la ubicación de la ruta.") from exc
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def registrar_entrega(
         self,
@@ -231,8 +274,6 @@ class ChoferController:
         motivo_fallo: str | None,
     ) -> None:
         """Guarda un POD solo si el envio pertenece a una hoja del chofer."""
-        # Construir el objeto de dominio correcto según el tipo de intento
-        # y delegar la validación al modelo (POO — RF 4.2 / RF 4.5)
         if tipo_intento == "fallido":
             prueba = EntregaFallida(
                 id_intento=None,
@@ -257,12 +298,14 @@ class ChoferController:
                 motivo_fallo=motivo_fallo,
             )
 
-        # La validación de negocio la hace el objeto (método del diagrama de clases)
         prueba.validar_entrega()
 
-        conn = self.db.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        conn = None
+        cursor = None
         try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
             cursor.execute(
                 """SELECT e.estado_actual FROM envios e
                    JOIN hojas_de_ruta hr ON hr.id_hoja_ruta = e.id_hoja_ruta
@@ -306,58 +349,46 @@ class ChoferController:
             self._liberar_vehiculo_si_hoja_completada(cursor, id_hoja_ruta)
             conn.commit()
 
-            # --- NOTIFICACION (RF 5.4) ---
-            try:
-                from app.services.servicio_notificacion import ServicioNotificacion
-                from app.models.cliente import Cliente
-                from app.models.envio import Envio
-                
-                conn_notif = self.db.get_connection()
-                cur_notif = conn_notif.cursor(dictionary=True)
-                
-                cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
-                env_row = cur_notif.fetchone()
-                if env_row:
-                    envio_obj = Envio.from_db_row(env_row)
-                    cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
-                    cli_row = cur_notif.fetchone()
-                    if cli_row:
-                        cli_obj = Cliente.from_db_row(cli_row)
-                        notificador = ServicioNotificacion()
-                        notificador.enviar_alerta_cambio_estado(
-                            envio_obj, cli_obj, nuevo_estado, observacion
-                        )
-                cur_notif.close()
-                conn_notif.close()
-            except Exception as e:
-                logger.warning("Error enviando notificaciones de entrega: %s", e)
+            # --- NOTIFICACION ASÍNCRONA (RF 5.4 / RF 6.2) ---
+            notificar_cambio_estado_async(
+                id_envio,
+                nuevo_estado=nuevo_estado,
+                observacion=observacion,
+            )
 
         except ValidationError:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         except Exception as exc:
-            conn.rollback()
-            logger.exception("Error al registrar prueba de entrega")
-            raise DatabaseQueryError(f"No se pudo registrar la entrega: {exc}") from exc
+            if conn:
+                conn.rollback()
+            logger.exception("Error al registrar prueba de entrega: %s", exc)
+            raise DatabaseQueryError("No se pudo registrar la entrega.") from exc
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def registrar_devolucion(self, id_chofer: int, id_hoja_ruta: int, id_envio: int, motivo: str) -> None:
         """Cambia un envío fallido a devolución y deja trazabilidad."""
-        # Usar EntregaFallida para validar el motivo y generar la observación del historial
         entrega_fallida = EntregaFallida(
             id_intento=None,
             id_envio=id_envio,
             id_hoja_ruta=id_hoja_ruta,
             motivo_fallo=motivo,
         )
-        # procesar_retorno_devolucion() valida y retorna el texto para el historial
         observacion_historial = entrega_fallida.procesar_retorno_devolucion()
 
-        conn = self.db.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        conn = None
+        cursor = None
         try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
             cursor.execute(
                 """SELECT e.estado_actual FROM envios e
                    JOIN hojas_de_ruta hr ON hr.id_hoja_ruta = e.id_hoja_ruta
@@ -380,42 +411,29 @@ class ChoferController:
             self._liberar_vehiculo_si_hoja_completada(cursor, id_hoja_ruta)
             conn.commit()
 
-            # --- NOTIFICACION (RF 5.4) ---
-            try:
-                from app.services.servicio_notificacion import ServicioNotificacion
-                from app.models.cliente import Cliente
-                from app.models.envio import Envio
-                
-                conn_notif = self.db.get_connection()
-                cur_notif = conn_notif.cursor(dictionary=True)
-                
-                cur_notif.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
-                env_row = cur_notif.fetchone()
-                if env_row:
-                    envio_obj = Envio.from_db_row(env_row)
-                    cur_notif.execute("SELECT * FROM clientes WHERE id_cliente = %s", (env_row['id_remitente'],))
-                    cli_row = cur_notif.fetchone()
-                    if cli_row:
-                        cli_obj = Cliente.from_db_row(cli_row)
-                        notificador = ServicioNotificacion()
-                        notificador.enviar_alerta_cambio_estado(
-                            envio_obj, cli_obj, 'devolucion', observacion_historial
-                        )
-                cur_notif.close()
-                conn_notif.close()
-            except Exception as e:
-                logger.warning("Error enviando notificacion de devolucion: %s", e)
+            # --- NOTIFICACION ASÍNCRONA (RF 5.4 / RF 6.2) ---
+            notificar_cambio_estado_async(
+                id_envio,
+                nuevo_estado="devolucion",
+                observacion=observacion_historial,
+            )
 
         except ValidationError:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         except Exception as exc:
-            conn.rollback()
-            logger.exception("Error al registrar devolución")
-            raise DatabaseQueryError(f"No se pudo registrar la devolución: {exc}") from exc
+            if conn:
+                conn.rollback()
+            logger.exception("Error al registrar devolución: %s", exc)
+            raise DatabaseQueryError("No se pudo registrar la devolución.") from exc
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     def _liberar_vehiculo_si_hoja_completada(self, cursor, id_hoja_ruta: int) -> None:
         """RF 6.1: Cierra la hoja de ruta y libera el vehículo cuando todos los envíos finalizaron."""

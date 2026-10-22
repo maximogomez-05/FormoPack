@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <title>{% block title %}FormoPack Express{% endblock %}</title>
   <!-- Favicon corporativo SVG -->
@@ -95,6 +96,49 @@
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+}
+
+// Protección CSRF automática para formularios de chofer
+const csrfMetaChofer = document.querySelector('meta[name="csrf-token"]');
+const csrfTokenChofer = csrfMetaChofer ? csrfMetaChofer.getAttribute('content') : null;
+if (csrfTokenChofer) {
+  document.querySelectorAll("form[method='POST'], form[method='post']").forEach(form => {
+    if (!form.querySelector("input[name='csrf_token']")) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "csrf_token";
+      input.value = csrfTokenChofer;
+      form.appendChild(input);
+    }
+  });
+
+  document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (form && form.method && form.method.toUpperCase() === 'POST') {
+      if (!form.querySelector("input[name='csrf_token']")) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "csrf_token";
+        input.value = csrfTokenChofer;
+        form.appendChild(input);
+      }
+    }
+  }, true);
+
+  const origFetchChofer = window.fetch;
+  window.fetch = function(url, options = {}) {
+    options.headers = options.headers || {};
+    if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
+      if (options.headers instanceof Headers) {
+        if (!options.headers.has('X-CSRFToken')) options.headers.append('X-CSRFToken', csrfTokenChofer);
+      } else if (Array.isArray(options.headers)) {
+        options.headers.push(['X-CSRFToken', csrfTokenChofer]);
+      } else {
+        options.headers['X-CSRFToken'] = csrfTokenChofer;
+      }
+    }
+    return origFetchChofer(url, options);
+  };
 }
 </script>
 </body>
