@@ -97,3 +97,11 @@ class DuplicateError(FormopackBaseError):
     def __init__(self, entity: str = "", identifier: str = ""):
         msg = f"{entity} duplicado: '{identifier}'." if entity else "Registro duplicado."
         super().__init__(msg, code="DUPLICATE_ERROR")
+
+
+class SoporteError(FormopackBaseError):
+    """Rechazo de una operación de soporte con un estado HTTP definido."""
+
+    def __init__(self, message: str, status: int = 400, code: str = "SUPPORT_ERROR"):
+        super().__init__(message, code=code)
+        self.status = status

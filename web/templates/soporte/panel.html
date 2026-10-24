@@ -39,14 +39,14 @@
           {% if chat_activo.nro_guia %} · Guía: <code>{{ chat_activo.nro_guia }}</code>{% endif %}
           · <span class="badge bg-primary">En progreso</span>
         </div>
-        <small style="color:#577e9e;">Recordá: solo podés atender un cliente a la vez. Al terminarla, se eliminará para liberar espacio.</small>
+        <small style="color:#577e9e;">Recordá: solo podés atender un cliente a la vez. Al finalizar, se borran los mensajes y se conserva el registro de atención.</small>
       </div>
     </div>
     <div class="d-flex gap-2">
       <a href="{{ url_for('soporte.ver_chat', id_chat=chat_activo.id_chat) }}" class="btn btn-primary btn-sm">
         <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Ir a mi chat
       </a>
-      <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=chat_activo.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar y eliminar este chat?');" style="margin:0;">
+      <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=chat_activo.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar el chat y borrar sus mensajes?');" style="margin:0;">
         <button type="submit" class="btn btn-outline-danger btn-sm">
           <i class="fa-solid fa-check me-1"></i> Finalizar
         </button>
@@ -247,11 +247,13 @@
               </td>
               <td class="text-end" style="padding-right:18px;">
                 <div class="d-flex justify-content-end gap-2">
+                  {% if c.puede_ver %}
                   <a href="{{ url_for('soporte.ver_chat', id_chat=c.id_chat) }}" class="btn btn-sm {% if es_mio %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-                    <i class="fa-solid fa-comment-dots me-1"></i> {% if es_mio %}Continuar{% else %}Ver{% endif %}
+                    <i class="fa-solid fa-comment-dots me-1"></i> {% if es_mio %}Continuar{% else %}Supervisar{% endif %}
                   </a>
-                  {% if es_mio %}
-                  <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=c.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar y eliminar este chat? Se liberará el espacio en base de datos.');" style="margin:0;">
+                  {% else %}<span class="text-muted">En atención</span>{% endif %}
+                  {% if c.puede_finalizar %}
+                  <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=c.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar el chat y borrar sus mensajes? Se conservará el registro de atención.');" style="margin:0;">
                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Finalizar conversación">
                       <i class="fa-solid fa-xmark"></i>
                     </button>

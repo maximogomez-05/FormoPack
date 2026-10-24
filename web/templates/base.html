@@ -141,7 +141,7 @@
 {% block scripts %}{% endblock %}
 <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
 <script>
-  AOS.init({ duration: 500, once: true, offset: 40 });
+  if (window.AOS) window.AOS.init({ duration: 500, once: true, offset: 40 });
   
   // Auto-dismiss alerts después de 5 segundos
   document.querySelectorAll('.alert').forEach(alert => {

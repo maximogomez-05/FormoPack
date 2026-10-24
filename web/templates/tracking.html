@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="theme-color" content="#102a43">
   <title>Seguimiento de Envíos — FormoPack</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=5) }}">
@@ -598,6 +599,12 @@
   </section>
   {% endif %}
 
+  {% if not envio %}
+  <p style="text-align:center; margin:1.5rem 0;">
+    <button id="contact-support" class="btn btn-support" type="button">Contactar Soporte</button>
+  </p>
+  {% endif %}
+
   <!-- ============================================== -->
   <!-- MODAL / WIDGET DE CHAT DE SOPORTE PARA CLIENTE -->
   <!-- ============================================== -->
@@ -633,7 +640,7 @@
         </div>
         <div>
           <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:3px;">¿Cuál es tu consulta?</label>
-          <textarea id="chat-init-message" class="form-control" rows="3" placeholder="Escribí tu consulta aquí..." required style="width:100%; padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; resize:none;"></textarea>
+          <textarea id="chat-init-message" maxlength="2000" class="form-control" rows="3" placeholder="Escribí tu consulta aquí..." required style="width:100%; padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; resize:none;"></textarea>
         </div>
         <button type="submit" class="btn" style="background:#004481; color:white; font-weight:700; padding:10px; border-radius:6px; font-size:13px; margin-top:4px;">
           <i class="fa-solid fa-paper-plane me-1"></i> Iniciar conversación
@@ -655,7 +662,7 @@
       <div id="client-chat-messages" class="support-chat-body"></div>
       <div class="support-chat-footer">
         <form id="form-client-send">
-          <input type="text" id="client-chat-input" placeholder="Escribí tu respuesta..." autocomplete="off" required>
+          <input type="text" id="client-chat-input" maxlength="2000" placeholder="Escribí tu respuesta..." autocomplete="off" required>
           <button type="submit" aria-label="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
         </form>
       </div>
@@ -676,14 +683,17 @@
     const agentText = document.getElementById('support-agent-text');
     const btnEndChat = document.getElementById('btn-end-chat-client');
 
-    let currentSessionId = sessionStorage.getItem('formopack_chat_session') || null;
+    sessionStorage.removeItem('formopack_chat_session');
+    let chatActivo = sessionStorage.getItem('formopack_chat_activo') === '1';
+    const csrfSoporte = document.querySelector('meta[name="csrf-token"]').content;
+    const headersSoporte = { 'Content-Type': 'application/json', 'X-CSRFToken': csrfSoporte };
     let knownClientMsgIds = new Set();
     let pollInterval = null;
 
     function openSupportModal() {
       if (supportModal) {
         supportModal.classList.add('is-open');
-        if (currentSessionId) {
+        if (chatActivo) {
           showActiveChat();
         }
       }
@@ -712,8 +722,8 @@
         clearInterval(pollInterval);
         pollInterval = null;
       }
-      sessionStorage.removeItem('formopack_chat_session');
-      currentSessionId = null;
+      sessionStorage.removeItem('formopack_chat_activo');
+      chatActivo = false;
       knownClientMsgIds.clear();
       clientChatMessages.innerHTML = '';
       activeScreen.style.display = 'none';
@@ -731,7 +741,7 @@
         try {
           const res = await fetch("/soporte/api/iniciar", {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headersSoporte,
             body: JSON.stringify({
               cliente_nombre: nombre,
               cliente_email: email,
@@ -740,10 +750,12 @@
             })
           });
           const data = await res.json();
-          if (data.ok && data.session_id) {
-            currentSessionId = data.session_id;
-            sessionStorage.setItem('formopack_chat_session', currentSessionId);
+          if (res.ok && data.ok) {
+            chatActivo = true;
+            sessionStorage.setItem('formopack_chat_activo', '1');
             showActiveChat();
+          } else {
+            alert(data.error || 'No se pudo iniciar la conversación.');
           }
         } catch (err) {
           alert('No se pudo conectar con el servidor de soporte.');
@@ -755,29 +767,31 @@
       formClientSend.addEventListener('submit', async (e) => {
         e.preventDefault();
         const text = clientChatInput.value.trim();
-        if (!text || !currentSessionId) return;
+        if (!text || !chatActivo || clientChatInput.disabled) return;
 
-        clientChatInput.value = '';
-        const clientName = document.getElementById('chat-client-name') ? document.getElementById('chat-client-name').value : 'Cliente';
+        clientChatInput.disabled = true;
 
         try {
           const res = await fetch("/soporte/api/enviar", {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headersSoporte,
             body: JSON.stringify({
-              session_id: currentSessionId,
-              mensaje: text,
-              cliente_nombre: clientName
+              mensaje: text
             })
           });
           const data = await res.json();
           if (data.finalizado) {
             handleChatFinalizado();
-          } else {
+          } else if (res.ok && data.ok) {
+            clientChatInput.value = '';
             loadClientMessages();
+          } else {
+            alert(data.error || 'El mensaje no se pudo enviar.');
           }
         } catch (err) {
-          console.error(err);
+          alert('El mensaje no fue confirmado. Revisá la conexión antes de reintentar.');
+        } finally {
+          clientChatInput.disabled = false;
         }
       });
     }
@@ -786,20 +800,24 @@
       btnEndChat.addEventListener('click', async () => {
         if (!confirm('¿Deseás terminar esta conversación? Se cerrará el chat.')) return;
         try {
-          await fetch("/soporte/api/finalizar", {
+          const respuesta = await fetch("/soporte/api/finalizar", {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: currentSessionId })
+            headers: headersSoporte,
+            body: JSON.stringify({})
           });
-        } catch {}
-        resetChatToInit();
+          const resultado = await respuesta.json();
+          if (!respuesta.ok || !resultado.ok) throw new Error(resultado.error || 'No se pudo cerrar la conversación.');
+          resetChatToInit();
+        } catch (error) {
+          alert(error.message || 'No se pudo confirmar el cierre.');
+        }
       });
     }
 
     async function loadClientMessages() {
-      if (!currentSessionId) return;
+      if (!chatActivo) return;
       try {
-        const res = await fetch(`/soporte/api/mensajes?session_id=${encodeURIComponent(currentSessionId)}`);
+        const res = await fetch("/soporte/api/mensajes");
         const data = await res.json();
         if (data.finalizado) {
           handleChatFinalizado();
@@ -807,7 +825,7 @@
         }
 
         if (data.agente) {
-          agentText.innerHTML = `<i class="fa-solid fa-user-check me-1"></i> Atendido por <strong>${data.agente}</strong>`;
+          agentText.innerHTML = `<i class="fa-solid fa-user-check me-1"></i> Atendido por <strong>${escapeHtml(data.agente)}</strong>`;
         } else {
           agentText.innerHTML = `<i class="fa-solid fa-clock me-1"></i> Esperando atención de un operador...`;
         }
@@ -821,10 +839,10 @@
               bubble.className = `client-msg-bubble ${isMe ? 'from-me' : 'from-soporte'}`;
               bubble.innerHTML = `
                 <div style="font-size:10px; font-weight:700; margin-bottom:2px; opacity:0.8;">
-                  ${isMe ? 'Tú' : m.remitente_nombre}
+                  ${isMe ? 'Tú' : escapeHtml(m.remitente_nombre)}
                 </div>
                 <div>${escapeHtml(m.mensaje)}</div>
-                <div class="client-msg-time">${m.fecha_envio || ''}</div>
+                <div class="client-msg-time">${escapeHtml(m.fecha_envio || '')}</div>
               `;
               clientChatMessages.appendChild(bubble);
               clientChatMessages.scrollTop = clientChatMessages.scrollHeight;
@@ -846,7 +864,7 @@
     }
 
     // Si ya había una sesión guardada, abrir silenciosamente
-    if (currentSessionId) {
+    if (chatActivo) {
       loadClientMessages();
     }
   </script>

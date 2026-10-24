@@ -62,9 +62,6 @@ def create_app() -> Flask:
     from web.routes.chofer import chofer_bp
     from web.routes.soporte import soporte_bp
 
-    # Eximir de CSRF APIs públicas de clientes sin sesión/JSON
-    csrf.exempt(soporte_bp)
-
     app.register_blueprint(auth_bp)
     app.register_blueprint(recepcion_bp, url_prefix="/recepcion")
     app.register_blueprint(admin_bp, url_prefix="/admin")
@@ -79,7 +76,7 @@ def create_app() -> Flask:
     @app.route("/service-worker.js")
     def service_worker():
         """Sirve el worker desde la raíz para que controle /chofer."""
-        return send_from_directory(os.path.join(ROOT, "web", "static"), "service-worker.js")
+        return send_from_directory(app.static_folder, "service-worker.js")
 
     from web.security.error_handlers import ManejadorErroresSeguridad
     ManejadorErroresSeguridad().registrar(app)

@@ -1,277 +1,193 @@
-"""Rutas para el sistema de Soporte al Cliente — Chats en vivo.
-Blueprint: soporte_bp
-Accesible tanto para administradores como para recepcionistas, y API pública para clientes en tracking.
-"""
+"""Adaptadores Flask del canal de soporte (RF 5.6)."""
 
-import uuid
-import logging
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, session, flash
-from web.routes.auth import login_required, rol_requerido
+import hashlib
+import hmac
+import secrets
+
+from flask import Blueprint, current_app, render_template, request, jsonify, redirect, url_for, session, flash
+from flask_limiter.util import get_remote_address
+
 from app.controllers.soporte_controller import SoporteController
+from app.models.chat_soporte import ChatSoporte
+from app.utils.exceptions import SoporteError, DatabaseQueryError, DatabaseConnectionError
+from web.routes.auth import login_required, rol_requerido
+from web.extensions import limiter
+from web.security.error_handlers import ManejadorErroresSeguridad
 
 soporte_bp = Blueprint("soporte", __name__)
-logger = logging.getLogger(__name__)
-soporte_ctrl = SoporteController()
 
 
-# ──────────────────────────────────────────
-# Rutas del Staff (Admin y Recepcionista)
-# ──────────────────────────────────────────
+class IdentidadClienteSoporte:
+    CLAVE = "soporte_cliente_token"
+
+    @classmethod
+    def token(cls, crear=False):
+        token = session.get(cls.CLAVE)
+        if not token and crear:
+            # El SID ya es aleatorio. Derivarlo evita duplicar chats si dos
+            # solicitudes de inicio llegan juntas desde el mismo navegador.
+            token = hmac.new(current_app.secret_key.encode("utf-8"),
+                             f"soporte:{session.sid}".encode("utf-8"), hashlib.sha256).hexdigest()
+            session[cls.CLAVE] = token
+        return token
+
+    @classmethod
+    def renovar(cls):
+        session[cls.CLAVE] = secrets.token_hex(32)
+        return session[cls.CLAVE]
+
+    @classmethod
+    def clave_limite(cls):
+        return cls.token() or get_remote_address()
+
+
+class PresentacionSoporte:
+    @staticmethod
+    def datos(campos):
+        if request.is_json:
+            datos = request.get_json(silent=True)
+            if not isinstance(datos, dict):
+                raise SoporteError("Revisá los datos de la solicitud.")
+        else:
+            datos = request.form.to_dict()
+        if set(datos) - set(campos) - {"csrf_token"}:
+            raise SoporteError("Revisá los datos de la solicitud.")
+        return datos
+
+    @staticmethod
+    def mensaje(fila):
+        return {
+            "id_mensaje": fila["id_mensaje"], "remitente_tipo": fila["remitente_tipo"],
+            "remitente_nombre": fila["remitente_nombre"], "mensaje": fila["mensaje"],
+            "fecha_envio": fila["fecha_envio"].strftime("%H:%M"),
+        }
+
+    @classmethod
+    def conversacion(cls, chat, mensajes):
+        cerrado = not chat or ChatSoporte(chat).cerrado
+        return {
+            "ok": True, "finalizado": cerrado,
+            "estado": chat["estado"] if chat else "cerrado",
+            "agente": chat.get("nombre_usuario_atendiendo") if chat else None,
+            "mensajes": [cls.mensaje(m) for m in mensajes] if not cerrado else [],
+        }
+
+
+@soporte_bp.errorhandler(SoporteError)
+def error_soporte(error):
+    if ManejadorErroresSeguridad.espera_json():
+        return jsonify(ok=False, code=error.code, error=error.message, finalizado=error.code == "CHAT_CLOSED"), error.status
+    return render_template("errors/seguridad.html", mensaje=error.message, estado=error.status,
+                           reintentar_url=url_for("soporte.panel")), error.status
+
+
+@soporte_bp.errorhandler(DatabaseConnectionError)
+@soporte_bp.errorhandler(DatabaseQueryError)
+def error_persistencia(error):
+    return error_soporte(SoporteError("Soporte no está disponible. Intentá nuevamente en unos instantes.", 503, "SERVICE_UNAVAILABLE"))
+
 
 @soporte_bp.route("/panel")
 @login_required
 @rol_requerido("administrador", "recepcionista")
 def panel():
-    """Panel principal de gestión de chats de soporte."""
-    datos_chats = soporte_ctrl.listar_chats()
-    chat_activo = soporte_ctrl.agente_tiene_chat_en_progreso(session["usuario_id"])
-
-    return render_template(
-        "soporte/panel.html",
-        sin_atender=datos_chats["sin_atender"],
-        en_progreso=datos_chats["en_progreso"],
-        total=datos_chats["total"],
-        chat_activo=chat_activo,
-    )
+    ctrl = SoporteController()
+    datos = ctrl.listar_chats(session["usuario_id"])
+    return render_template("soporte/panel.html", **datos,
+                           chat_activo=ctrl.agente_tiene_chat_en_progreso(session["usuario_id"]))
 
 
 @soporte_bp.route("/chat/<int:id_chat>")
 @login_required
 @rol_requerido("administrador", "recepcionista")
-def ver_chat(id_chat: int):
-    """Vista detallada de la sala de chat de soporte."""
-    chat = soporte_ctrl.obtener_chat_por_id(id_chat)
-    if not chat:
-        flash("La conversación ya no existe o fue finalizada.", "info")
-        return redirect(url_for("soporte.panel"))
-
-    mensajes = soporte_ctrl.obtener_mensajes(id_chat)
-    chat_activo = soporte_ctrl.agente_tiene_chat_en_progreso(session["usuario_id"])
-
-    es_mi_chat = (chat["id_usuario_atendiendo"] == session["usuario_id"])
-    puede_atender = (chat["estado"] == "sin_atender" and (not chat_activo or chat_activo["id_chat"] == id_chat))
-
+def ver_chat(id_chat):
+    ctrl = SoporteController()
+    chat, mensajes = ctrl.consultar_staff(id_chat, session["usuario_id"])
+    activo = ctrl.agente_tiene_chat_en_progreso(session["usuario_id"])
+    politica = ChatSoporte(chat)
     return render_template(
-        "soporte/chat.html",
-        chat=chat,
-        mensajes=mensajes,
-        es_mi_chat=es_mi_chat,
-        puede_atender=puede_atender,
-        chat_activo=chat_activo,
+        "soporte/chat.html", chat=chat, mensajes=mensajes, chat_activo=activo,
+        es_mi_chat=chat["id_usuario_atendiendo"] == session["usuario_id"],
+        puede_atender=chat["estado"] == "sin_atender" and not activo,
+        puede_finalizar=politica.puede_finalizar(session["usuario_id"], session["rol"]),
     )
 
 
 @soporte_bp.route("/chat/<int:id_chat>/tomar", methods=["POST"])
 @login_required
 @rol_requerido("administrador", "recepcionista")
-def tomar_chat(id_chat: int):
-    """Asigna la conversación al operador actual si cumple las reglas."""
-    ok, mensaje = soporte_ctrl.tomar_chat(
-        id_chat=id_chat,
-        id_usuario=session["usuario_id"],
-        nombre_usuario=session.get("nombre", "Operador"),
-    )
-
-    if ok:
-        flash("Has tomado la conversación. Ahora podés responder al cliente.", "success")
-        return redirect(url_for("soporte.ver_chat", id_chat=id_chat))
-    else:
-        flash(mensaje, "warning")
-        return redirect(url_for("soporte.panel"))
+def tomar_chat(id_chat):
+    SoporteController().tomar_chat(id_chat, session["usuario_id"])
+    flash("Conversación asignada. Ya podés responder.", "success")
+    return redirect(url_for("soporte.ver_chat", id_chat=id_chat))
 
 
 @soporte_bp.route("/chat/<int:id_chat>/mensaje", methods=["POST"])
 @login_required
 @rol_requerido("administrador", "recepcionista")
-def enviar_mensaje_staff(id_chat: int):
-    """Envía un mensaje como operador de soporte."""
-    texto = request.form.get("mensaje") or (request.json.get("mensaje") if request.is_json else "")
-    if not texto or not texto.strip():
-        if request.is_json:
-            return jsonify({"ok": False, "error": "El mensaje no puede estar vacío"}), 400
-        return redirect(url_for("soporte.ver_chat", id_chat=id_chat))
-
-    chat = soporte_ctrl.obtener_chat_por_id(id_chat)
-    if not chat:
-        if request.is_json:
-            return jsonify({"ok": False, "error": "El chat fue finalizado"}), 404
-        flash("La conversación ya fue finalizada.", "info")
-        return redirect(url_for("soporte.panel"))
-
-    # Si el chat está sin atender y este usuario no tiene otro chat, lo toma automáticamente
-    if chat["estado"] == "sin_atender":
-        ok, msg = soporte_ctrl.tomar_chat(id_chat, session["usuario_id"], session.get("nombre", "Operador"))
-        if not ok:
-            if request.is_json:
-                return jsonify({"ok": False, "error": msg}), 403
-            flash(msg, "warning")
-            return redirect(url_for("soporte.ver_chat", id_chat=id_chat))
-
-    nuevo_msg = soporte_ctrl.enviar_mensaje(
-        id_chat=id_chat,
-        remitente_tipo="soporte",
-        remitente_nombre=session.get("nombre", "Operador"),
-        mensaje=texto.strip(),
-    )
-
-    if request.is_json:
-        return jsonify({
-            "ok": True,
-            "mensaje": {
-                "id_mensaje": nuevo_msg["id_mensaje"],
-                "remitente_tipo": nuevo_msg["remitente_tipo"],
-                "remitente_nombre": nuevo_msg["remitente_nombre"],
-                "mensaje": nuevo_msg["mensaje"],
-                "fecha_envio": nuevo_msg["fecha_envio"].strftime("%H:%M") if hasattr(nuevo_msg["fecha_envio"], "strftime") else str(nuevo_msg["fecha_envio"]),
-            } if nuevo_msg else None
-        })
-
+def enviar_mensaje_staff(id_chat):
+    datos = PresentacionSoporte.datos({"mensaje"})
+    mensaje = SoporteController().enviar_staff(id_chat, session["usuario_id"], datos.get("mensaje"))
+    if ManejadorErroresSeguridad.espera_json():
+        return jsonify(ok=True, mensaje=PresentacionSoporte.mensaje(mensaje))
     return redirect(url_for("soporte.ver_chat", id_chat=id_chat))
 
 
 @soporte_bp.route("/chat/<int:id_chat>/finalizar", methods=["POST"])
 @login_required
 @rol_requerido("administrador", "recepcionista")
-def finalizar_chat_staff(id_chat: int):
-    """Finaliza y elimina la conversación de la base de datos."""
-    soporte_ctrl.finalizar_chat(id_chat)
-    flash("Conversación finalizada y eliminada para liberar espacio.", "success")
+def finalizar_chat_staff(id_chat):
+    SoporteController().finalizar_staff(id_chat, session["usuario_id"])
+    if request.is_json:
+        return jsonify(ok=True, finalizado=True)
+    flash("Conversación finalizada. Los mensajes fueron eliminados.", "success")
     return redirect(url_for("soporte.panel"))
 
 
 @soporte_bp.route("/api/chat/<int:id_chat>/mensajes")
 @login_required
 @rol_requerido("administrador", "recepcionista")
-def api_chat_mensajes_staff(id_chat: int):
-    """Polling de mensajes en tiempo real para el panel del operador."""
-    chat = soporte_ctrl.obtener_chat_por_id(id_chat)
-    if not chat:
-        return jsonify({"ok": True, "finalizado": True, "mensajes": []})
+def api_chat_mensajes_staff(id_chat):
+    chat, mensajes = SoporteController().consultar_staff(id_chat, session["usuario_id"])
+    return jsonify(PresentacionSoporte.conversacion(chat, mensajes))
 
-    raw_mensajes = soporte_ctrl.obtener_mensajes(id_chat)
-    mensajes = []
-    for m in raw_mensajes:
-        fecha_str = m["fecha_envio"].strftime("%H:%M") if hasattr(m["fecha_envio"], "strftime") else str(m["fecha_envio"])
-        mensajes.append({
-            "id_mensaje": m["id_mensaje"],
-            "remitente_tipo": m["remitente_tipo"],
-            "remitente_nombre": m["remitente_nombre"],
-            "mensaje": m["mensaje"],
-            "fecha_envio": fecha_str,
-        })
-
-    return jsonify({
-        "ok": True,
-        "finalizado": False,
-        "estado": chat["estado"],
-        "id_usuario_atendiendo": chat["id_usuario_atendiendo"],
-        "nombre_usuario_atendiendo": chat["nombre_usuario_atendiendo"],
-        "mensajes": mensajes,
-    })
-
-
-# ──────────────────────────────────────────
-# API Pública para el Cliente (Tracking / Web)
-# ──────────────────────────────────────────
 
 @soporte_bp.route("/api/iniciar", methods=["POST"])
+@limiter.limit("5 per minute")
 def api_cliente_iniciar():
-    """Inicia o recupera una conversación de soporte para el cliente."""
-    data = request.get_json(silent=True) or request.form
-    session_id = data.get("session_id") or str(uuid.uuid4())
-    cliente_nombre = data.get("cliente_nombre") or "Cliente"
-    nro_guia = data.get("nro_guia") or None
-    cliente_email = data.get("cliente_email") or None
-    mensaje_inicial = data.get("mensaje") or None
-
-    chat = soporte_ctrl.obtener_o_crear_chat(
-        session_id=session_id,
-        cliente_nombre=cliente_nombre,
-        nro_guia=nro_guia,
-        cliente_email=cliente_email,
-        mensaje_inicial=mensaje_inicial,
-    )
-
-    return jsonify({
-        "ok": True,
-        "session_id": chat["session_id"],
-        "id_chat": chat["id_chat"],
-        "estado": chat["estado"],
-        "agente": chat["nombre_usuario_atendiendo"],
-    })
+    datos = PresentacionSoporte.datos({"cliente_nombre", "cliente_email", "nro_guia", "mensaje"})
+    ctrl = SoporteController()
+    argumentos = {"nombre": datos.get("cliente_nombre"), "email": datos.get("cliente_email"),
+                  "guia": datos.get("nro_guia"), "mensaje": datos.get("mensaje")}
+    try:
+        chat = ctrl.iniciar_chat(IdentidadClienteSoporte.token(True), **argumentos)
+    except SoporteError as error:
+        if error.code != "CHAT_CLOSED":
+            raise
+        chat = ctrl.iniciar_chat(IdentidadClienteSoporte.renovar(), **argumentos)
+    return jsonify(ok=True, id_chat=chat["id_chat"], estado=chat["estado"], agente=chat["nombre_usuario_atendiendo"])
 
 
-@soporte_bp.route("/api/mensajes", methods=["GET"])
+@soporte_bp.route("/api/mensajes")
+@limiter.limit("60 per minute", key_func=IdentidadClienteSoporte.clave_limite)
 def api_cliente_mensajes():
-    """Obtiene los mensajes del chat del cliente mediante su session_id."""
-    session_id = request.args.get("session_id")
-    if not session_id:
-        return jsonify({"ok": False, "error": "Falta session_id"}), 400
-
-    chat = soporte_ctrl.obtener_chat_por_session(session_id)
-    if not chat:
-        # Si ya no existe en la BD, fue finalizado y eliminado por soporte
-        return jsonify({"ok": True, "finalizado": True, "mensajes": []})
-
-    raw_mensajes = soporte_ctrl.obtener_mensajes(chat["id_chat"])
-    mensajes = []
-    for m in raw_mensajes:
-        fecha_str = m["fecha_envio"].strftime("%H:%M") if hasattr(m["fecha_envio"], "strftime") else str(m["fecha_envio"])
-        mensajes.append({
-            "id_mensaje": m["id_mensaje"],
-            "remitente_tipo": m["remitente_tipo"],
-            "remitente_nombre": m["remitente_nombre"],
-            "mensaje": m["mensaje"],
-            "fecha_envio": fecha_str,
-        })
-
-    return jsonify({
-        "ok": True,
-        "finalizado": False,
-        "estado": chat["estado"],
-        "agente": chat["nombre_usuario_atendiendo"],
-        "mensajes": mensajes,
-    })
+    if request.args:
+        raise SoporteError("Revisá los datos de la solicitud.")
+    chat, mensajes = SoporteController().consultar_cliente(IdentidadClienteSoporte.token())
+    return jsonify(PresentacionSoporte.conversacion(chat, mensajes))
 
 
 @soporte_bp.route("/api/enviar", methods=["POST"])
+@limiter.limit("30 per minute", key_func=IdentidadClienteSoporte.clave_limite)
 def api_cliente_enviar():
-    """Envía un mensaje desde la interfaz del cliente."""
-    data = request.get_json(silent=True) or request.form
-    session_id = data.get("session_id")
-    texto = data.get("mensaje")
-    cliente_nombre = data.get("cliente_nombre") or "Cliente"
-
-    if not session_id or not texto or not texto.strip():
-        return jsonify({"ok": False, "error": "Datos incompletos"}), 400
-
-    chat = soporte_ctrl.obtener_chat_por_session(session_id)
-    if not chat:
-        return jsonify({"ok": False, "finalizado": True, "error": "La conversación ha finalizado."}), 404
-
-    nuevo_msg = soporte_ctrl.enviar_mensaje(
-        id_chat=chat["id_chat"],
-        remitente_tipo="cliente",
-        remitente_nombre=cliente_nombre,
-        mensaje=texto.strip(),
-    )
-
-    return jsonify({
-        "ok": True,
-        "id_mensaje": nuevo_msg["id_mensaje"] if nuevo_msg else None,
-    })
+    datos = PresentacionSoporte.datos({"mensaje"})
+    mensaje = SoporteController().enviar_cliente(IdentidadClienteSoporte.token(), datos.get("mensaje"))
+    return jsonify(ok=True, id_mensaje=mensaje["id_mensaje"])
 
 
 @soporte_bp.route("/api/finalizar", methods=["POST"])
+@limiter.limit("10 per minute", key_func=IdentidadClienteSoporte.clave_limite)
 def api_cliente_finalizar():
-    """El cliente decide terminar su conversación."""
-    data = request.get_json(silent=True) or request.form
-    session_id = data.get("session_id")
-    if not session_id:
-        return jsonify({"ok": False, "error": "Falta session_id"}), 400
-
-    chat = soporte_ctrl.obtener_chat_por_session(session_id)
-    if chat:
-        soporte_ctrl.finalizar_chat(chat["id_chat"])
-
-    return jsonify({"ok": True, "mensaje": "Conversación finalizada y eliminada."})
+    PresentacionSoporte.datos(set())
+    SoporteController().finalizar_cliente(IdentidadClienteSoporte.token())
+    return jsonify(ok=True, finalizado=True)

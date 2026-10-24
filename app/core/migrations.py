@@ -63,6 +63,12 @@ class MigrationManager:
                     continue
 
                 logger.info("Aplicando migración: %s...", version)
+                if version == "006_soporte_exclusivo":
+                    cur.execute("""SELECT id_usuario_atendiendo FROM chats_soporte
+                        WHERE estado = 'en_progreso' AND id_usuario_atendiendo IS NOT NULL
+                        GROUP BY id_usuario_atendiendo HAVING COUNT(*) > 1""")
+                    if cur.fetchall():
+                        raise ValueError("Hay operadores con varios chats activos. Resolver las asignaciones antes de migrar soporte.")
                 contenido = archivo.read_text(encoding="utf-8")
                 # Dividir sentencias respetando delimitadores básicos
                 sentencias = [s.strip() for s in contenido.split(";") if s.strip()]

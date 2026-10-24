@@ -20,7 +20,8 @@ class ManejadorErroresSeguridad:
     @staticmethod
     def espera_json() -> bool:
         return (
-            request.is_json
+            request.path.startswith("/soporte/api/")
+            or request.is_json
             or request.headers.get("X-Offline-Sync") == "1"
             or request.headers.get("X-Requested-With") == "XMLHttpRequest"
             or request.accept_mimetypes.best == "application/json"

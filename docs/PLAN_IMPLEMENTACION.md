@@ -70,12 +70,32 @@ con base real desechable y pruebas simultáneas. La migración 005 se aplicó a
 la base local después de generar, restaurar y comprobar un respaldo en una
 instancia aislada. Ver [actualización de seguridad](SEGURIDAD_ACCESO.md).
 
+### Incremento 1C Soporte exclusivo implementado y probado
+
+- [x] Encapsular permisos y validación en `ChatSoporte` y `MensajeSoporte`,
+  con transacciones coordinadas por `SoporteController` y rutas de presentación.
+- [x] Garantizar un operador por chat y un chat activo por operador, con bloqueos
+  y una restricción única en la base. Probar ambas carreras concurrentes.
+- [x] Responder únicamente como operador asignado; permitir supervisión y
+  cierre administrativo, sin suplantar al responsable de la conversación.
+- [x] Conservar el registro de atención cerrado y purgar sus mensajes en una
+  sola transacción, conforme a RF 5.6 y su descripción de secuencia.
+- [x] Ligar el chat público a la sesión del servidor; eliminar el token de
+  URLs, respuestas y almacenamiento JavaScript. Proteger todos los POST con CSRF.
+- [x] Validar entradas, limitar solicitudes públicas y conservar el texto
+  redactado cuando falla el envío. Acceder al soporte sin una guía previa.
+- [x] Retirar la creación de tablas del controlador y versionar el esquema en 006.
+
+Validación acumulada de esta selección: **173 pruebas aprobadas y dos
+deseleccionadas**, incluidas integración y concurrencia en MariaDB 10.4 y un
+flujo completo en Chrome. No representa la aceptación de todos los RF.
+La migración 006 se aplicó a la base local tras restaurar y cotejar las 19 tablas
+de un respaldo aislado. Detalles y cambios para los diagramas: [soporte](SOPORTE.md).
+
 ### Pendientes de seguridad
 
 - [ ] Evaluar diferencias temporales de recuperación y compartir el límite
   por IP entre procesos; programar limpieza de registros sin actividad.
-- [ ] Garantizar exclusividad del chat en servidor y en solicitudes concurrentes;
-  definir quién puede responder, supervisar y finalizar cada conversación.
 - [ ] Aplicar las excepciones CSRF solamente a endpoints que lo necesiten.
 - [ ] Revisar acceso a evidencias, límites de entradas públicas y datos expuestos.
 

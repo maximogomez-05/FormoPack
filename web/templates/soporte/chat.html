@@ -118,6 +118,8 @@
           <strong style="font-size:15px; color:#0f172a;">{{ chat.cliente_nombre }}</strong>
           {% if chat.estado == 'sin_atender' %}
           <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Sin atender</span>
+          {% elif chat.estado == 'cerrado' %}
+          <span class="badge bg-secondary">Finalizado</span>
           {% else %}
           <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> En progreso: {{ chat.nombre_usuario_atendiendo or 'Operador' }}</span>
           {% endif %}
@@ -146,12 +148,14 @@
       </form>
       {% endif %}
 
-      <!-- Botón para finalizar la conversación y eliminarla -->
-      <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=chat.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar y eliminar esta conversación? Al hacerlo, se cerrará y se liberará espacio en la base de datos.');" style="margin:0;">
-        <button type="submit" class="btn btn-sm btn-danger" title="Finalizar y eliminar chat">
+      {% if puede_finalizar and chat.estado != 'cerrado' %}
+      <!-- Cierre autorizado y purga de mensajes -->
+      <form method="POST" action="{{ url_for('soporte.finalizar_chat_staff', id_chat=chat.id_chat) }}" onsubmit="return confirm('¿Confirmás finalizar el chat y borrar sus mensajes? Se conservará el registro de atención.');" style="margin:0;">
+        <button type="submit" class="btn btn-sm btn-danger" title="Finalizar conversación">
           <i class="fa-solid fa-check-circle me-1"></i> Finalizar conversación
         </button>
       </form>
+      {% endif %}
     </div>
   </header>
 
@@ -184,7 +188,9 @@
 
   <!-- Pie de formulario para redactar respuesta -->
   <footer class="chat-room-footer">
-    {% if chat.estado == 'en_progreso' and not es_mi_chat %}
+    {% if chat.estado == 'cerrado' %}
+    <p>La conversación fue finalizada.</p>
+    {% elif chat.estado == 'en_progreso' and not es_mi_chat %}
     <div class="alert alert-warning mb-0 py-2 text-center" style="font-size:13px;">
       <i class="fa-solid fa-lock me-1"></i> Este chat está siendo atendido actualmente por <strong>{{ chat.nombre_usuario_atendiendo }}</strong>. Un solo operador puede responder a la vez.
     </div>
@@ -194,7 +200,7 @@
     </div>
     {% else %}
     <form id="form-send-message">
-      <textarea id="input-message" placeholder="Escribí tu mensaje aquí... (Presioná Enter para enviar, Shift+Enter para salto de línea)" required></textarea>
+      <textarea id="input-message" maxlength="2000" placeholder="Escribí tu mensaje aquí... (Presioná Enter para enviar, Shift+Enter para salto de línea)" required></textarea>
       <button type="submit" class="btn btn-primary" id="btn-submit" style="height:48px; padding:0 20px; font-weight:600;">
         <i class="fa-solid fa-paper-plane me-1"></i> Enviar
       </button>
@@ -229,10 +235,9 @@
     formSend.addEventListener('submit', async (e) => {
       e.preventDefault();
       const texto = inputMessage.value.trim();
-      if (!texto) return;
+      if (!texto || inputMessage.disabled) return;
 
-      inputMessage.value = '';
-      inputMessage.focus();
+      inputMessage.disabled = true;
 
       try {
         const response = await fetch("{{ url_for('soporte.enviar_mensaje_staff', id_chat=chat.id_chat) }}", {
@@ -244,14 +249,17 @@
           body: JSON.stringify({ mensaje: texto })
         });
         const res = await response.json();
-        if (res.ok && res.mensaje) {
+        if (response.ok && res.ok && res.mensaje) {
+          inputMessage.value = '';
           appendMessage(res.mensaje);
         } else if (!res.ok) {
           alert(res.error || 'Error al enviar mensaje');
-          window.location.reload();
         }
       } catch (err) {
-        console.error('Error enviando mensaje:', err);
+        alert('El mensaje no fue confirmado. Revisá la conexión antes de reintentar.');
+      } finally {
+        inputMessage.disabled = false;
+        inputMessage.focus();
       }
     });
   }
@@ -289,8 +297,12 @@
     try {
       const resp = await fetch("{{ url_for('soporte.api_chat_mensajes_staff', id_chat=chat.id_chat) }}");
       const data = await resp.json();
+      if (!resp.ok) {
+        window.location.href = "{{ url_for('soporte.panel') }}";
+        return;
+      }
       if (data.finalizado) {
-        alert('Esta conversación ha finalizado o fue eliminada.');
+        alert('Esta conversación ha finalizado.');
         window.location.href = "{{ url_for('soporte.panel') }}";
         return;
       }

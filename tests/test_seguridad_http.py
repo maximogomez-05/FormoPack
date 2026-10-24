@@ -6,16 +6,14 @@ import pytest
 
 from app.core.database import DatabaseManager
 from app.controllers.auth_controller import AuthController
-from app.controllers.soporte_controller import SoporteController
 from web.app import create_app
 from web.extensions import limiter
 
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
-    # create_app importa soporte; impedir incluso su inicialización de tablas.
+    # Aislar cualquier acceso de las rutas a la base configurada.
     monkeypatch.setattr(DatabaseManager, "get_instance", MagicMock(return_value=MagicMock()))
-    monkeypatch.setattr(SoporteController, "inicializar_tablas", lambda self: None)
     monkeypatch.setattr("web.app.ROOT", str(tmp_path))
     app = create_app()
     app.config.update(TESTING=True, SECRET_KEY="test-only-security-key", SESSION_COOKIE_SECURE=False)

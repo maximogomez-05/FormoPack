@@ -588,7 +588,7 @@
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
     <script>
         // Init AOS
-        AOS.init({ duration: 700, once: true });
+        if (window.AOS) window.AOS.init({ duration: 700, once: true });
 
         // Set Year
         document.getElementById('year').textContent = new Date().getFullYear();

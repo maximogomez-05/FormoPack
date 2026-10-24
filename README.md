@@ -15,6 +15,11 @@ un respaldo de la base, ejecutar `py -m app.core.migrations --desde 005` desde
 la raíz del proyecto. No volver a inicializar una base de trabajo como mecanismo
 de actualización.
 
+La actualización también incluye [soporte exclusivo y cierre de chats](docs/SOPORTE.md).
+Si la migración 005 ya estaba aplicada, ejecutar `py -m app.core.migrations --desde 006`
+con respaldo previo y la aplicación detenida. Las migraciones se ejecutan fuera
+del arranque web.
+
 **FormoPack Express** es un Sistema de Gestión Logística integral diseñado para automatizar el registro, cotización, seguimiento y entrega de encomiendas. El objetivo principal es erradicar el uso de papel y planillas manuales, unificando la administración en mostrador, la logística (armado de hojas de ruta) y la operación en calle mediante una aplicación web *Mobile-First* para los choferes.
 
 ## 🏗️ Arquitectura y Tecnologías
