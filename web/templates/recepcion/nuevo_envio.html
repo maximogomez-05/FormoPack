@@ -16,7 +16,7 @@
           <input type="text" name="rem_dni" id="rem_dni" class="form-control"
                  placeholder="Solo números, sin puntos" required
                  maxlength="15" minlength="7"
-                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
+                 pattern="[0-9]{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
@@ -24,7 +24,7 @@
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
         <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required
                maxlength="100" minlength="3"
-               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
+               pattern="[\p{L} .’\x27\-]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
@@ -47,7 +47,7 @@
           <input type="text" name="dest_dni" id="dest_dni" class="form-control"
                  placeholder="Solo números, sin puntos" required
                  maxlength="15" minlength="7"
-                 pattern="\d{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
+                 pattern="[0-9]{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
           <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
       </div>
@@ -55,7 +55,7 @@
         <label class="form-label">Razón Social / Nombre Completo (*)</label>
         <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required
                maxlength="100" minlength="3"
-               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s\-'\.]+" title="Solo letras y espacios">
+               pattern="[\p{L} .’\x27\-]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono de Contacto (*)</label>
@@ -86,7 +86,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Dirección Exacta de Entrega (*)</label>
-        <input type="text" name="direccion_destino" class="form-control" required maxlength="200" minlength="5" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
+        <input type="text" name="direccion_destino" class="form-control" required maxlength="200" minlength="3" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -111,7 +111,7 @@
       </div>
       <div class="form-group">
         <label class="form-label" id="lbl_valor_declarado">Valor Declarado de la Mercadería ($)</label>
-        <input type="number" name="valor_declarado" id="valor_declarado" class="form-control" min="0" max="9999999" step="0.01" placeholder="0.00" oninput="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
+        <input type="number" name="valor_declarado" id="valor_declarado" class="form-control" min="0" max="9999999999.99" step="0.01" placeholder="0.00" oninput="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
         <div id="seguro-helper" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:4px;"></div>
       </div>
     </div>
@@ -131,15 +131,15 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Peso Real (kg) (*)</label>
-              <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" step="0.01" required oninput="recalcularCotizacionEnVivo();">
+              <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
             </div>
             <div class="form-group">
               <label class="form-label">Peso Vol. (kg)</label>
-              <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
+              <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-            <input type="checkbox" name="es_fragil[]" value="on" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
+            <input type="checkbox" name="es_fragil[]" value="0" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
             <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
           </label>
         </div>
@@ -175,6 +175,7 @@
 let nb = 1;
 function agregarBulto() {
   nb++;
+  if (document.querySelectorAll('.bulto-item').length >= 100) { alert('Se admiten hasta 100 bultos por envío.'); return; }
   const c = document.getElementById('bultos-form');
   const d = document.createElement('div');
   d.className = 'bulto-item';
@@ -190,15 +191,15 @@ function agregarBulto() {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Peso Real (kg) (*)</label>
-        <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" step="0.01" required oninput="recalcularCotizacionEnVivo();">
+        <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
       </div>
       <div class="form-group">
         <label class="form-label">Peso Vol. (kg)</label>
-        <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
+        <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
       </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
-      <input type="checkbox" name="es_fragil[]" value="on" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
+      <input type="checkbox" name="es_fragil[]" value="0" class="es-fragil" onchange="recalcularCotizacionEnVivo();">
       <span style="font-size:12px;"><i class="fa-solid fa-wine-glass" style="color:var(--warning);"></i> Requiere manejo frágil (+10%)</span>
     </label>`;
   c.appendChild(d);
@@ -245,6 +246,7 @@ function actualizarSeguroInfo() {
 
 let debounceTimer = null;
 function recalcularCotizacionEnVivo() {
+  document.querySelectorAll('.bulto-item .es-fragil').forEach((input, indice) => { input.value = String(indice); });
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
     const locSel = document.getElementById('id_localidad_destino');
@@ -280,7 +282,7 @@ function recalcularCotizacionEnVivo() {
     const valDec = parseFloat(document.getElementById('valor_declarado').value || 0);
 
     try {
-      const resp = await fetch('/cotizador/calcular', {
+      const resp = await fetch('{{ url_for("recepcion.calcular_cotizacion") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -291,8 +293,12 @@ function recalcularCotizacionEnVivo() {
         }),
       });
 
-      if (!resp.ok) return;
       const data = await resp.json();
+      if (!resp.ok) {
+        document.getElementById('live-desglose').textContent = data.error || 'No se pudo actualizar la cotización.';
+        document.getElementById('live-loc-badge').style.display = 'none';
+        return;
+      }
 
       let html = `<div style="margin-bottom:8px;">`;
       data.detalle_bultos.forEach(b => {
@@ -408,6 +414,25 @@ async function buscarCliente(prefix) {
   recalcularCotizacionEnVivo();
 })();
 
+// Restaurar el formulario tras validaciones rechazadas sin perder los bultos.
+const datosRechazados = {{ request.form.to_dict(flat=False)|tojson }};
+if (Object.keys(datosRechazados).length) {
+  for (const [nombre, valores] of Object.entries(datosRechazados)) {
+    if (nombre.endsWith('[]') || nombre === 'csrf_token') continue;
+    const input = document.getElementsByName(nombre)[0];
+    if (input) input.value = valores[0];
+  }
+  const pesos = datosRechazados['peso_real[]'] || [];
+  for (let i = document.querySelectorAll('.bulto-item').length; i < Math.min(pesos.length, 100); i++) agregarBulto();
+  document.querySelectorAll('.bulto-item').forEach((item, i) => {
+    item.querySelector('.peso-real').value = pesos[i] || '';
+    item.querySelector('.peso-vol').value = (datosRechazados['peso_volumetrico[]'] || [])[i] || '0';
+    item.querySelector('.es-fragil').checked = (datosRechazados['es_fragil[]'] || []).includes(String(i));
+  });
+  actualizarSeguroInfo();
+  recalcularCotizacionEnVivo();
+}
+
 // Advertencia de cambios sin guardar (Data Loss Prevention)
 let formChanged = false;
 const formEnvio = document.getElementById('form-envio');
@@ -420,6 +445,7 @@ if (formEnvio) {
 
   // Al enviar el formulario, quitar la advertencia
   formEnvio.addEventListener('submit', () => {
+    document.querySelectorAll('.bulto-item .es-fragil').forEach((input, indice) => { input.value = String(indice); });
     formChanged = false;
   });
 

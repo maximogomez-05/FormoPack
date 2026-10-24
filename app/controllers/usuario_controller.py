@@ -25,10 +25,11 @@ class UsuarioController:
                 conn.close()
 
     def crear_usuario(self, nombre: str, email: str, tipo_usuario: str, password: str):
-        if not nombre or not nombre.strip():
-            raise ValidationError(field="nombre", reason="No puede estar vacío")
-        if not email or "@" not in email or "." not in email:
-            raise ValidationError(field="email", reason="Formato inválido")
+        from app.services.validacion_entrada import ValidacionEntrada as V
+        nombre = V.nombre(nombre)
+        email = V.email(email)
+        if not email:
+            raise ValidationError("email", "El correo es obligatorio")
         if tipo_usuario not in ('administrador', 'recepcionista', 'chofer'):
             raise ValidationError(field="tipo_usuario", reason="Tipo inválido")
         

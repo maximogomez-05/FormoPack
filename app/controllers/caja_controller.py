@@ -1,6 +1,8 @@
 """Controlador de Turnos de Caja — RF 2.6."""
 
 import logging
+from contextlib import contextmanager
+from app.services.validacion_entrada import ValidacionEntrada as V
 from typing import Optional
 from datetime import datetime
 
@@ -26,121 +28,73 @@ class CajaController:
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
 
+    @contextmanager
+    def _transaccion(self):
+        conn, cur = None, None
+        try:
+            conn = self._db.get_connection()
+            cur = conn.cursor(dictionary=True)
+            yield cur
+            conn.commit()
+        except (TurnoCajaError, ValidationError):
+            if conn:
+                conn.rollback()
+            raise
+        except Exception as exc:
+            if conn:
+                conn.rollback()
+            raise DatabaseQueryError("No se pudo completar la operación de caja") from exc
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    @staticmethod
+    def _operador(cur, id_usuario):
+        cur.execute("SELECT activo, tipo_usuario FROM usuarios WHERE id_usuario=%s FOR UPDATE", (id_usuario,))
+        usuario = cur.fetchone()
+        if not usuario or not usuario["activo"] or usuario["tipo_usuario"] not in {"administrador", "recepcionista"}:
+            raise TurnoCajaError("La cuenta no está habilitada para operar una caja.")
+
     def abrir_turno(self, id_recepcionista: int, saldo_inicial: float = 0.0) -> TurnoCaja:
-        """Abre un nuevo turno de caja para una recepcionista.
+        id_recepcionista = V.entero(id_recepcionista, "id_recepcionista")
+        saldo_inicial = V.decimal(saldo_inicial, "saldo_inicial")
+        with self._transaccion() as cur:
+            # El bloqueo del usuario serializa aperturas simultáneas de su caja.
+            self._operador(cur, id_recepcionista)
+            cur.execute("SELECT id_turno FROM turnos_caja WHERE id_recepcionista=%s AND estado_caja='abierto' FOR UPDATE", (id_recepcionista,))
+            if cur.fetchall():
+                raise TurnoCajaError("Ya tenés un turno abierto. Cerralo antes de abrir otro.")
+            cur.execute("INSERT INTO turnos_caja (id_recepcionista, saldo_inicial, estado_caja) VALUES (%s,%s,'abierto')", (id_recepcionista, saldo_inicial))
+            return TurnoCaja(cur.lastrowid, id_recepcionista, saldo_inicial=saldo_inicial)
 
-        Args:
-            id_recepcionista: ID del usuario recepcionista.
-            saldo_inicial: Saldo inicial en efectivo de la caja.
-
-        Returns:
-            Instancia de TurnoCaja creada.
-
-        Raises:
-            TurnoCajaError: Si la recepcionista ya tiene un turno abierto.
-        """
-        # Verificar que no tenga un turno abierto
-        turno_abierto = self._obtener_turno_abierto(id_recepcionista)
-        if turno_abierto:
-            raise TurnoCajaError(
-                f"La recepcionista #{id_recepcionista} ya tiene un turno abierto (#{turno_abierto.id_turno})."
-            )
-
-        sql = """
-            INSERT INTO turnos_caja (id_recepcionista, saldo_inicial, estado_caja)
-            VALUES (%s, %s, 'abierto')
-        """
-        conn = None
-        try:
-            conn = self._db.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(sql, (id_recepcionista, saldo_inicial))
-            conn.commit()
-            id_turno = cursor.lastrowid
-            cursor.close()
-
-            turno = TurnoCaja(
-                id_turno=id_turno,
-                id_recepcionista=id_recepcionista,
-                saldo_inicial=saldo_inicial,
-            )
-            logger.info("Turno de caja #%d abierto por recepcionista #%d", id_turno, id_recepcionista)
-            return turno
-
-        except TurnoCajaError:
-            raise
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            raise DatabaseQueryError(f"Error al abrir turno de caja: {e}") from e
-        finally:
-            if conn:
-                conn.close()
-
-    def cerrar_turno(self, id_turno: int) -> dict:
-        """Cierra un turno de caja y genera el resumen de conciliación.
-
-        Args:
-            id_turno: ID del turno a cerrar.
-
-        Returns:
-            Diccionario con el resumen del cierre de caja.
-
-        Raises:
-            TurnoCajaError: Si el turno no existe o ya está cerrado.
-        """
-        turno = self._obtener_turno_por_id(id_turno)
-        if not turno:
-            raise TurnoCajaError(f"Turno de caja #{id_turno} no encontrado.")
-        if turno.estado_caja == "cerrado":
-            raise TurnoCajaError(f"El turno #{id_turno} ya esta cerrado.")
-
-        # Obtener totales reales de la BD
-        totales = self._calcular_totales_turno(id_turno)
-
-        sql = """
-            UPDATE turnos_caja
-            SET estado_caja = 'cerrado',
-                fecha_cierre = NOW(),
-                ingresos_efectivo = %s,
-                ingresos_digitales = %s
-            WHERE id_turno = %s
-        """
-        conn = None
-        try:
-            conn = self._db.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(sql, (
-                totales["total_efectivo"],
-                totales["total_digital"],
-                id_turno,
-            ))
-            conn.commit()
-            cursor.close()
-
-            resumen = {
-                "id_turno": id_turno,
-                "fecha_cierre": datetime.now().isoformat(),
-                "saldo_inicial": turno.saldo_inicial,
-                "ingresos_efectivo": totales["total_efectivo"],
-                "ingresos_digitales": totales["total_digital"],
-                "total_caja_fisica": round(turno.saldo_inicial + totales["total_efectivo"], 2),
-                "total_ingresos": round(totales["total_efectivo"] + totales["total_digital"], 2),
-                "cantidad_operaciones": totales["cantidad_pagos"],
-            }
-
-            logger.info("Turno #%d cerrado. Resumen: %s", id_turno, resumen)
-            return resumen
-
-        except TurnoCajaError:
-            raise
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            raise DatabaseQueryError(f"Error al cerrar turno: {e}") from e
-        finally:
-            if conn:
-                conn.close()
+    def cerrar_turno(self, id_turno: int, id_usuario: int) -> dict:
+        id_turno = V.entero(id_turno, "id_turno")
+        id_usuario = V.entero(id_usuario, "id_usuario")
+        with self._transaccion() as cur:
+            self._operador(cur, id_usuario)
+            cur.execute("SELECT * FROM turnos_caja WHERE id_turno=%s FOR UPDATE", (id_turno,))
+            fila = cur.fetchone()
+            if not fila or fila["id_recepcionista"] != id_usuario:
+                raise TurnoCajaError("Solo podés cerrar tu propio turno de caja.")
+            if fila["estado_caja"] != "abierto":
+                raise TurnoCajaError("El turno ya está cerrado.")
+            cur.execute("""SELECT
+                COALESCE(SUM(CASE WHEN tipo_pago='efectivo' THEN monto ELSE 0 END),0) AS efectivo,
+                COALESCE(SUM(CASE WHEN tipo_pago='digital' THEN monto ELSE 0 END),0) AS digital,
+                COUNT(*) AS cantidad FROM pagos WHERE id_turno=%s""", (id_turno,))
+            totales = cur.fetchone()
+            efectivo = V.decimal(totales["efectivo"], "ingresos_efectivo")
+            digital = V.decimal(totales["digital"], "ingresos_digitales")
+            cur.execute("""UPDATE turnos_caja SET estado_caja='cerrado', fecha_cierre=NOW(),
+                ingresos_efectivo=%s, ingresos_digitales=%s WHERE id_turno=%s""", (efectivo, digital, id_turno))
+            cur.execute("SELECT fecha_cierre FROM turnos_caja WHERE id_turno=%s", (id_turno,))
+            fecha = cur.fetchone()["fecha_cierre"]
+            return {"id_turno": id_turno, "fecha_cierre": fecha.isoformat(),
+                    "saldo_inicial": float(fila["saldo_inicial"]), "ingresos_efectivo": efectivo,
+                    "ingresos_digitales": digital, "total_caja_fisica": round(float(fila["saldo_inicial"]) + efectivo, 2),
+                    "total_ingresos": round(efectivo + digital, 2), "cantidad_operaciones": totales["cantidad"]}
 
     def obtener_resumen(self, id_turno: int) -> dict:
         """Obtiene el resumen actual de un turno de caja (abierto o cerrado).

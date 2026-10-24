@@ -106,6 +106,24 @@ casos positivos, negativos y concurrencia; sin filtración de secretos.
 
 Requisitos: RF 2.1–2.8, 5.2 y 6.3.
 
+### Incremento 2A Validación de recepción y caja
+
+Implementado: validadores de texto, contactos, identificadores y decimales;
+validación completa del formulario antes de crear clientes; límites alineados
+con el esquema; fragilidad por índice de bulto; cotización en vivo corregida;
+formularios conservados tras un rechazo; errores de persistencia controlados.
+La apertura de caja se serializa por usuario; el cierre exige titularidad y
+guarda su conciliación en una transacción. El cobro comprueba total exacto,
+turno propio abierto y bloqueo compartido con el cierre.
+
+Validación: 273 pruebas acumuladas en la selección aislada, dos deseleccionadas.
+Incluye Chrome para recepción y soporte, recorrido HTTP de caja/cobro/comprobante,
+entradas inválidas, concurrencia y fallos SQL forzados. No exige migración nueva
+ni modifica los datos operativos. Detalles: [recepción y validaciones](RECEPCION_VALIDACIONES.md).
+
+La acreditación externa de Mercado Pago, rendiciones en destino e inmutabilidad
+documental siguen pendientes. Este incremento no cierra toda la etapa 2.
+
 - [ ] Encapsular la confirmación de Mercado Pago en un servicio: comprobar
   estado, referencia, importe, moneda y destinatario comercial del pago.
 - [ ] Autenticar notificaciones según el producto de Mercado Pago utilizado;
@@ -114,10 +132,11 @@ Requisitos: RF 2.1–2.8, 5.2 y 6.3.
 - [ ] No anunciar aprobación si falla la conciliación local.
 - [ ] Asociar cobros digitales a su contexto contable y definir cómo se
   concilian los recibidos fuera de un turno.
-- [ ] Validar titularidad, estado y concurrencia de apertura/cierre de caja.
+- [x] Validar titularidad y estado del turno, serializar apertura y cierre y
+  coordinar el registro de cobros con el cierre en la aplicación.
 - [ ] Separar pago acreditado, registro manual de transferencia, cuenta corriente
   y cobro en destino; completar rendición del chofer, saldos y diferencias.
-- [ ] Corregir el índice de los checkboxes de fragilidad en multibulto.
+- [x] Corregir el índice de los checkboxes de fragilidad en multibulto.
 - [ ] Validar dimensiones, pesos e importes finitos y positivos en servidor;
   calcular el aforo allí y unificar divisor, descuentos, mínimos y redondeos.
 - [ ] Mantener una copia histórica de los datos de cada documento emitido,

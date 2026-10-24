@@ -23,23 +23,24 @@ class ClienteController:
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
+        self._columna_email_cache = None
 
     _columna_email_cache: Optional[bool] = None
 
     def _tiene_columna_email(self) -> bool:
         """Compatibilidad con esquemas antiguos sin columna email (con caché en memoria)."""
-        if ClienteController._columna_email_cache is not None:
-            return ClienteController._columna_email_cache
+        if self._columna_email_cache is not None:
+            return self._columna_email_cache
         conn = None
         cursor = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SHOW COLUMNS FROM clientes LIKE 'email'")
-            ClienteController._columna_email_cache = (cursor.fetchone() is not None)
-            return ClienteController._columna_email_cache
-        except Exception:
-            return False
+            self._columna_email_cache = (cursor.fetchone() is not None)
+            return self._columna_email_cache
+        except Exception as exc:
+            raise DatabaseQueryError("No se pudo verificar la estructura de clientes") from exc
         finally:
             if cursor:
                 try: cursor.close()
@@ -70,8 +71,9 @@ class ClienteController:
             ValidationError: Si faltan datos obligatorios.
             DuplicateError: Si el DNI ya está registrado.
         """
-        email_limpio = email.strip() if email else None
-        Cliente.validar_datos(dni, nombre_completo, telefono, email_limpio)
+        from app.services.validacion_entrada import ValidacionEntrada as V
+        dni, nombre_completo, telefono = V.documento(dni), V.nombre(nombre_completo), V.telefono(telefono)
+        email_limpio = V.email(email)
 
         # Verificar duplicado
         existente = self.buscar_por_dni(dni)
@@ -117,6 +119,10 @@ class ClienteController:
         except DuplicateError:
             raise
         except Exception as e:
+            if getattr(e, "errno", None) == 1062:
+                if conn:
+                    conn.rollback()
+                raise DuplicateError(entity="Cliente", identifier=dni) from e
             if conn:
                 conn.rollback()
             raise DatabaseQueryError(f"Error al registrar cliente: {e}") from e
@@ -133,6 +139,8 @@ class ClienteController:
         Returns:
             Instancia de Cliente o None si no se encuentra.
         """
+        from app.services.validacion_entrada import ValidacionEntrada as V
+        dni = V.documento(dni)
         sql = "SELECT * FROM clientes WHERE dni = %s LIMIT 1"
         conn = None
         try:
@@ -215,6 +223,7 @@ class ClienteController:
         Returns:
             Instancia de Cliente (existente o recién creado).
         """
+        Cliente.validar_datos(dni, nombre_completo, telefono, email)
         existente = self.buscar_por_dni(dni)
         if existente:
             return existente

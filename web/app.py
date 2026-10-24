@@ -152,6 +152,9 @@ def create_app() -> Flask:
 
     @app.errorhandler(500)
     def server_error(e):
+        from flask import jsonify
+        if ManejadorErroresSeguridad.espera_json():
+            return jsonify(ok=False, error="Ocurrió un error inesperado. Intentá nuevamente.", code="INTERNAL_ERROR"), 500
         return render_template_string(_ERROR_PAGE,
             code=500, title="Error interno del servidor",
             message="Algo falló en el sistema. Si el problema persiste, reiniciá la aplicación."), 500

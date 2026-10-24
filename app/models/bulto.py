@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 import logging
+from app.services.validacion_entrada import ValidacionEntrada as V
+from app.utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +26,23 @@ class Bulto:
     ) -> None:
         self._id_bulto = id_bulto
         self._id_envio = id_envio
-        self._peso_real = peso_real
-        self._peso_volumetrico = peso_volumetrico
+        self._peso_real = V.decimal(peso_real, "peso_real", 0.01, V.MAX_PESO)
+        self._peso_volumetrico = V.decimal(peso_volumetrico, "peso_volumetrico", 0, V.MAX_PESO)
+        if not isinstance(es_fragil, bool):
+            raise ValidationError("es_fragil", "La fragilidad debe ser verdadera o falsa")
         self._es_fragil = es_fragil
+
+    @classmethod
+    def validar_lista(cls, datos):
+        if not isinstance(datos, list) or not 1 <= len(datos) <= 100:
+            raise ValidationError("bultos", "Ingresá entre 1 y 100 bultos por envío")
+        resultado = []
+        for dato in datos:
+            if not isinstance(dato, dict) or set(dato) - {"peso_real", "peso_volumetrico", "es_fragil"}:
+                raise ValidationError("bultos", "Revisá los datos de cada bulto")
+            bulto = cls(0, 0, dato.get("peso_real"), dato.get("peso_volumetrico", 0), dato.get("es_fragil", False))
+            resultado.append({"peso_real": bulto.peso_real, "peso_volumetrico": bulto.peso_volumetrico, "es_fragil": bulto.es_fragil})
+        return resultado
 
     # --- Properties ---
 

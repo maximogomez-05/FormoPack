@@ -9,6 +9,7 @@ from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from config.settings import CotizadorConfig
 from app.utils.exceptions import CotizacionError
+from app.services.validacion_entrada import ValidacionEntrada as V
 
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -38,6 +39,7 @@ class Cotizador:
         if not bultos:
             raise CotizacionError("El envio debe tener al menos un bulto para cotizar.")
 
+        valor_declarado = V.decimal(valor_declarado, "valor_declarado")
         factor_zona = self._calcular_factor_zona(localidad)
         d_factor_zona = _d(factor_zona)
         d_tarifa_base_kg = _d(CotizadorConfig.TARIFA_BASE_KG)
@@ -95,6 +97,7 @@ class Cotizador:
 
         costo_total = _redondear_moneda(_d(subtotal_flete) + _d(costo_seguro))
 
+        V.decimal(costo_total, "costo_total", 0.01)
         resultado = {
             "localidad_destino": localidad.nombre,
             "distancia_km": localidad.distancia_km,

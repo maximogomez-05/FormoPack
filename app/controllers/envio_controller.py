@@ -7,6 +7,8 @@ from datetime import datetime
 from app.core.database import DatabaseManager
 from app.models.envio import Envio
 from app.models.bulto import Bulto
+from app.models.solicitud_recepcion import SolicitudRecepcion
+from app.services.validacion_entrada import ValidacionEntrada as V
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from app.models.pago import Pago, PagoEfectivo, PagoDigital
@@ -59,6 +61,8 @@ class EnvioController:
         Returns:
             Diccionario con el desglose de la cotización.
         """
+        bultos_data, id_localidad_destino, valor_declarado, id_seguro = SolicitudRecepcion.validar_cotizacion(
+            bultos_data, id_localidad_destino, valor_declarado, id_seguro)
         localidad = self._obtener_localidad(id_localidad_destino)
         seguro = self._obtener_seguro(id_seguro) if id_seguro else None
 
@@ -101,14 +105,16 @@ class EnvioController:
         Returns:
             Diccionario con datos del envío creado y cotización.
         """
-        if not direccion_destino or not direccion_destino.strip():
-            raise ValidationError(field="direccion_destino", reason="La direccion es obligatoria.")
-        if not bultos_data:
-            raise ValidationError(field="bultos", reason="El envio debe tener al menos un bulto.")
+        direccion_destino = SolicitudRecepcion.validar_envio(direccion_destino, modalidad_pago)
+        id_remitente = V.entero(id_remitente, "id_remitente")
+        id_destinatario = V.entero(id_destinatario, "id_destinatario")
+        bultos_data, id_localidad_destino, valor_declarado, id_seguro = SolicitudRecepcion.validar_cotizacion(
+            bultos_data, id_localidad_destino, valor_declarado, id_seguro)
 
         # Cotizar
         cotizacion = self.cotizar_envio(bultos_data, id_localidad_destino, valor_declarado, id_seguro)
 
+        V.decimal(cotizacion["costo_total"], "costo_total", 0.01)
         conn = None
         cursor = None
         try:
@@ -215,6 +221,7 @@ class EnvioController:
         monto_entregado: float = 0.0,
         id_transaccion_qr: Optional[str] = None,
         billetera_virtual: Optional[str] = None,
+        id_usuario: Optional[int] = None,
     ) -> dict:
         """Registra un pago contra un envío.
 
@@ -230,7 +237,17 @@ class EnvioController:
         Returns:
             Diccionario con datos del pago registrado.
         """
-        if tipo_pago not in {"efectivo", "digital"}:
+        monto = V.decimal(monto, "monto", 0.01)
+        monto_entregado = V.decimal(monto_entregado, "monto_entregado")
+        id_envio = V.entero(id_envio, "id_envio")
+        if id_turno is not None:
+            id_turno = V.entero(id_turno, "id_turno")
+            id_usuario = V.entero(id_usuario, "id_usuario")
+        if id_transaccion_qr is not None:
+            id_transaccion_qr = V.texto(id_transaccion_qr, "id_transaccion_qr", 1, 100)
+        if billetera_virtual is not None:
+            billetera_virtual = V.texto(billetera_virtual, "billetera_virtual", 1, 50)
+        if not isinstance(tipo_pago, str) or tipo_pago not in {"efectivo", "digital"}:
             raise ValidationError(field="tipo_pago", reason="El medio de pago no es válido")
         if monto <= 0:
             raise ValidationError(field="monto", reason="El monto debe ser mayor que cero")
@@ -250,11 +267,19 @@ class EnvioController:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                "SELECT id_envio FROM envios WHERE id_envio = %s FOR UPDATE",
+                "SELECT id_envio, costo_total FROM envios WHERE id_envio = %s FOR UPDATE",
                 (id_envio,),
             )
-            if not cursor.fetchone():
+            envio = cursor.fetchone()
+            if not envio:
                 raise ValidationError(field="envio", reason="El envío no existe")
+            if monto != float(envio["costo_total"]):
+                raise ValidationError("monto", "El cobro debe coincidir con el total del envío; el efectivo recibido se indica por separado")
+            if id_turno is not None:
+                cursor.execute("SELECT id_recepcionista, estado_caja FROM turnos_caja WHERE id_turno=%s FOR UPDATE", (id_turno,))
+                turno = cursor.fetchone()
+                if not turno or turno["estado_caja"] != "abierto" or turno["id_recepcionista"] != id_usuario:
+                    raise ValidationError("id_turno", "El cobro requiere un turno propio y abierto")
 
             cursor.execute(
                 "SELECT id_pago FROM pagos WHERE id_envio = %s LIMIT 1",

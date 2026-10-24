@@ -48,9 +48,9 @@ def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un er
     if "out of range" in texto_lower:
         return "Un valor numérico quedó fuera del rango permitido."
     if "unknown column" in texto_lower or "field list" in texto_lower or "no such column" in texto_lower:
-        return "La base de datos está desactualizada: falta una columna del sistema. Actualizá la estructura de la base de datos o ejecutá el script de inicialización."
+        return fallback
 
-    return texto or fallback
+    return fallback
 
 
 @admin_bp.route("/dashboard")

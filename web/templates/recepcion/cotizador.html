@@ -27,7 +27,7 @@
       <div class="form-group">
         <label class="form-label">Valor Declarado ($)</label>
         <input type="number" id="valor_declarado" class="form-control"
-               placeholder="0.00" min="0" step="0.01" oninput="calcularCotizacion()">
+               placeholder="0.00" min="0" max="9999999999.99" step="0.01" oninput="calcularCotizacion()">
       </div>
       <div class="form-group">
         <label class="form-label">Cobertura (Seguro)</label>
@@ -55,12 +55,12 @@
           <div class="form-group">
             <label class="form-label">Peso Real (kg)</label>
             <input type="number" class="form-control peso-real" placeholder="0.0"
-                   min="0.01" step="0.01" oninput="calcularCotizacion()">
+                   min="0.01" max="999999.99" step="0.01" oninput="calcularCotizacion()">
           </div>
           <div class="form-group">
             <label class="form-label">Peso Vol. (kg)</label>
             <input type="number" class="form-control peso-vol" placeholder="0.0"
-                   min="0" step="0.01" oninput="calcularCotizacion()">
+                   min="0" max="999999.99" step="0.01" oninput="calcularCotizacion()">
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:10px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -126,11 +126,11 @@ function agregarBulto() {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Peso Real (kg)</label>
-        <input type="number" class="form-control peso-real" placeholder="0.0" min="0.01" step="0.01" oninput="calcularCotizacion()">
+        <input type="number" class="form-control peso-real" placeholder="0.0" min="0.01" max="999999.99" step="0.01" oninput="calcularCotizacion()">
       </div>
       <div class="form-group">
         <label class="form-label">Peso Vol. (kg)</label>
-        <input type="number" class="form-control peso-vol" placeholder="0.0" min="0" step="0.01" oninput="calcularCotizacion()">
+        <input type="number" class="form-control peso-vol" placeholder="0.0" min="0" max="999999.99" step="0.01" oninput="calcularCotizacion()">
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:10px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -179,7 +179,12 @@ async function calcularCotizacion() {
       body: JSON.stringify({ bultos, id_localidad: idLocalidad, valor_declarado: valorDeclarado, id_seguro: idSeguro }),
     });
     const data = await resp.json();
-    if (data.error) return;
+    if (!resp.ok || data.error) {
+      document.getElementById('resultado-panel').style.display = 'none';
+      document.getElementById('placeholder-panel').style.display = 'block';
+      document.getElementById('placeholder-panel').textContent = data.error || 'No se pudo calcular la cotización.';
+      return;
+    }
 
     document.getElementById('resultado-panel').style.display = 'block';
     document.getElementById('placeholder-panel').style.display = 'none';
@@ -200,7 +205,9 @@ async function calcularCotizacion() {
     html += `<div class="desglose-row"><span>TOTAL SERVICIO</span><span>$${data.costo_total.toFixed(2)}</span></div>`;
     document.getElementById('desglose-container').innerHTML = html;
   } catch (e) {
-    console.error(e);
+    document.getElementById('resultado-panel').style.display = 'none';
+    document.getElementById('placeholder-panel').style.display = 'block';
+    document.getElementById('placeholder-panel').textContent = 'No se pudo calcular la cotización. Revisá la conexión.';
   }
 }
 

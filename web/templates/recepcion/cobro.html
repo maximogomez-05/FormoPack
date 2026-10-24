@@ -137,7 +137,7 @@
         <input type="hidden" name="monto" value="{{ envio.costo_total }}">
         <div class="form-group">
           <label class="form-label">Monto Recibido ($)</label>
-          <input type="number" name="monto_entregado" id="monto-entregado" class="form-control"
+          <input type="number" max="9999999999.99" name="monto_entregado" id="monto-entregado" class="form-control"
                  min="{{ envio.costo_total }}" max="999999" step="0.01" required
                  placeholder="{{ '%.2f'|format(envio.costo_total) }}"
                  oninput="calcularVuelto({{ envio.costo_total }})">

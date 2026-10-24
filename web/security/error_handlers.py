@@ -4,6 +4,7 @@ import logging
 
 from flask import jsonify, render_template, request
 from flask_wtf.csrf import CSRFError
+from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, CotizacionError
 
 
 class ManejadorErroresSeguridad:
@@ -16,11 +17,16 @@ class ManejadorErroresSeguridad:
         app.register_error_handler(CSRFError, self.error_csrf)
         app.register_error_handler(429, self.limite_excedido)
         app.register_error_handler(503, self.servicio_no_disponible)
+        app.register_error_handler(DatabaseConnectionError, self.error_persistencia)
+        app.register_error_handler(DatabaseQueryError, self.error_persistencia)
+        app.register_error_handler(ValidationError, self.error_validacion)
+        app.register_error_handler(CotizacionError, self.error_validacion)
 
     @staticmethod
     def espera_json() -> bool:
         return (
             request.path.startswith("/soporte/api/")
+            or request.path in {"/recepcion/clientes/buscar", "/admin/logistica/mapa/envios"}
             or request.is_json
             or request.headers.get("X-Offline-Sync") == "1"
             or request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -55,3 +61,12 @@ class ManejadorErroresSeguridad:
             "No pudimos verificar tu acceso. Intentá nuevamente en unos instantes.",
             "SERVICE_UNAVAILABLE", 503,
         )
+
+    def error_persistencia(self, error):
+        self._logger.error("Falló la persistencia en %s", request.path, exc_info=True)
+        return self._respuesta(
+            "No pudimos completar la consulta. Intentá nuevamente en unos instantes.",
+            "SERVICE_UNAVAILABLE", 503)
+
+    def error_validacion(self, error):
+        return self._respuesta(error.message, "VALIDATION_ERROR", 400)

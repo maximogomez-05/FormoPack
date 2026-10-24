@@ -21,10 +21,12 @@ from app.core.database import DatabaseManager
 from app.utils.exceptions import (
     ValidationError, DuplicateError, DatabaseConnectionError,
     DatabaseQueryError, ClienteNotFoundError, EnvioNotFoundError,
-    TurnoCajaError,
+    TurnoCajaError, CotizacionError,
 )
 from app.services.cotizador import Cotizador
 from app.models.bulto import Bulto
+from app.models.solicitud_recepcion import SolicitudRecepcion
+from app.services.validacion_entrada import ValidacionEntrada as V
 from app.models.localidad import Localidad
 from app.models.seguro import Seguro
 from app.models.pago import PagoDigital
@@ -60,9 +62,11 @@ def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un er
     if "out of range" in texto_lower:
         return "Un valor numérico quedó fuera del rango permitido."
     if "unknown column" in texto_lower or "field list" in texto_lower or "no such column" in texto_lower:
-        return "La base de datos está desactualizada: falta una columna del sistema (por ejemplo, email). Actualizá la estructura de la tabla clientes o ejecutá el script de inicialización."
+        return fallback
 
-    return texto or fallback
+    if isinstance(excepcion, (CotizacionError, TurnoCajaError, DuplicateError)):
+        return texto
+    return fallback
 
 
 # ──────────────────────────────────────────
@@ -91,6 +95,7 @@ def listar_clientes():
 
 @recepcion_bp.route("/clientes/buscar")
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def buscar_cliente_ajax():
     """Búsqueda AJAX de cliente por DNI (para autocompletar en formularios)."""
     dni = request.args.get("dni", "").strip()
@@ -102,8 +107,12 @@ def buscar_cliente_ajax():
         if cliente:
             return jsonify({"encontrado": True, "cliente": cliente.to_dict()})
         return jsonify({"encontrado": False})
-    except Exception as e:
-        return jsonify({"encontrado": False, "error": "Error interno"})
+    except ValidationError as e:
+        return jsonify(encontrado=False, error=_mensaje_usuario_error(e)), 400
+    except (DatabaseConnectionError, DatabaseQueryError):
+        logger.exception("No se pudo buscar el cliente")
+        return jsonify(encontrado=False, error="No se pudo consultar el cliente. Intentá nuevamente."), 503
+
 
 
 @recepcion_bp.route("/clientes/nuevo", methods=["GET", "POST"])
@@ -123,13 +132,14 @@ def nuevo_cliente():
             return redirect(url_for("recepcion.listar_clientes"))
         except DuplicateError:
             flash(f"Ya existe un cliente con el DNI {dni}.", "warning")
-            return redirect(request.url)
+            return render_template("recepcion/nuevo_cliente.html"), 409
         except ValidationError as e:
-            flash(e.message, "danger")
-            return redirect(request.url)
-        except Exception as e:
+            flash(_mensaje_usuario_error(e), "danger")
+            return render_template("recepcion/nuevo_cliente.html"), 400
+        except Exception:
+            logger.exception("No se pudo registrar el cliente")
             flash("Ocurrió un error al registrar el cliente. Intente nuevamente.", "danger")
-            return redirect(request.url)
+            return render_template("recepcion/nuevo_cliente.html"), 503
     return render_template("recepcion/nuevo_cliente.html")
 
 
@@ -152,30 +162,25 @@ def cotizador():
 
 @recepcion_bp.route("/cotizador/calcular", methods=["POST"])
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def calcular_cotizacion():
     """Endpoint AJAX: calcula la tarifa en tiempo real."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="Ingresá un objeto JSON válido."), 400
     try:
-        data = request.get_json()
-        bultos_data = data.get("bultos", [])
-        id_localidad = int(data.get("id_localidad", 0))
-        valor_declarado = float(data.get("valor_declarado", 0))
-        id_seguro = data.get("id_seguro")
-
-        if not bultos_data or not id_localidad:
-            return jsonify({"error": "Faltan datos obligatorios."}), 400
-
-        ctrl = EnvioController()
-        resultado = ctrl.cotizar_envio(
-            bultos_data=bultos_data,
-            id_localidad_destino=id_localidad,
-            valor_declarado=valor_declarado,
-            id_seguro=int(id_seguro) if id_seguro else None,
-        )
+        resultado = EnvioController().cotizar_envio(
+            bultos_data=data.get("bultos"), id_localidad_destino=data.get("id_localidad"),
+            valor_declarado=data.get("valor_declarado", 0), id_seguro=data.get("id_seguro"))
         return jsonify(resultado)
-
-    except Exception as e:
-        logger.error("Error en cotización AJAX: %s", e)
-        return jsonify({"error": "Error al calcular cotización"}), 500
+    except (ValidationError, CotizacionError) as e:
+        return jsonify(error=_mensaje_usuario_error(e)), 400
+    except (DatabaseConnectionError, DatabaseQueryError):
+        logger.exception("No se pudo cotizar el envío")
+        return jsonify(error="No se pudo consultar la cotización. Intentá nuevamente."), 503
+    except Exception:
+        logger.exception("Error inesperado en cotización")
+        return jsonify(error="No se pudo calcular la cotización. Intentá nuevamente."), 500
 
 
 # ──────────────────────────────────────────
@@ -191,72 +196,18 @@ def nuevo_envio():
 
     if request.method == "POST":
         try:
-            form = request.form
-
-            # Remitente
-            cliente_ctrl = ClienteController()
-            remitente = cliente_ctrl.obtener_o_crear(
-                dni=form.get("rem_dni", "").strip(),
-                nombre_completo=form.get("rem_nombre", "").strip(),
-                telefono=form.get("rem_telefono", "").strip(),
-                email=form.get("rem_email", "").strip() or None,
-            )
-
-            # Destinatario
-            destinatario = cliente_ctrl.obtener_o_crear(
-                dni=form.get("dest_dni", "").strip(),
-                nombre_completo=form.get("dest_nombre", "").strip(),
-                telefono=form.get("dest_telefono", "").strip(),
-                email=form.get("dest_email", "").strip() or None,
-            )
-
-            # Bultos (vienen como listas del form)
-            pesos_reales = request.form.getlist("peso_real[]")
-            pesos_vol = request.form.getlist("peso_volumetrico[]")
-            es_fragil_list = request.form.getlist("es_fragil[]")
-
-            bultos_data = []
-            for i in range(len(pesos_reales)):
-                try:
-                    peso_real = float(pesos_reales[i] or 0)
-                    peso_vol = float(pesos_vol[i] if i < len(pesos_vol) else 0)
-                except (ValueError, TypeError):
-                    peso_real = 0.0
-                    peso_vol = 0.0
-                # es_fragil se detecta por posición relativa, no por value del checkbox
-                es_fragil = len(es_fragil_list) > i and es_fragil_list[i] in ('on', '1', 'true', str(i))
-                bultos_data.append({
-                    "peso_real": peso_real,
-                    "peso_volumetrico": peso_vol,
-                    "es_fragil": es_fragil,
-                })
-
-            # Validar seguro y valor declarado
-            id_seguro_raw = form.get("id_seguro")
-            valor_declarado_raw = form.get("valor_declarado", 0) or 0
-            try:
-                valor_declarado = float(valor_declarado_raw)
-            except (ValueError, TypeError):
-                valor_declarado = 0.0
-
-            id_seguro = int(id_seguro_raw) if id_seguro_raw else None
-
-            if id_seguro and valor_declarado <= 0:
-                flash("Si selecciona una cobertura de seguro, debe indicar el Valor Declarado de la mercadería (mayor a $0).", "warning")
-                return redirect(request.url)
-
-            # Crear envío
+            solicitud = SolicitudRecepcion(request.form)
+            # Comprobar referencias y cotización antes de crear clientes.
             envio_ctrl = EnvioController()
+            envio_ctrl.cotizar_envio(solicitud.bultos, solicitud.localidad, solicitud.declarado, solicitud.seguro)
+            cliente_ctrl = ClienteController()
+            remitente = cliente_ctrl.obtener_o_crear(**solicitud.clientes["rem"])
+            destinatario = cliente_ctrl.obtener_o_crear(**solicitud.clientes["dest"])
             resultado = envio_ctrl.crear_envio(
-                id_remitente=remitente.id_cliente,
-                id_destinatario=destinatario.id_cliente,
-                id_localidad_destino=int(form.get("id_localidad_destino")),
-                direccion_destino=form.get("direccion_destino", "").strip(),
-                bultos_data=bultos_data,
-                modalidad_pago=form.get("modalidad_pago", "efectivo"),
-                valor_declarado=valor_declarado,
-                id_seguro=id_seguro,
-            )
+                id_remitente=remitente.id_cliente, id_destinatario=destinatario.id_cliente,
+                id_localidad_destino=solicitud.localidad, direccion_destino=solicitud.direccion,
+                bultos_data=solicitud.bultos, modalidad_pago=solicitud.modalidad,
+                valor_declarado=solicitud.declarado, id_seguro=solicitud.seguro)
 
             flash(
                 f"✅ Envío registrado. Guía: {resultado['nro_guia']} — Total: ${resultado['cotizacion']['costo_total']:.2f}",
@@ -268,17 +219,16 @@ def nuevo_envio():
                 nro_guia=resultado["nro_guia"],
             ))
 
-        except ValidationError as e:
+        except (ValidationError, CotizacionError) as e:
             flash(_mensaje_usuario_error(e, "Los datos del envío no son válidos."), "danger")
-            return redirect(request.url)
-        except (DuplicateError, DatabaseConnectionError, DatabaseQueryError) as e:
-            logger.error("Error al crear envío: %s", e)
-            flash(_mensaje_usuario_error(e, "No se pudo registrar el envío."), "danger")
-            return redirect(request.url)
-        except Exception as e:
-            logger.error("Error al crear envío: %s", e)
-            flash(_mensaje_usuario_error(e, "No se pudo registrar el envío."), "danger")
-            return redirect(request.url)
+            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 400
+        except DuplicateError:
+            flash("Otro registro utilizó esos datos. Revisá el cliente antes de reintentar.", "warning")
+            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 409
+        except Exception:
+            logger.exception("No se pudo registrar el envío")
+            flash("No se pudo confirmar el registro. Consultá los envíos antes de reintentar.", "danger")
+            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 503
 
     return render_template(
         "recepcion/nuevo_envio.html",
@@ -316,7 +266,7 @@ def cobrar_envio(nro_guia: str):
         ya_pagado = cursor.fetchone() is not None
     except Exception as e:
         logger.error(f"Error verificando pago: {e}")
-        ya_pagado = False
+        raise DatabaseQueryError("No se pudo verificar el estado del cobro") from e
     finally:
         if conn_check:
             conn_check.close()
@@ -333,13 +283,11 @@ def cobrar_envio(nro_guia: str):
 
         tipo_pago = request.form.get("tipo_pago", "efectivo")
         try:
-            monto = float(request.form.get("monto", envio.costo_total))
-        except (ValueError, TypeError):
-            monto = envio.costo_total
-        try:
-            monto_entregado = float(request.form.get("monto_entregado", 0) or 0)
-        except (ValueError, TypeError):
-            monto_entregado = 0.0
+            monto = V.decimal(request.form.get("monto", str(envio.costo_total)), "monto", 0.01)
+            monto_entregado = V.decimal(request.form.get("monto_entregado") or "0", "monto_entregado")
+        except ValidationError as e:
+            flash(_mensaje_usuario_error(e), "warning")
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id), 400
         billetera = request.form.get("billetera_virtual", "MercadoPago")
         if monto < float(envio.costo_total):
             flash("El importe cobrado no puede ser inferior al total del envío.", "warning")
@@ -373,6 +321,7 @@ def cobrar_envio(nro_guia: str):
                 monto=monto,
                 tipo_pago=tipo_pago,
                 id_turno=turno_activo["id_turno"],
+                id_usuario=session["usuario_id"],
                 monto_entregado=monto_entregado if tipo_pago == "efectivo" else 0,
                 billetera_virtual=billetera if tipo_pago == "digital" else None,
                 id_transaccion_qr=(request.form.get("id_transaccion_qr") or request.form.get("qr_id")) if tipo_pago == "digital" else None,
@@ -380,7 +329,11 @@ def cobrar_envio(nro_guia: str):
             flash(f"✅ Pago registrado correctamente. Guía: {nro_guia}", "success")
             return redirect(url_for("recepcion.comprobante", nro_guia=nro_guia))
 
+        except ValidationError as e:
+            flash(_mensaje_usuario_error(e), "warning")
+            return render_template("recepcion/cobro.html", envio=envio, detalle=detalle, envio_dict=envio_dict, qr_base64=qr_base64, qr_id=qr_id), 400
         except Exception as e:
+            logger.exception("No se pudo registrar el pago")
             flash("Ocurrió un error al procesar el pago. Intente nuevamente.", "danger")
 
     # Generar QR estático con datos del cobro
@@ -500,17 +453,14 @@ def caja():
 def abrir_caja():
     """Abre un nuevo turno de caja."""
     try:
-        saldo_inicial = float(request.form.get("saldo_inicial", 0) or 0)
-    except (ValueError, TypeError):
-        saldo_inicial = 0.0
-    try:
+        saldo_inicial = V.decimal(request.form.get("saldo_inicial") or "0", "saldo_inicial")
         ctrl = CajaController()
         turno = ctrl.abrir_turno(
             id_recepcionista=session.get("usuario_id"),
             saldo_inicial=saldo_inicial,
         )
         flash(f"✅ Caja abierta. Turno #{turno.id_turno} iniciado.", "success")
-    except TurnoCajaError as e:
+    except (TurnoCajaError, ValidationError) as e:
         flash(e.message, "warning")
     except Exception as e:
         flash("Ocurrió un error al abrir la caja. Intente nuevamente.", "danger")
@@ -524,14 +474,14 @@ def cerrar_caja(id_turno: int):
     """Cierra el turno de caja activo."""
     try:
         ctrl = CajaController()
-        resumen = ctrl.cerrar_turno(id_turno)
+        resumen = ctrl.cerrar_turno(id_turno, session["usuario_id"])
         flash(
             f"✅ Caja cerrada. Total ingresos: ${resumen['total_ingresos']:.2f} "
             f"(Efectivo: ${resumen['ingresos_efectivo']:.2f} | "
             f"Digital: ${resumen['ingresos_digitales']:.2f})",
             "success",
         )
-    except TurnoCajaError as e:
+    except (TurnoCajaError, ValidationError) as e:
         flash(e.message, "warning")
     except Exception as e:
         flash("Ocurrió un error al cerrar la caja. Intente nuevamente.", "danger")
@@ -549,8 +499,8 @@ def _obtener_localidades() -> list:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM localidades ORDER BY nombre ASC")
         return cursor.fetchall()
-    except Exception:
-        return []
+    except Exception as exc:
+        raise DatabaseQueryError("No se pudieron consultar las localidades") from exc
     finally:
         if conn:
             conn.close()
@@ -564,8 +514,8 @@ def _obtener_seguros() -> list:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM seguros ORDER BY cobertura_estandar ASC")
         return cursor.fetchall()
-    except Exception:
-        return []
+    except Exception as exc:
+        raise DatabaseQueryError("No se pudieron consultar los seguros") from exc
     finally:
         if conn:
             conn.close()
@@ -612,8 +562,8 @@ def _obtener_turno_activo(id_usuario: int):
             LIMIT 1
         """, (id_usuario,))
         return cursor.fetchone()
-    except Exception:
-        return None
+    except Exception as exc:
+        raise DatabaseQueryError("No se pudo consultar el turno activo") from exc
     finally:
         if conn:
             conn.close()
