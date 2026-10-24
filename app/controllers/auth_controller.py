@@ -1,11 +1,13 @@
 import logging
-import secrets
-from datetime import datetime, timedelta
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core.database import DatabaseManager
 from app.models.usuario import Usuario
+from app.models.recuperacion_contrasena import RecuperacionContrasena
+from app.services.seguridad_recuperacion import ProtectorCodigoRecuperacion, LimiteSolicitudesRecuperacion
+from config.settings import AppConfig
 from app.services.servicio_notificacion import enviar_codigo_recuperacion_async
 from app.utils.exceptions import (
     AuthenticationError,
@@ -32,6 +34,8 @@ class AuthController:
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
+        self._protector = ProtectorCodigoRecuperacion(AppConfig.SECRET_KEY)
+        self._limite_recuperacion = LimiteSolicitudesRecuperacion()
 
     def login(self, email: str, password_plano: str) -> LoginResult:
         """Autentica usuario por email y contraseña."""
@@ -74,7 +78,7 @@ class AuthController:
     def _buscar_usuario_por_email(self, email: str) -> Optional[dict]:
         """Consulta usuario por email en la base de datos."""
         sql = """
-            SELECT id_usuario, nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo
+            SELECT id_usuario, nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo, version_sesion
             FROM usuarios
             WHERE email = %s
             LIMIT 1
@@ -93,60 +97,66 @@ class AuthController:
             if conn:
                 conn.close()
 
-    def solicitar_recuperacion(self, email: str) -> tuple[dict, str]:
-        """Valida que el correo coincida con el usuario registrado al crearse y genera el código de 6 dígitos."""
+    @staticmethod
+    def _validar_email_recuperacion(email: str) -> str:
         email_clean = (email or "").strip().lower()
-        if not email_clean or "@" not in email_clean or "." not in email_clean:
-            raise ValidationError(field="email", reason="Ingresá un formato de correo electrónico válido.")
+        if len(email_clean) > 100 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email_clean):
+            raise ValidationError(field="email", reason="Ingresá un formato de correo electrónico válido")
+        return email_clean
 
-        fila = self._buscar_usuario_por_email(email_clean)
-        if fila is None:
-            raise ValidationError(
-                field="email",
-                reason="El correo electrónico ingresado no coincide con ningún usuario registrado en el sistema.",
-            )
+    def solicitar_recuperacion(self, email: str) -> None:
+        """Emite el OTP por correo sin devolver secretos ni revelar cuentas.
 
-        if not fila.get("activo"):
-            raise UserInactiveError(email=email_clean)
-
-        # Generar código criptográfico de 6 dígitos
-        codigo = f"{secrets.randbelow(900000) + 100000}"
-        expira_en = datetime.now() + timedelta(minutes=15)
-
+        El bloqueo del usuario serializa las solicitudes y el consumo del código.
+        La respuesta pública es la misma para cuentas ausentes e inactivas.
+        """
+        email_clean = self._validar_email_recuperacion(email)
         conn = None
+        cursor = None
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
+            if not self._limite_recuperacion.admitir(cursor, self._protector.clave_cuenta(email_clean)):
+                conn.commit()
+                return
+            cursor.execute(
+                """SELECT id_usuario, nombre, email, activo FROM usuarios
+                   WHERE email = %s LIMIT 1 FOR UPDATE""",
+                (email_clean,),
+            )
+            fila = cursor.fetchone()
+            if not fila or not fila["activo"]:
+                conn.commit()
+                return
 
-            # Invalidar códigos anteriores pendientes para este usuario
+            cursor.execute("SELECT CURRENT_TIMESTAMP AS ahora")
+            ahora = cursor.fetchone()["ahora"]
+            codigo = RecuperacionContrasena.generar_codigo()
+            codigo_hash = self._protector.proteger(codigo, fila["id_usuario"])
+            recuperacion = RecuperacionContrasena(codigo_hash, ahora + RecuperacionContrasena.VIGENCIA)
             cursor.execute(
                 "UPDATE recuperacion_contrasenas SET utilizado = 1 WHERE id_usuario = %s AND utilizado = 0",
                 (fila["id_usuario"],),
             )
-
-            # Insertar el nuevo código
             cursor.execute(
-                """
-                INSERT INTO recuperacion_contrasenas (id_usuario, codigo, expira_en, utilizado)
-                VALUES (%s, %s, %s, 0)
-                """,
-                (fila["id_usuario"], codigo, expira_en),
+                """INSERT INTO recuperacion_contrasenas (id_usuario, codigo, codigo_hash, expira_en, utilizado)
+                   VALUES (%s, '', %s, %s, 0)""",
+                (fila["id_usuario"], recuperacion.codigo_hash, recuperacion.expira_en),
             )
             conn.commit()
-            cursor.close()
-        except Exception as e:
+        except Exception as exc:
             if conn:
                 conn.rollback()
-            logger.error("Error al registrar código de recuperación para %s: %s", email_clean, e)
-            raise DatabaseQueryError(f"Error al generar código de recuperación: {e}") from e
+            logger.error("No se pudo registrar la solicitud de recuperación")
+            raise DatabaseQueryError("No se pudo procesar la recuperación de contraseña") from exc
         finally:
+            if cursor:
+                cursor.close()
             if conn:
                 conn.close()
 
-        # Enviar código por correo de forma desacoplada
+        # El código solo sale del controlador hacia el canal de correo.
         enviar_codigo_recuperacion_async(fila["email"], fila["nombre"], codigo)
-
-        return fila, codigo
 
     def restablecer_password(
         self,
@@ -155,86 +165,83 @@ class AuthController:
         nueva_password: str,
         confirmar_password: str,
     ) -> bool:
-        """Verifica el código recibido por correo y actualiza la contraseña del usuario."""
-        email_clean = (email or "").strip().lower()
+        """Consume el OTP y cambia la clave en una única transacción."""
+        email_clean = self._validar_email_recuperacion(email)
         codigo_clean = (codigo or "").strip()
-
-        if not email_clean or "@" not in email_clean:
-            raise ValidationError(field="email", reason="Ingresá un correo electrónico válido.")
-
-        if not codigo_clean:
-            raise ValidationError(field="codigo", reason="Ingresá el código de 6 dígitos recibido en tu correo.")
-
-        if not nueva_password:
-            raise ValidationError(field="nueva_password", reason="Ingresá una nueva contraseña.")
-
+        RecuperacionContrasena.validar_formato(codigo_clean)
         if nueva_password != confirmar_password:
-            raise ValidationError(field="confirmar_password", reason="Las contraseñas no coinciden.")
-
+            raise ValidationError(field="confirmar_password", reason="Las contraseñas no coinciden")
         Usuario.validar_complejidad_password(nueva_password)
 
-        fila = self._buscar_usuario_por_email(email_clean)
-        if fila is None:
-            raise ValidationError(
-                field="email",
-                reason="El correo electrónico ingresado no coincide con ningún usuario registrado.",
-            )
-
-        if not fila.get("activo"):
-            raise UserInactiveError(email=email_clean)
-
         conn = None
+        cursor = None
+        rechazo_persistido = False
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
+            # Mismo orden de bloqueo que la emisión: primero usuario, luego OTP.
+            cursor.execute(
+                """SELECT id_usuario, activo FROM usuarios
+                   WHERE email = %s LIMIT 1 FOR UPDATE""",
+                (email_clean,),
+            )
+            fila = cursor.fetchone()
+            if not fila or not fila["activo"]:
+                raise ValidationError(field="codigo", reason=RecuperacionContrasena.ERROR_CODIGO)
 
             cursor.execute(
-                """
-                SELECT id_recuperacion, codigo, expira_en, utilizado
-                FROM recuperacion_contrasenas
-                WHERE id_usuario = %s AND utilizado = 0 AND expira_en >= NOW()
-                ORDER BY creado_en DESC
-                LIMIT 1
-                """,
+                """SELECT id_recuperacion, codigo_hash, expira_en, utilizado, intentos_fallidos,
+                          CURRENT_TIMESTAMP AS ahora
+                   FROM recuperacion_contrasenas
+                   WHERE id_usuario = %s AND utilizado = 0
+                   ORDER BY creado_en DESC, id_recuperacion DESC
+                   LIMIT 1 FOR UPDATE""",
                 (fila["id_usuario"],),
             )
             rec = cursor.fetchone()
-
             if not rec:
-                raise ValidationError(
-                    field="codigo",
-                    reason="El código de recuperación ha expirado o ya fue utilizado. Solicitá uno nuevo.",
-                )
+                raise ValidationError(field="codigo", reason=RecuperacionContrasena.ERROR_CODIGO)
 
-            if not secrets.compare_digest(str(rec["codigo"]), codigo_clean):
-                raise ValidationError(
-                    field="codigo",
-                    reason="El código de recuperación ingresado es incorrecto.",
+            recuperacion = RecuperacionContrasena(
+                rec["codigo_hash"], rec["expira_en"], bool(rec["utilizado"]), rec["intentos_fallidos"],
+            )
+            coincide = self._protector.verificar(codigo_clean, fila["id_usuario"], rec["codigo_hash"] or "")
+            try:
+                recuperacion.validar_codigo(coincide, rec["ahora"])
+            except ValidationError:
+                # Confirmar el intento rechazado: un rollback lo borraría del presupuesto.
+                cursor.execute(
+                    """UPDATE recuperacion_contrasenas SET intentos_fallidos = %s, utilizado = %s
+                       WHERE id_recuperacion = %s""",
+                    (recuperacion.intentos_fallidos, int(recuperacion.utilizado), rec["id_recuperacion"]),
                 )
-
+                conn.commit()
+                rechazo_persistido = True
+                raise
             nuevo_hash = Usuario.hashear_password(nueva_password)
-
             cursor.execute(
-                "UPDATE usuarios SET credenciales_hash = %s WHERE id_usuario = %s",
+                "UPDATE usuarios SET credenciales_hash = %s, version_sesion = version_sesion + 1 WHERE id_usuario = %s",
                 (nuevo_hash, fila["id_usuario"]),
             )
-
+            recuperacion.marcar_utilizado()
             cursor.execute(
-                "UPDATE recuperacion_contrasenas SET utilizado = 1 WHERE id_recuperacion = %s",
-                (rec["id_recuperacion"],),
+                "UPDATE recuperacion_contrasenas SET utilizado = 1 WHERE id_usuario = %s AND utilizado = 0",
+                (fila["id_usuario"],),
             )
-
             conn.commit()
-            cursor.close()
-            logger.info("Contraseña actualizada exitosamente para usuario %s (#%s)", email_clean, fila["id_usuario"])
+            logger.info("Contraseña restablecida para usuario #%s", fila["id_usuario"])
             return True
-        except (ValidationError, UserInactiveError, UserNotFoundError):
+        except ValidationError:
+            if conn and not rechazo_persistido:
+                conn.rollback()
             raise
-        except Exception as e:
+        except Exception as exc:
             if conn:
                 conn.rollback()
-            logger.error("Error al restablecer contraseña: %s", e)
-            raise DatabaseQueryError(f"Error al actualizar la contraseña: {e}") from e
+            logger.error("No se pudo completar el cambio de contraseña")
+            raise DatabaseQueryError("No se pudo restablecer la contraseña") from exc
         finally:
+            if cursor:
+                cursor.close()
             if conn:
                 conn.close()

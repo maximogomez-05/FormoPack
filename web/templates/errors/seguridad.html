@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solicitud no completada · FormoPack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <main style="max-width:36rem;margin:10vh auto;padding:1.5rem">
+    <h1>Solicitud no completada</h1>
+    <p role="alert">{{ mensaje }}</p>
+    <p>La operación no fue confirmada.</p>
+    {% if reintentar_url %}<p><a href="{{ reintentar_url }}">Volver a abrir el formulario</a></p>{% endif %}
+    <p><a href="{{ url_for('auth.landing') }}">Ir al inicio</a></p>
+  </main>
+</body>
+</html>

@@ -317,15 +317,32 @@ INSERT INTO usuarios (nombre, email, credenciales_hash, tipo_usuario, nro_licenc
     ('Maria Recepcionista', 'recepcion@formopack.com', '$2b$12$FKOiYKNciRZJkko/.c.u0emTbfo8BddiG5QYVuIUGYkUOntOUAJqi', 'recepcionista', NULL, 1),
     ('Carlos Chofer', 'chofer@formopack.com', '$2b$12$hKw3va/yuDZddKdx8fti..orvEm3327VLE5Q0wLmRl/Cl4f.k31ZC', 'chofer', 'LI-123456', 1)
 ON DUPLICATE KEY UPDATE
-    credenciales_hash = VALUES(credenciales_hash),
-    tipo_usuario = VALUES(tipo_usuario);
+    id_usuario = usuarios.id_usuario;
 
 -- ============================================================
 -- MIGRACIONES IDEMPOTENTES (compatibilidad con BDs existentes)
 -- ============================================================
-ALTER TABLE clientes ADD COLUMN IF NOT EXISTS email VARCHAR(100) DEFAULT NULL;
-ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS estado ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta';
-ALTER TABLE hojas_de_ruta ADD COLUMN IF NOT EXISTS fecha_cierre DATETIME DEFAULT NULL;
+SET @formopack_existe = (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clientes' AND COLUMN_NAME = 'email');
+SET @formopack_sql = IF(@formopack_existe = 0,
+    'ALTER TABLE clientes ADD COLUMN email VARCHAR(100) DEFAULT NULL', 'DO 0');
+PREPARE formopack_stmt FROM @formopack_sql;
+EXECUTE formopack_stmt;
+DEALLOCATE PREPARE formopack_stmt;
+SET @formopack_existe = (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'hojas_de_ruta' AND COLUMN_NAME = 'estado');
+SET @formopack_sql = IF(@formopack_existe = 0,
+    'ALTER TABLE hojas_de_ruta ADD COLUMN estado ENUM(''abierta'',''cerrada'') NOT NULL DEFAULT ''abierta''', 'DO 0');
+PREPARE formopack_stmt FROM @formopack_sql;
+EXECUTE formopack_stmt;
+DEALLOCATE PREPARE formopack_stmt;
+SET @formopack_existe = (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'hojas_de_ruta' AND COLUMN_NAME = 'fecha_cierre');
+SET @formopack_sql = IF(@formopack_existe = 0,
+    'ALTER TABLE hojas_de_ruta ADD COLUMN fecha_cierre DATETIME DEFAULT NULL', 'DO 0');
+PREPARE formopack_stmt FROM @formopack_sql;
+EXECUTE formopack_stmt;
+DEALLOCATE PREPARE formopack_stmt;
 
 -- ============================================================
 -- FIN DEL SCRIPT DDL

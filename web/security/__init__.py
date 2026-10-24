@@ -1,0 +1,1 @@
+"""Adaptadores web de seguridad."""

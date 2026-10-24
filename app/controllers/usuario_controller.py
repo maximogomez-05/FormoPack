@@ -1,5 +1,4 @@
 import logging
-import bcrypt
 from app.core.database import DatabaseManager
 from app.utils.exceptions import ValidationError, DuplicateError, DatabaseQueryError
 
@@ -46,7 +45,7 @@ class UsuarioController:
             if cursor.fetchone():
                 raise DuplicateError(entity="Usuario", identifier=email)
 
-            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            hashed_password = Usuario.hashear_password(password)
 
             cursor.execute("""
                 INSERT INTO usuarios (nombre, email, tipo_usuario, credenciales_hash, activo)
@@ -74,13 +73,20 @@ class UsuarioController:
             conn = db.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            cursor.execute("SELECT activo FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+            cursor.execute("SELECT activo FROM usuarios WHERE id_usuario = %s FOR UPDATE", (id_usuario,))
             user = cursor.fetchone()
             if not user:
                 raise ValidationError(field="id_usuario", reason="Usuario no encontrado")
 
             nuevo_estado = not user['activo']
-            cursor.execute("UPDATE usuarios SET activo = %s WHERE id_usuario = %s", (int(nuevo_estado), id_usuario))
+            cursor.execute(
+                "UPDATE usuarios SET activo = %s, version_sesion = version_sesion + 1 WHERE id_usuario = %s",
+                (int(nuevo_estado), id_usuario),
+            )
+            cursor.execute(
+                "UPDATE recuperacion_contrasenas SET utilizado = 1 WHERE id_usuario = %s AND utilizado = 0",
+                (id_usuario,),
+            )
             conn.commit()
             return nuevo_estado
         except (ValidationError, DuplicateError):

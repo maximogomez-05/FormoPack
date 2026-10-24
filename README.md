@@ -3,7 +3,17 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-Web_Framework-black)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0+-orange.svg)
-![Estado](https://img.shields.io/badge/Estado-Finalizado-success.svg)
+![Estado](https://img.shields.io/badge/Estado-En_validación-yellow.svg)
+
+El proyecto está en una etapa de validación y ajustes previos al despliegue.
+El [plan de implementación](docs/PLAN_IMPLEMENTACION.md) registra requisitos,
+criterios de aceptación, incrementos terminados y cambios para los diagramas.
+
+**Instalaciones existentes:** antes de usar esta versión, aplicar la migración
+de [seguridad de acceso](docs/SEGURIDAD_ACCESO.md). Con la aplicación detenida y
+un respaldo de la base, ejecutar `py -m app.core.migrations --desde 005` desde
+la raíz del proyecto. No volver a inicializar una base de trabajo como mecanismo
+de actualización.
 
 **FormoPack Express** es un Sistema de Gestión Logística integral diseñado para automatizar el registro, cotización, seguimiento y entrega de encomiendas. El objetivo principal es erradicar el uso de papel y planillas manuales, unificando la administración en mostrador, la logística (armado de hojas de ruta) y la operación en calle mediante una aplicación web *Mobile-First* para los choferes.
 
@@ -17,9 +27,10 @@ El proyecto está construido bajo una arquitectura modular y Programación Orien
 - **Integraciones:** Mercado Pago (Checkout Pro), Servicio SMTP Email (HTML Remitos), Mapas Interactivos (Leaflet.js).
 - **Frontend Móvil:** Panel *Mobile-First* (PWA) con capacidades Offline (Service Workers).
 
-## 📊 Módulos del Sistema Completados
+## 📊 Módulos del Sistema
 
-El sistema cubre al 100% los 5 grandes módulos funcionales del negocio:
+Los siguientes módulos tienen implementación. Su validación integral y los
+pendientes se detallan en el plan; esta lista no certifica cumplimiento total:
 
 - [x] **RF 1: Gestión de Usuarios:** Autenticación y control de accesos por roles (Administrador, Recepcionista, Chofer).
 - [x] **RF 2: Recepción y Facturación:** Cotizador automático, gestión de clientes, cobro en efectivo y cobro dinámico con código QR vía **Mercado Pago**.

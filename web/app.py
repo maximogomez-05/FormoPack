@@ -81,20 +81,22 @@ def create_app() -> Flask:
         """Sirve el worker desde la raíz para que controle /chofer."""
         return send_from_directory(os.path.join(ROOT, "web", "static"), "service-worker.js")
 
-    # Manejadores de Rate Limiting y CSRF
-    from flask_wtf.csrf import CSRFError
-    from flask import flash
+    from web.security.error_handlers import ManejadorErroresSeguridad
+    ManejadorErroresSeguridad().registrar(app)
 
-    @app.errorhandler(CSRFError)
-    def handle_csrf_error(e):
-        logger.warning("Error de validación CSRF: %s", getattr(e, "description", e))
-        flash("La sesión de seguridad del formulario expiró o no es válida. Por favor, intentá nuevamente.", "warning")
-        return redirect(request.referrer or url_for("auth.landing"))
+    @app.before_request
+    def verificar_sesion_vigente():
+        from flask import session, abort
+        from web.security.sesiones import ControlSesion
+        from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError
 
-    @app.errorhandler(429)
-    def handle_ratelimit_error(e):
-        flash("Demasiados intentos de acceso. Por favor, aguardá un minuto antes de reintentar.", "danger")
-        return redirect(url_for("auth.landing")), 429
+        if "usuario_id" not in session or request.endpoint in {"static", "service_worker"}:
+            return None
+        try:
+            ControlSesion().validar()
+        except (DatabaseConnectionError, DatabaseQueryError):
+            # Ante caída de persistencia no confiar en permisos de una sesión vieja.
+            abort(503)
 
     # ──────────────────────────────────────────
     # Filtros de Seguridad (Anti-Caché y Headers)

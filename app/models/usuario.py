@@ -23,6 +23,7 @@ class Usuario:
         tipo_usuario: str,
         activo: bool = True,
         nro_licencia: Optional[str] = None,
+        version_sesion: int = 0,
     ) -> None:
         self._id_usuario = id_usuario
         self._nombre = nombre
@@ -31,6 +32,11 @@ class Usuario:
         self._tipo_usuario = tipo_usuario
         self._activo = activo
         self._nro_licencia = nro_licencia
+        self._version_sesion = version_sesion
+
+    @property
+    def version_sesion(self) -> int:
+        return self._version_sesion
 
     @property
     def id_usuario(self) -> int:
@@ -59,6 +65,8 @@ class Usuario:
     def verificar_password(self, password_plano: str) -> bool:
         """Verifica la contraseña contra el hash Bcrypt."""
         try:
+            if len(password_plano.encode("utf-8")) > 72:
+                return False
             return bcrypt.checkpw(
                 password_plano.encode("utf-8"),
                 self._credenciales_hash.encode("utf-8"),
@@ -96,6 +104,7 @@ class Usuario:
             tipo_usuario=tipo,
             activo=bool(row.get("activo", True)),
             nro_licencia=row.get("nro_licencia"),
+            version_sesion=int(row.get("version_sesion", 0)),
         )
 
         if tipo == RoleConfig.ADMINISTRADOR:
@@ -116,6 +125,8 @@ class Usuario:
         """
         if not password_plano or len(password_plano) < 8:
             raise ValidationError(field="password", reason="La contraseña debe tener al menos 8 caracteres.")
+        if len(password_plano.encode("utf-8")) > 72:
+            raise ValidationError(field="password", reason="La contraseña no puede superar 72 bytes en UTF-8.")
         if not any(c.isalpha() for c in password_plano):
             raise ValidationError(field="password", reason="La contraseña debe contener al menos una letra.")
         if not any(c.isdigit() for c in password_plano):

@@ -41,14 +41,19 @@ class MigrationManager:
         archivos = [p for p in MIGRATIONS_DIR.glob("*.sql") if p.is_file()]
         return sorted(archivos, key=lambda p: p.name)
 
-    def aplicar_migraciones(self) -> List[Tuple[str, bool]]:
+    def aplicar_migraciones(self, desde: str | None = None) -> List[Tuple[str, bool]]:
         """Aplica todas las migraciones pendientes en orden correlativo."""
+        if desde is not None and (not desde.isdigit() or len(desde) != 3):
+            raise ValueError("La versión inicial debe tener tres dígitos")
         self.inicializar_tabla_migraciones()
         aplicadas = self.obtener_migraciones_aplicadas()
         archivos = self.obtener_archivos_migracion()
+        if desde is not None:
+            archivos = [archivo for archivo in archivos if archivo.name[:3] >= desde]
         resultados = []
 
         conn = self.db.get_connection()
+        cur = None
         try:
             cur = conn.cursor()
             for archivo in archivos:
@@ -73,15 +78,17 @@ class MigrationManager:
             logger.error("Error al aplicar migración: %s", e)
             raise
         finally:
+            if cur:
+                cur.close()
             conn.close()
 
         return resultados
 
 
-def ejecutar_migraciones() -> None:
+def ejecutar_migraciones(desde: str | None = None) -> None:
     """Función de utilidad para ejecutar migraciones desde CLI o scripts."""
     manager = MigrationManager()
-    resultados = manager.aplicar_migraciones()
+    resultados = manager.aplicar_migraciones(desde=desde)
     print("=" * 50)
     print("  [FormoPack] Estado de Migraciones de Base de Datos")
     print("=" * 50)
@@ -92,4 +99,8 @@ def ejecutar_migraciones() -> None:
 
 
 if __name__ == "__main__":
-    ejecutar_migraciones()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Migraciones de FormoPack")
+    parser.add_argument("--desde", help="Versión inicial, por ejemplo 005 para una instalación existente")
+    ejecutar_migraciones(desde=parser.parse_args().desde)

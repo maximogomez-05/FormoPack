@@ -7,7 +7,7 @@ import logging
 from functools import wraps
 from flask import (
     Blueprint, render_template, request,
-    redirect, url_for, session, flash,
+    redirect, url_for, session, flash, abort, jsonify,
 )
 
 from app.controllers.auth_controller import AuthController
@@ -17,6 +17,8 @@ from app.utils.exceptions import (
     DatabaseConnectionError,
 )
 from web.extensions import limiter
+from web.security.sesiones import ControlSesion
+from web.security.error_handlers import ManejadorErroresSeguridad
 
 auth_bp = Blueprint("auth", __name__)
 logger = logging.getLogger(__name__)
@@ -30,6 +32,8 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if "usuario_id" not in session:
+            if ManejadorErroresSeguridad.espera_json():
+                return jsonify(ok=False, code="SESSION_EXPIRED", error="Debés iniciar sesión nuevamente."), 401
             flash("Debés iniciar sesión para acceder.", "warning")
             return redirect(url_for("auth.login"))
         return f(*args, **kwargs)
@@ -42,10 +46,13 @@ def rol_requerido(*roles):
         @wraps(f)
         def decorated(*args, **kwargs):
             if "usuario_id" not in session:
+                if ManejadorErroresSeguridad.espera_json():
+                    return jsonify(ok=False, code="SESSION_EXPIRED", error="Debés iniciar sesión nuevamente."), 401
                 return redirect(url_for("auth.login"))
             if session.get("rol") not in roles:
-                flash("No tenés permisos para acceder a esa sección.", "danger")
-                return redirect(url_for("auth.dashboard"))
+                if ManejadorErroresSeguridad.espera_json():
+                    return jsonify(ok=False, code="FORBIDDEN", error="No tenés permisos para esta operación."), 403
+                abort(403)
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -79,10 +86,7 @@ def login():
             resultado = auth.login(email, password)
 
             # Guardar sesión
-            session["usuario_id"] = resultado.usuario.id_usuario
-            session["nombre"] = resultado.usuario.nombre
-            session["email"] = resultado.usuario.email
-            session["rol"] = resultado.usuario.tipo_usuario
+            ControlSesion.iniciar(resultado.usuario)
 
             logger.info("Login exitoso: %s (%s)", email, resultado.rol)
             flash(f"Bienvenido, {resultado.usuario.nombre}!", "success")
@@ -140,19 +144,16 @@ def recuperar_password():
         email = request.form.get("email", "").strip().lower()
         try:
             auth = AuthController()
-            fila, codigo = auth.solicitar_recuperacion(email)
+            auth.solicitar_recuperacion(email)
             session["recuperar_email"] = email
-
-            from config.settings import EmailConfig
-            if not EmailConfig.USER or not EmailConfig.PASSWORD:
-                flash(f"Se generó el código de recuperación para {email}. Código de verificación de prueba: {codigo} (Válido por 15 minutos).", "info")
-            else:
-                flash(f"Enviamos un código de 6 dígitos a {email}. Revisá tu casilla de correo.", "success")
+            flash(
+                "Si el correo corresponde a una cuenta habilitada, recibirás un código de seis dígitos. "
+                "Revisá tu bandeja de entrada y spam. El código vence a los 15 minutos.",
+                "info",
+            )
             return redirect(url_for("auth.restablecer_password"))
         except ValidationError as e:
             flash(str(e.message), "danger")
-        except UserInactiveError as e:
-            flash(str(e.message), "warning")
         except Exception as e:
             logger.exception("Error al solicitar recuperación de contraseña para %s", email)
             flash("Ocurrió un error inesperado al procesar la solicitud. Intentá de nuevo.", "danger")
@@ -181,8 +182,6 @@ def restablecer_password():
             return redirect(url_for("auth.landing"))
         except ValidationError as e:
             flash(str(e.message), "danger")
-        except UserInactiveError as e:
-            flash(str(e.message), "warning")
         except Exception as e:
             logger.exception("Error al restablecer contraseña para %s", email)
             flash("Ocurrió un error inesperado al actualizar la contraseña.", "danger")
