@@ -123,7 +123,7 @@
           <i class="fa-solid fa-money-bill-wave"></i> Efectivo
         </button>
         <button type="button" class="btn btn-secondary" id="btn-digital" onclick="mostrarPago('digital')">
-          <i class="fa-solid fa-qrcode"></i> QR / Digital
+          <i class="fa-solid fa-qrcode"></i> Transferencia manual
         </button>
         <button type="button" class="btn btn-secondary" id="btn-mp" onclick="mostrarPago('mp')"
                 style="background:#009ee3;border-color:#009ee3;color:#fff;">
@@ -138,7 +138,7 @@
         <div class="form-group">
           <label class="form-label">Monto Recibido ($)</label>
           <input type="number" max="9999999999.99" name="monto_entregado" id="monto-entregado" class="form-control"
-                 min="{{ envio.costo_total }}" max="999999" step="0.01" required
+                 min="{{ envio.costo_total }}" step="0.01" required
                  placeholder="{{ '%.2f'|format(envio.costo_total) }}"
                  oninput="calcularVuelto({{ envio.costo_total }})">
         </div>
@@ -155,12 +155,13 @@
         <input type="hidden" name="tipo_pago" value="digital">
         <input type="hidden" name="monto" value="{{ envio.costo_total }}">
         <input type="hidden" name="monto_entregado" value="0">
-        <input type="hidden" name="id_transaccion_qr" value="{{ qr_id }}">
+        <label class="form-label" for="referencia-transferencia">Referencia del comprobante</label>
+        <input id="referencia-transferencia" name="id_transaccion_qr" class="form-control" maxlength="100" required>
 
         <div class="form-group">
           <label class="form-label">Plataforma / Billetera Virtual</label>
           <select name="billetera_virtual" class="form-control">
-            <option>MercadoPago</option>
+
             <option>Naranja X</option>
             <option>MODO</option>
             <option>Uala</option>
@@ -168,22 +169,12 @@
           </select>
         </div>
 
-        {% if qr_base64 %}
-        <div style="text-align:center;margin:24px 0;padding:16px;border:1px solid var(--border);border-radius:6px;background:#f8f9fa;">
-          <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR Pago" style="max-width:180px;">
-          <div style="font-size:12px;color:var(--text-muted);margin-top:12px;text-transform:uppercase;font-weight:600;">
-            Escanee para abonar ${{ "%.2f"|format(envio.costo_total) }}
-          </div>
-          <div class="payment-reference">Referencia: {{ qr_id }}</div>
-        </div>
-        {% endif %}
-
-        <div class="alert alert-warning mt-2" style="font-size:12px;">
-          Instrucciones: Aguarde la confirmación de la transacción en su terminal comercial antes de asentar el pago en el sistema.
-        </div>
+        <p class="text-muted mt-2">Registrá esta operación únicamente después de comprobar la acreditación en la cuenta de la empresa.</p>
+        <label class="manual-payment-check"><input type="checkbox" name="transferencia_verificada" value="1" required>
+          Comprobé la acreditación y la referencia del comprobante.</label>
 
         <button type="submit" class="btn btn-primary w-100 btn-lg mt-2">
-          Confirmar Transacción Digital <i class="fa-solid fa-check" style="margin-left:8px;"></i>
+          Registrar transferencia verificada <i class="fa-solid fa-check" style="margin-left:8px;"></i>
         </button>
       </form>
 

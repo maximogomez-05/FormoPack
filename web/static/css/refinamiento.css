@@ -1,0 +1,61 @@
+/* Acabado de la interfaz: conservar estructura y usar el color como señal. */
+:root {
+  --text-main: #202d3e;
+  --text-muted: #536276;
+  --border: #dce2e9;
+  --bg-main: #f3f5f7;
+  --success: #28624d;
+  --warning: #8c5b1f;
+  --danger: #a03542;
+  --info: #355f85;
+  --shadow-sm: 0 1px 3px rgba(22, 35, 50, .045);
+  --shadow-md: 0 5px 18px rgba(22, 35, 50, .065);
+}
+.card { border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+.card:hover { box-shadow: var(--shadow-sm); transform: none; }
+.card-header { border-bottom-color: #e9edf1; background: #fafbfc; }
+.metric-card, .metric-card.green, .metric-card.yellow, .metric-card.blue, .metric-card.red {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.metric-card:hover { border-color: #aebdcd; transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.metric-card .metric-icon { color: #47617d; opacity: 1; font-size: 20px; }
+.metric-card .metric-label { color: #536276; font-size: 11px; letter-spacing: .5px; }
+.metric-card .metric-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.alert, .alert-success, .alert-info, .alert-warning, .alert-danger {
+  background: #fff;
+  color: #263548;
+  border: 1px solid #dce2e9;
+  border-left: 3px solid #71859a;
+  box-shadow: none;
+  line-height: 1.55;
+  align-items: flex-start;
+}
+.alert-success { border-left-color: #28624d; }
+.alert-warning { border-left-color: #8c5b1f; }
+.alert-danger { border-left-color: #a03542; }
+.alert-info { border-left-color: #355f85; }
+.alert > i { color: #536276; margin-top: 4px; }
+.alert-dismiss { margin-left: auto; padding: 0 3px; border: 0; background: transparent; color: #536276; cursor: pointer; font-size: 21px; line-height: 1.2; }
+.badge { border: 1px solid transparent; font-weight: 600; letter-spacing: .1px; }
+.badge-recibido, .badge-en_ruta, .badge-digital, .badge-mercadopago, .badge-recepcionista { background: #edf2f7; color: #284d70; border-color: #d9e3ed; }
+.badge-entregado, .badge-disponible, .badge-pagado, .badge-chofer { background: #edf4f0; color: #23543f; border-color: #d5e5dc; }
+.badge-en_planta, .badge-mantenimiento, .badge-cuenta_corriente { background: #f7f2e9; color: #714b20; border-color: #e8dcc5; }
+.badge-fallido, .badge-devolucion, .badge-fuera_de_servicio, .badge-pendiente, .badge-administrador { background: #f8eff0; color: #8a2e3a; border-color: #ead7db; }
+.badge-efectivo { background: #f0f2f5; color: #435164; border-color: #dfe4eb; }
+.btn { transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.btn:active { transform: translateY(1px); }
+:focus-visible { outline: 3px solid #6c97bf; outline-offset: 3px; }
+.form-control:focus { box-shadow: 0 0 0 3px rgba(53, 95, 133, .12); }
+@keyframes aparecer-panel { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.page-content > .card, .page-content > .metrics-grid { animation: aparecer-panel 240ms ease both; }
+.payment-result { max-width: 620px; margin: 12vh auto; padding: 20px; }
+.payment-confirmed-mark { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d5e5dc; border-radius: 50%; color: #23543f; background: #edf4f0; font-size: 30px; }
+.provider-name { font-size: 15px; color: #354b62; font-weight: 600; margin: 8px 0; }
+.manual-payment-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.6; margin: 16px 0; }
+@media (max-width: 768px) { .sidebar:not(.open) { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  [data-aos] { opacity: 1 !important; transform: none !important; }
+}

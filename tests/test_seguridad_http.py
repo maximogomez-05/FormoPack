@@ -101,12 +101,12 @@ class TestErroresSeguridadHTTP:
         assert response.json["ok"] is False
         assert response.json["code"] == "CSRF_ERROR"
 
-    def test_webhook_no_dispara_nameerror_en_error_csrf(self, app):
-        # La autenticación y exención del webhook se resuelven en la etapa de pagos.
+    def test_webhook_exento_csrf_exige_su_autenticacion(self, app):
+        # Solo este endpoint usa firma externa en lugar de CSRF.
         with patch("web.routes.recepcion.MercadoPagoService") as mp:
             response = app.test_client().post("/recepcion/mp/webhook", json={"type": "payment"})
-        assert response.status_code == 400
-        assert response.json["code"] == "CSRF_ERROR"
+        assert response.status_code == 401
+        assert response.json["code"] == "INVALID_SIGNATURE"
         mp.assert_not_called()
 
     @pytest.mark.parametrize("accept", ["text/html", "application/json"])

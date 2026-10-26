@@ -20,6 +20,12 @@ Si la migración 005 ya estaba aplicada, ejecutar `py -m app.core.migrations --d
 con respaldo previo y la aplicación detenida. Las migraciones se ejecutan fuera
 del arranque web.
 
+Para una instalación con 005 y 006 aplicadas, el incremento de
+[pagos verificados y acabado visual](docs/PAGOS_MERCADOPAGO.md) requiere
+`py -m app.core.migrations --desde 007`, con aplicación detenida y respaldo
+comprobado. Configurar `MP_COLLECTOR_ID`, `MP_WEBHOOK_SECRET` y `MP_TEST_MODE`
+además del token; una referencia QR manual ya no acredita un pago de Mercado Pago.
+
 **FormoPack Express** es un Sistema de Gestión Logística integral diseñado para automatizar el registro, cotización, seguimiento y entrega de encomiendas. El objetivo principal es erradicar el uso de papel y planillas manuales, unificando la administración en mostrador, la logística (armado de hojas de ruta) y la operación en calle mediante una aplicación web *Mobile-First* para los choferes.
 
 ## 🏗️ Arquitectura y Tecnologías

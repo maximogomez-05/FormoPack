@@ -63,6 +63,11 @@ class MigrationManager:
                     continue
 
                 logger.info("Aplicando migración: %s...", version)
+                if version == "007_pagos_mp":
+                    cur.execute("""SELECT id_transaccion_ext FROM pagos WHERE id_transaccion_ext IS NOT NULL
+                        GROUP BY id_transaccion_ext HAVING COUNT(*) > 1""")
+                    if cur.fetchall():
+                        raise ValueError("Hay referencias de pago externo duplicadas. Resolverlas antes de migrar pagos.")
                 if version == "006_soporte_exclusivo":
                     cur.execute("""SELECT id_usuario_atendiendo FROM chats_soporte
                         WHERE estado = 'en_progreso' AND id_usuario_atendiendo IS NOT NULL

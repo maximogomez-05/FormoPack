@@ -9,7 +9,8 @@
   <!-- Favicon corporativo SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><path fill='%23004481' d='M256 16L79.8 93.6C75.7 95.4 73 99.5 73 104v304c0 4.5 2.7 8.6 6.8 10.4L256 496l176.2-77.6c4.1-1.8 6.8-5.9 6.8-10.4V104c0-4.5-2.7-8.6-6.8-10.4L256 16zm135.2 367L256 442.5 120.8 383V163.6l121.7 54.1c8.4 3.7 18.5 3.7 26.9 0l121.7-54.1V383z'/></svg>">
   <!-- CSS Principal -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=5) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=6) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=1) }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
@@ -125,9 +126,10 @@
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for cat, msg in messages %}
-            <div class="alert alert-{{ cat }}">
+            <div class="alert alert-{{ cat }}" role="{{ 'alert' if cat in ['danger', 'warning'] else 'status' }}">
               <i class="fa-solid {% if cat == 'success' %}fa-check-circle{% elif cat == 'danger' %}fa-exclamation-circle{% elif cat == 'warning' %}fa-triangle-exclamation{% else %}fa-info-circle{% endif %}"></i>
               <span>{{ msg }}</span>
+              <button type="button" class="alert-dismiss" aria-label="Cerrar aviso" onclick="this.closest('.alert').remove()">&times;</button>
             </div>
           {% endfor %}
         {% endif %}
@@ -141,18 +143,12 @@
 {% block scripts %}{% endblock %}
 <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
 <script>
-  if (window.AOS) window.AOS.init({ duration: 500, once: true, offset: 40 });
-  
-  // Auto-dismiss alerts después de 5 segundos
-  document.querySelectorAll('.alert').forEach(alert => {
-    setTimeout(() => {
-      alert.style.opacity = '0';
-      alert.style.transform = 'translateY(-8px)';
-      alert.style.transition = 'all 0.4s ease';
-      setTimeout(() => alert.remove(), 400);
-    }, 5000);
-  });
-  
+  if (window.AOS) {
+    window.AOS.init({ duration: 260, once: true, offset: 24, disable: window.matchMedia('(prefers-reduced-motion: reduce)').matches });
+  } else {
+    document.querySelectorAll('[data-aos]').forEach(el => el.removeAttribute('data-aos'));
+  }
+
   // Mobile sidebar controls
   const toggleBtn = document.getElementById('sidebar-toggle');
   const closeBtn = document.getElementById('sidebar-close');

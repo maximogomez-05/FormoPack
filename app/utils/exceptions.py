@@ -105,3 +105,11 @@ class SoporteError(FormopackBaseError):
     def __init__(self, message: str, status: int = 400, code: str = "SUPPORT_ERROR"):
         super().__init__(message, code=code)
         self.status = status
+
+
+class PagoExternoError(FormopackBaseError):
+    """Rechazo o indisponibilidad del procesamiento de pagos externos."""
+
+    def __init__(self, message, status=409, code="PAYMENT_CONFLICT"):
+        super().__init__(message, code)
+        self.status = status

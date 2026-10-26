@@ -87,7 +87,7 @@ def create_app() -> Flask:
         from web.security.sesiones import ControlSesion
         from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError
 
-        if "usuario_id" not in session or request.endpoint in {"static", "service_worker"}:
+        if "usuario_id" not in session or request.endpoint in {"static", "service_worker", "recepcion.mp_webhook"}:
             return None
         try:
             ControlSesion().validar()

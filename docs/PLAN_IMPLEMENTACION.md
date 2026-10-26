@@ -124,14 +124,32 @@ ni modifica los datos operativos. Detalles: [recepción y validaciones](RECEPCIO
 La acreditación externa de Mercado Pago, rendiciones en destino e inmutabilidad
 documental siguen pendientes. Este incremento no cierra toda la etapa 2.
 
-- [ ] Encapsular la confirmación de Mercado Pago en un servicio: comprobar
+### Incremento 2B Checkout Pro y acabado visual
+
+Implementados el contexto de orden local, validación de firma y recurso externo,
+idempotencia SQL, polling POST con CSRF y retorno sin acreditación por querystring.
+El checkout reutiliza la preferencia guardada y el QR se genera en Python.
+La transferencia manual queda separada. Los ingresos recibidos tras el cierre
+se conservan fuera de turno y son visibles para administración.
+
+Se refinan contrastes, avisos y bordes sin cambiar la distribución, con
+transiciones discretas y respeto por movimiento reducido. Ver
+[configuración, pruebas y límites](PAGOS_MERCADOPAGO.md).
+
+La selección acumulada comprende 308 pruebas. Falta completar cuenta receptora
+y secreto de webhook en el entorno y verificar una compra sandbox auténtica;
+las pruebas automatizadas simulan el proveedor y no realizan cobros reales.
+
+- [x] Encapsular la confirmación de Mercado Pago en un servicio: comprobar
   estado, referencia, importe, moneda y destinatario comercial del pago.
-- [ ] Autenticar notificaciones según el producto de Mercado Pago utilizado;
+- [x] Autenticar notificaciones de Checkout Pro/Preferences mediante firma;
   eximir de CSRF el webhook específico y gestionar reintentos reales.
-- [ ] Unicidad del pago externo e idempotencia entre webhook, retorno y polling.
-- [ ] No anunciar aprobación si falla la conciliación local.
-- [ ] Asociar cobros digitales a su contexto contable y definir cómo se
-  concilian los recibidos fuera de un turno.
+- [x] Unicidad del pago externo e idempotencia de webhook y polling; retorno de
+  navegador sin escritura de pagos.
+- [x] No anunciar aprobación si falla la conciliación local.
+- [x] Conservar contexto de caja original y registrar fuera de turno si ya cerró.
+- [ ] Completar conciliación administrativa posterior de esos ingresos,
+  devoluciones/contracargos y una prueba externa con la cuenta de sandbox.
 - [x] Validar titularidad y estado del turno, serializar apertura y cierre y
   coordinar el registro de cobros con el cierre en la aplicación.
 - [ ] Separar pago acreditado, registro manual de transferencia, cuenta corriente
@@ -251,7 +269,7 @@ suite completa ni una prueba de concurrencia contra un motor real.
 
 Referencia de seguridad: [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
 
-El webhook de Mercado Pago sigue pendiente en la etapa 2: ya no provoca el
-NameError del manejador CSRF, pero todavía se rechaza por falta de token.
+El webhook de Checkout Pro usa firma externa y una exención CSRF específica
+desde el incremento 2B. La compra sandbox externa sigue pendiente de configuración.
 La suite completa conserva pruebas antiguas que necesitan aislarse antes de
 ejecutarlas; no debe apuntarse automáticamente a la base de trabajo.

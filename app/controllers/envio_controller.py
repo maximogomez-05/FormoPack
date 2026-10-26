@@ -256,6 +256,8 @@ class EnvioController:
         if tipo_pago == "digital" and not id_transaccion_qr:
             raise ValidationError(field="id_transaccion_qr", reason="El pago digital requiere una referencia QR")
 
+        if tipo_pago == "digital" and billetera_virtual not in {"Transferencia Bancaria", "Naranja X", "MODO", "Uala"}:
+            raise ValidationError("billetera_virtual", "Mercado Pago requiere confirmación externa; seleccioná la plataforma de transferencia manual")
         sql = """
             INSERT INTO pagos
                 (id_envio, id_turno, monto, tipo_pago, monto_entregado,

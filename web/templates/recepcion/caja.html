@@ -75,12 +75,21 @@
     <div class="form-group" style="text-align:left;">
       <label class="form-label">Fondo Fijo Inicial / Saldo de Apertura ($)</label>
       <input type="number" max="9999999999.99" name="saldo_inicial" class="form-control"
-             placeholder="0.00" min="0" max="999999" step="0.01" value="0">
+             placeholder="0.00" min="0" step="0.01" value="0">
     </div>
     <button type="submit" class="btn btn-primary btn-lg w-100">
       <i class="fa-solid fa-key"></i> Habilitar Turno
     </button>
   </form>
+</div>
+{% endif %}
+{% if session.rol == 'administrador' and pagos_sin_turno %}
+<div class="card mt-3">
+  <div class="card-header"><span class="card-title">Cobros externos fuera de turno</span></div>
+  <p class="text-muted">Estos ingresos se recibieron sin una caja abierta asociada. Revisalos por separado; los cierres anteriores conservan su arqueo.</p>
+  <div class="table-responsive"><table><thead><tr><th>Guía</th><th>Fecha</th><th>Referencia</th><th>Importe</th></tr></thead><tbody>
+  {% for pago in pagos_sin_turno %}<tr><td><a href="{{ url_for('recepcion.comprobante', nro_guia=pago.nro_guia) }}">{{ pago.nro_guia }}</a></td><td>{{ pago.fecha }}</td><td>{{ pago.id_transaccion_ext }}</td><td>${{ '%.2f'|format(pago.monto) }}</td></tr>{% endfor %}
+  </tbody></table></div>
 </div>
 {% endif %}
 {% endblock %}

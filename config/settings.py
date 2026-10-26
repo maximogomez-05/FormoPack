@@ -97,6 +97,9 @@ class MercadoPagoConfig:
     """Configuración del SDK de Mercado Pago (RF 2.5 — Checkout Pro)."""
     ACCESS_TOKEN: str = os.getenv("MP_ACCESS_TOKEN", "")
     PUBLIC_KEY: str = os.getenv("MP_PUBLIC_KEY", "")
+    WEBHOOK_SECRET: str = os.getenv("MP_WEBHOOK_SECRET", "")
+    COLLECTOR_ID: str = os.getenv("MP_COLLECTOR_ID", "")
+    TEST_MODE: bool = os.getenv("MP_TEST_MODE", "true").lower() == "true"
     BASE_URL: str = os.getenv("MP_BASE_URL", "http://localhost:5050")
     # Rutas de callback (Mercado Pago redirige al usuario a estas URLs)
     SUCCESS_URL: str = f"{BASE_URL}/recepcion/mp/success"
@@ -107,4 +110,4 @@ class MercadoPagoConfig:
     @classmethod
     def esta_configurado(cls) -> bool:
         """Verifica si las credenciales de Mercado Pago están cargadas."""
-        return bool(cls.ACCESS_TOKEN and not cls.ACCESS_TOKEN.startswith("TEST-PEGAR"))
+        return bool(cls.ACCESS_TOKEN and not any(x in cls.ACCESS_TOKEN.lower() for x in ("pegar", "tu_access_token")))

@@ -4,13 +4,12 @@
 
 {% block content %}
 <div style="display: flex; justify-content: center; align-items: center; min-height: 75vh; padding: 12px 0;" data-aos="zoom-in">
-  <div class="card" style="max-width: 480px; width: 100%; border-top: 4px solid #009ee3; margin: 0 auto;" id="mp-card">
+  <div class="card" style="max-width: 480px; width: 100%; border-top: 3px solid #355f85; margin: 0 auto;" id="mp-card">
 
     <!-- ESTADO: Esperando pago -->
     <div id="estado-esperando">
-      <div class="card-header text-center" style="background: #f0faff; border-bottom: 1px solid #e0e6ef; justify-content: center; flex-direction: column;">
-        <img src="https://http2.mlstatic.com/frontend-assets/ui-navigation/5.19.5/mercadopago/logo__large.png"
-             alt="Mercado Pago" style="max-width:180px; margin: 10px auto;">
+      <div class="card-header text-center" style="background: #fafbfc; border-bottom: 1px solid #e0e6ef; justify-content: center; flex-direction: column;">
+        <span class="provider-name">Mercado Pago</span>
         <h3 style="margin-bottom: 0; color: #006699; font-weight: 800;">Pago Seguro</h3>
       </div>
 
@@ -21,14 +20,14 @@
         </h2>
 
         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
-          Pedile al cliente que escanee este código QR con la app de Mercado Pago o la cámara de su celular.
+          Pedile al cliente que escanee el código con la cámara del teléfono para abrir el pago en Mercado Pago.
         </p>
 
         <!-- Contenedor del QR -->
-        <div id="qrcode" style="display: flex; justify-content: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid var(--border);"></div>
+        <div id="qrcode" style="display: flex; justify-content: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid var(--border);"><img src="data:image/png;base64,{{ qr_checkout }}" alt="Código QR para abrir el pago seguro" style="width:200px;height:200px;"></div>
 
         <!-- Indicador de polling activo -->
-        <div id="polling-status" style="font-size: 13px; color: #2563eb; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <div id="polling-status" style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
           <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#2563eb; animation: pulse-dot 1.2s infinite;"></span>
           Esperando confirmación de pago...
         </div>
@@ -37,8 +36,8 @@
           <a href="{{ url_for('recepcion.cobrar_envio', nro_guia=envio.nro_guia) }}" class="btn btn-secondary" style="flex: 1 1 auto; text-align: center; justify-content: center;">
             <i class="fa-solid fa-arrow-left"></i> Volver
           </a>
-          <a href="{{ url_checkout }}" target="_blank" class="btn btn-primary" style="background:#009ee3; border-color:#009ee3; flex: 1 1 auto; text-align: center; justify-content: center;">
-            Abrir en browser <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          <a href="{{ url_checkout }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="background:#009ee3; border-color:#009ee3; flex: 1 1 auto; text-align: center; justify-content: center;">
+            Abrir pago seguro <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
         </div>
       </div>
@@ -47,8 +46,8 @@
     <!-- ESTADO: Pago aprobado (oculto hasta que se detecte el pago) -->
     <div id="estado-aprobado" style="display:none;">
       <div class="card-body text-center" style="padding: 50px 30px;">
-        <div style="font-size: 80px; color: #22c55e; margin-bottom: 20px;">✅</div>
-        <h2 style="color: #22c55e; font-weight: 800;">¡Pago Confirmado!</h2>
+        <div class="payment-confirmed-mark" aria-hidden="true">✓</div>
+        <h2 style="color: var(--success); font-weight: 700;">¡Pago Confirmado!</h2>
         <p style="font-size: 16px; color: #4a5568; margin: 15px 0;">El cliente pagó correctamente. Redirigiendo al comprobante...</p>
         <div style="font-size: 13px; color: #6c757d;">Guía: <strong>{{ envio.nro_guia }}</strong></div>
       </div>
@@ -66,20 +65,11 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
 <script>
   // Generar el QR de la URL del Checkout
-  const urlPago = "{{ url_checkout }}";
-  const nroGuia = "{{ envio.nro_guia }}";
-
-  new QRCode(document.getElementById("qrcode"), {
-    text: urlPago,
-    width: 200,
-    height: 200,
-    colorDark: "#006699",
-    colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.H
-  });
+  const urlPago = {{ url_checkout|tojson }};
+  const nroGuia = {{ envio.nro_guia|tojson }};
 
   // RF 6.3: Polling en vivo — consulta el backend cada 4 segundos
   let pollingActivo = true;
@@ -99,11 +89,14 @@
 
     try {
       const resp = await fetch(`/recepcion/mp/verificar/${nroGuia}`, {
-        credentials: 'same-origin'
+        method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       const data = await resp.json();
 
-      if (data.aprobado) {
+      if (!resp.ok) {
+        document.getElementById('polling-status').textContent = data.error || 'No se pudo verificar el pago. Reintentando…';
+        if ([401, 403, 409].includes(resp.status)) pollingActivo = false;
+      } else if (data.aprobado) {
         // ¡PAGO DETECTADO! Mostrar pantalla de éxito
         pollingActivo = false;
         document.getElementById('estado-esperando').style.display = 'none';
@@ -116,7 +109,7 @@
       }
     } catch (err) {
       // Error de red: continuar esperando silenciosamente
-      console.warn('Error de red en verificación MP:', err);
+      document.getElementById('polling-status').textContent = 'Conexión interrumpida. Reintentando la verificación…';
     }
 
     // Programar el próximo check

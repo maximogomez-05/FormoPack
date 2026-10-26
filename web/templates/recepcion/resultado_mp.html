@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estado del pago — FormoPack</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=6) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=1) }}"></head>
+<body><main class="payment-result">
+  <div class="card"><div class="card-header"><span class="card-title">Estado del pago</span></div>
+  <p>Estamos verificando la operación con Mercado Pago. El comprobante estará disponible cuando se confirme la acreditación.</p>
+  <p class="text-muted">Si el pago sigue pendiente o fue rechazado, consultá con el personal antes de volver a pagar.</p>
+  <a class="btn btn-primary" href="{{ url_for('admin.tracking_publico') }}">Ir a seguimiento</a></div>
+</main></body></html>
