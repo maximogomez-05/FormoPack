@@ -18,6 +18,7 @@ from app.models.comprobante_interno import ComprobanteInterno
 from app.controllers.logistica_controller import LogisticaController
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
 from app.controllers.usuario_controller import UsuarioController
+from app.services.actividad_operativa import ActividadOperativa
 from app.controllers.liquidacion_controller import LiquidacionController
 from config.settings import EmailConfig
 admin_bp = Blueprint("admin", __name__)
@@ -64,7 +65,9 @@ def dashboard():
         "limite": request.args.get("limite", "25").strip(),
     }
     metricas = _obtener_metricas()
-    historico = _obtener_historico_metricas()
+    actividad = ActividadOperativa(_obtener_historico_metricas())
+    mostrar_todos = request.args.get("actividad") == "todos"
+    historico = actividad.filas(mostrar_todos)
     ultimos_envios = _obtener_ultimos_envios(filtros=filtros)
     alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
 
@@ -81,7 +84,7 @@ def dashboard():
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
-        historico=historico,
+        historico=historico, actividad=actividad, mostrar_todos=mostrar_todos,
         ultimos_envios=ultimos_envios,
         alertas=alertas,
         filtros=filtros,
@@ -1131,7 +1134,7 @@ def _obtener_historico_metricas() -> list:
         return resultado
     except Exception as e:
         logger.error("Error al obtener histórico del dashboard: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo consultar la actividad del período") from e
     finally:
         if conn:
             conn.close()

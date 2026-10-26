@@ -36,8 +36,9 @@
                 </select>
             </div>
             <div class="form-group" style="margin-top: 10px;">
-                <label>Contraseña</label>
-                <input type="password" name="password" class="form-control" minlength="8" maxlength="72" placeholder="Mín. 8 caracteres" required>
+                <label>Contraseña provisoria</label>
+                <input type="password" name="password" class="form-control" minlength="8" maxlength="72" placeholder="Mín. 8 caracteres, letra y número" autocomplete="new-password" required>
+                <small class="text-muted">La persona deberá elegir su contraseña personal al ingresar por primera vez.</small>
             </div>
             <div style="margin-top: 20px; text-align: right;">
                 <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">Cancelar</button>

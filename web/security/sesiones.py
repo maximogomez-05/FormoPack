@@ -21,7 +21,7 @@ class ControlSesion:
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                """SELECT nombre, email, tipo_usuario, activo, version_sesion
+                """SELECT nombre, email, tipo_usuario, activo, version_sesion, debe_cambiar_password
                    FROM usuarios WHERE id_usuario = %s""", (session["usuario_id"],),
             )
             usuario = cursor.fetchone()
@@ -33,6 +33,7 @@ class ControlSesion:
                 session.clear()
                 return False
             session.update(nombre=usuario["nombre"], email=usuario["email"], rol=usuario["tipo_usuario"])
+            session["debe_cambiar_password"] = bool(usuario.get("debe_cambiar_password", False))
             return True
         except Exception as exc:
             raise DatabaseQueryError("No se pudo verificar la sesión") from exc
@@ -47,6 +48,7 @@ class ControlSesion:
         session.update(
             usuario_id=usuario.id_usuario, nombre=usuario.nombre, email=usuario.email,
             rol=usuario.tipo_usuario, version_sesion=usuario.version_sesion,
+            debe_cambiar_password=usuario.debe_cambiar_password,
         )
         # Flask-Session regenera solo si el contenido de la sesión no está vacío.
         current_app.session_interface.regenerate(session)

@@ -24,6 +24,7 @@ class Usuario:
         activo: bool = True,
         nro_licencia: Optional[str] = None,
         version_sesion: int = 0,
+        debe_cambiar_password: bool = False,
     ) -> None:
         self._id_usuario = id_usuario
         self._nombre = nombre
@@ -33,6 +34,11 @@ class Usuario:
         self._activo = activo
         self._nro_licencia = nro_licencia
         self._version_sesion = version_sesion
+        self._debe_cambiar_password = debe_cambiar_password
+
+    @property
+    def debe_cambiar_password(self) -> bool:
+        return self._debe_cambiar_password
 
     @property
     def version_sesion(self) -> int:
@@ -105,6 +111,7 @@ class Usuario:
             activo=bool(row.get("activo", True)),
             nro_licencia=row.get("nro_licencia"),
             version_sesion=int(row.get("version_sesion", 0)),
+            debe_cambiar_password=bool(row.get("debe_cambiar_password", False)),
         )
 
         if tipo == RoleConfig.ADMINISTRADOR:

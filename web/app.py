@@ -91,6 +91,12 @@ def create_app() -> Flask:
             return None
         try:
             ControlSesion().validar()
+            if session.get("debe_cambiar_password") and request.endpoint not in {"auth.cambiar_password_inicial", "auth.logout"}:
+                if ManejadorErroresSeguridad.espera_json():
+                    from flask import jsonify
+                    return jsonify(ok=False, code="PASSWORD_CHANGE_REQUIRED", error="Elegí tu contraseña personal antes de continuar.",
+                                   redirect_url=url_for("auth.cambiar_password_inicial")), 423
+                return redirect(url_for("auth.cambiar_password_inicial"))
         except (DatabaseConnectionError, DatabaseQueryError):
             # Ante caída de persistencia no confiar en permisos de una sesión vieja.
             abort(503)

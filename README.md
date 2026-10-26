@@ -26,6 +26,10 @@ Para una instalación con 005 y 006 aplicadas, el incremento de
 comprobado. Configurar `MP_COLLECTOR_ID`, `MP_WEBHOOK_SECRET` y `MP_TEST_MODE`
 además del token; una referencia QR manual ya no acredita un pago de Mercado Pago.
 
+El incremento de [primer acceso y navegación](docs/PRIMER_ACCESO_Y_NAVEGACION.md)
+requiere `py -m app.core.migrations --desde 008`. Las cuentas nuevas deben
+reemplazar su contraseña provisoria antes de operar; las existentes se conservan.
+
 **FormoPack Express** es un Sistema de Gestión Logística integral diseñado para automatizar el registro, cotización, seguimiento y entrega de encomiendas. El objetivo principal es erradicar el uso de papel y planillas manuales, unificando la administración en mostrador, la logística (armado de hojas de ruta) y la operación en calle mediante una aplicación web *Mobile-First* para los choferes.
 
 ## 🏗️ Arquitectura y Tecnologías

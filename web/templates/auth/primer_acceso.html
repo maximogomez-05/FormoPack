@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Elegí tu contraseña — FormoPack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=6) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=2) }}">
+</head><body>
+<main class="first-access-shell">
+  <section class="card first-access-card" aria-labelledby="first-access-title">
+    <span class="section-eyebrow">FormoPack · Primer acceso</span>
+    <h1 id="first-access-title">Una contraseña que solo vos conozcas</h1>
+    <p class="text-muted">Reemplazá la clave provisoria que te entregaron para habilitar tu cuenta de trabajo.</p>
+    {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group"><label class="form-label" for="password-actual">Contraseña provisoria</label>
+        <input class="form-control" type="password" name="password_actual" id="password-actual" autocomplete="current-password" maxlength="72" required autofocus></div>
+      <div class="form-group"><label class="form-label" for="password-nueva">Nueva contraseña personal</label>
+        <input class="form-control" type="password" name="nueva_password" id="password-nueva" autocomplete="new-password" minlength="8" maxlength="72" aria-describedby="password-ayuda" required>
+        <small id="password-ayuda" class="text-muted">Al menos 8 caracteres, una letra y un número. Máximo 72 bytes; las letras acentuadas pueden ocupar más de uno.</small></div>
+      <div class="form-group"><label class="form-label" for="password-confirmar">Repetí tu nueva contraseña</label>
+        <input class="form-control" type="password" name="confirmar_password" id="password-confirmar" autocomplete="new-password" minlength="8" maxlength="72" required></div>
+      <button type="submit" class="btn btn-primary w-100">Guardar contraseña y continuar</button>
+    </form>
+    <a class="first-access-exit" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+  </section>
+</main></body></html>

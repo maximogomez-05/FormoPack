@@ -62,6 +62,44 @@ class AuthController:
             rol=usuario.tipo_usuario,
         )
 
+    def cambiar_password_inicial(self, id_usuario, version_sesion, password_actual, nueva_password, confirmacion):
+        """Consume la clave provisoria y revoca las sesiones previas atómicamente."""
+        if nueva_password != confirmacion:
+            raise ValidationError("confirmacion", "Las contraseñas no coinciden")
+        Usuario.validar_complejidad_password(nueva_password)
+        conn, cursor = None, None
+        try:
+            conn = self._db.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM usuarios WHERE id_usuario=%s FOR UPDATE", (id_usuario,))
+            fila = cursor.fetchone()
+            if not fila or not fila["activo"] or fila["version_sesion"] != version_sesion:
+                raise AuthenticationError("La sesión ya no es válida. Volvé a iniciar sesión.")
+            usuario = Usuario.from_db_row(fila)
+            if not usuario.debe_cambiar_password:
+                raise ValidationError("password", "La clave provisoria ya fue reemplazada")
+            if not usuario.verificar_password(password_actual):
+                raise ValidationError("password_actual", "La contraseña provisoria no es correcta")
+            if usuario.verificar_password(nueva_password):
+                raise ValidationError("nueva_password", "Elegí una contraseña diferente de la provisoria")
+            nuevo_hash = Usuario.hashear_password(nueva_password)
+            cursor.execute("""UPDATE usuarios SET credenciales_hash=%s, debe_cambiar_password=0,
+                version_sesion=version_sesion+1 WHERE id_usuario=%s""", (nuevo_hash, id_usuario))
+            cursor.execute("UPDATE recuperacion_contrasenas SET utilizado=1 WHERE id_usuario=%s AND utilizado=0", (id_usuario,))
+            fila.update(credenciales_hash=nuevo_hash, debe_cambiar_password=0, version_sesion=version_sesion+1)
+            conn.commit()
+            return Usuario.from_db_row(fila)
+        except (ValidationError, AuthenticationError):
+            if conn: conn.rollback()
+            raise
+        except Exception as exc:
+            if conn: conn.rollback()
+            logger.error("No se pudo completar el primer acceso")
+            raise DatabaseQueryError("No se pudo guardar la contraseña. Intentá nuevamente.") from exc
+        finally:
+            if cursor: cursor.close()
+            if conn: conn.close()
+
     def verificar_permiso(self, usuario: Usuario, roles_permitidos: list[str]) -> bool:
         """Verifica si el usuario posee un rol permitido."""
         return usuario.tiene_permiso(roles_permitidos)
@@ -78,7 +116,7 @@ class AuthController:
     def _buscar_usuario_por_email(self, email: str) -> Optional[dict]:
         """Consulta usuario por email en la base de datos."""
         sql = """
-            SELECT id_usuario, nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo, version_sesion
+            SELECT id_usuario, nombre, email, credenciales_hash, tipo_usuario, nro_licencia, activo, version_sesion, debe_cambiar_password
             FROM usuarios
             WHERE email = %s
             LIMIT 1
@@ -181,7 +219,7 @@ class AuthController:
             cursor = conn.cursor(dictionary=True)
             # Mismo orden de bloqueo que la emisión: primero usuario, luego OTP.
             cursor.execute(
-                """SELECT id_usuario, activo FROM usuarios
+                """SELECT id_usuario, activo, credenciales_hash, debe_cambiar_password FROM usuarios
                    WHERE email = %s LIMIT 1 FOR UPDATE""",
                 (email_clean,),
             )
@@ -218,9 +256,13 @@ class AuthController:
                 conn.commit()
                 rechazo_persistido = True
                 raise
+            if fila.get("debe_cambiar_password"):
+                import bcrypt
+                if bcrypt.checkpw(nueva_password.encode("utf-8"), fila["credenciales_hash"].encode("utf-8")):
+                    raise ValidationError("nueva_password", "Elegí una contraseña diferente de la provisoria")
             nuevo_hash = Usuario.hashear_password(nueva_password)
             cursor.execute(
-                "UPDATE usuarios SET credenciales_hash = %s, version_sesion = version_sesion + 1 WHERE id_usuario = %s",
+                "UPDATE usuarios SET credenciales_hash = %s, debe_cambiar_password = 0, version_sesion = version_sesion + 1 WHERE id_usuario = %s",
                 (nuevo_hash, fila["id_usuario"]),
             )
             recuperacion.marcar_utilizado()

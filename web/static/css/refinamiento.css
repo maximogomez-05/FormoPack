@@ -53,6 +53,23 @@
 .payment-result { max-width: 620px; margin: 12vh auto; padding: 20px; }
 .payment-confirmed-mark { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d5e5dc; border-radius: 50%; color: #23543f; background: #edf4f0; font-size: 30px; }
 .provider-name { font-size: 15px; color: #354b62; font-weight: 600; margin: 8px 0; }
+.home-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid #dce2e9; border-radius: 8px; color: #354b62; background: #fff; text-decoration: none; font-size: 13px; font-weight: 600; transition: border-color 160ms ease, background-color 160ms ease; }
+.home-link:hover { border-color: #9aafc3; background: #f3f6f9; }
+.tracking-nav-actions { display: flex; align-items: center; gap: 18px; }
+.activity-caption { color: var(--text-muted); font-size: 12px; margin: 6px 0 0; }
+.activity-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+.dashboard-columns .card-header { flex-wrap: wrap; gap: 16px; }
+.activity-empty { padding: 28px 16px; text-align: center; color: #536276; }
+.activity-empty h3 { font-size: 16px; color: #263548; margin: 12px 0 8px; }
+.activity-empty p { margin: 0 0 18px; font-size: 13px; }
+.activity-empty-mark { display: grid; place-items: center; margin: 0 auto; width: 40px; height: 40px; border: 1px solid #dce2e9; border-radius: 50%; }
+.first-access-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.first-access-card { width: 100%; max-width: 470px; padding: 32px; }
+.first-access-card h1 { font-size: 25px; letter-spacing: -.6px; margin: 14px 0 12px; line-height: 1.2; }
+.first-access-card > p { margin-bottom: 26px; font-size: 14px; line-height: 1.6; }
+.section-eyebrow { color: #536276; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.first-access-exit { display: block; margin-top: 22px; text-align: center; color: #536276; font-size: 13px; }
+@media (max-width: 480px) { .tracking-topbar { flex-wrap: wrap; gap: 16px; } .tracking-nav-actions { width: 100%; justify-content: space-between; } .topbar-actions .home-link { padding: 8px; } .first-access-card { padding: 24px; } }
 .manual-payment-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.6; margin: 16px 0; }
 @media (max-width: 768px) { .sidebar:not(.open) { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) {

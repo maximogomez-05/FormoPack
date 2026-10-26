@@ -127,10 +127,18 @@
 <div class="dashboard-columns" style="margin-bottom:20px;">
   <div class="card">
     <div class="card-header">
-      <span class="card-title"><i class="fa-solid fa-chart-column"></i> Actividad Operativa de los Últimos 7 Días</span>
+      <div>
+        <span class="card-title">Actividad operativa · Últimos 7 días</span>
+        <p class="activity-caption">{{ actividad.con_movimiento|length }} de {{ actividad.dias|length }} días con movimiento · Registros, entregas e incidencias</p>
+      </div>
+      <nav class="activity-switch" aria-label="Días de actividad">
+        <a class="btn btn-sm {{ 'btn-secondary' if mostrar_todos else 'btn-primary' }}" href="{{ url_for('admin.dashboard', actividad='con_movimiento', **filtros) }}" {{ 'aria-current=page' if not mostrar_todos else '' }}>Con movimiento</a>
+        <a class="btn btn-sm {{ 'btn-primary' if mostrar_todos else 'btn-secondary' }}" href="{{ url_for('admin.dashboard', actividad='todos', **filtros) }}" {{ 'aria-current=page' if mostrar_todos else '' }}>Ver los 7 días</a>
+      </nav>
     </div>
     {% if historico %}
-    <div class="history-bars">
+    <p class="activity-caption">Gráfico: nuevos registros por día. Las entregas e incidencias se detallan en la tabla.</p>
+    <div class="history-bars" aria-label="Cantidad de nuevos registros por día visible">
       {% set max_envios = historico|map(attribute='total_envios')|max or 1 %}
       {% for dia in historico %}
       <div class="history-day">
@@ -165,7 +173,12 @@
       </table>
     </div>
     {% else %}
-    <p class="empty-state">No se registraron datos en el período.</p>
+    <div class="activity-empty" role="status">
+      <span class="activity-empty-mark" aria-hidden="true">—</span>
+      <h3>Sin movimientos en los últimos siete días</h3>
+      <p>Cuando se registren envíos, entregas o incidencias, aparecerán acá.</p>
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('admin.dashboard', actividad='todos', **filtros) }}">Ver el período completo</a>
+    </div>
     {% endif %}
   </div>
 </div>

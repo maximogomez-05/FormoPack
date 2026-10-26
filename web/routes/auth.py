@@ -87,6 +87,8 @@ def login():
 
             # Guardar sesión
             ControlSesion.iniciar(resultado.usuario)
+            if resultado.usuario.debe_cambiar_password:
+                return redirect(url_for("auth.cambiar_password_inicial"))
 
             logger.info("Login exitoso: %s (%s)", email, resultado.rol)
             flash(f"Bienvenido, {resultado.usuario.nombre}!", "success")
@@ -189,3 +191,25 @@ def restablecer_password():
     email_precargado = session.get("recuperar_email", request.args.get("email", ""))
     return render_template("auth/restablecer_password.html", email=email_precargado)
 
+
+
+@auth_bp.route("/primer-acceso", methods=["GET", "POST"])
+@login_required
+@limiter.limit("5 per minute", methods=["POST"])
+def cambiar_password_inicial():
+    if not session.get("debe_cambiar_password"):
+        return redirect(url_for("auth.dashboard"))
+    if request.method == "POST":
+        try:
+            usuario = AuthController().cambiar_password_inicial(
+                session["usuario_id"], session["version_sesion"], request.form.get("password_actual", ""),
+                request.form.get("nueva_password", ""), request.form.get("confirmar_password", ""))
+            ControlSesion.iniciar(usuario)
+            flash("Tu contraseña personal quedó guardada. Ya podés continuar.", "success")
+            return redirect(url_for("auth.dashboard"))
+        except ValidationError as error:
+            return render_template("auth/primer_acceso.html", error=error.message), 400
+        except AuthenticationError:
+            session.clear()
+            return redirect(url_for("auth.login"))
+    return render_template("auth/primer_acceso.html")

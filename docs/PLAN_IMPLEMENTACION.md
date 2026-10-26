@@ -94,6 +94,14 @@ de un respaldo aislado. Detalles y cambios para los diagramas: [soporte](SOPORTE
 
 ### Pendientes de seguridad
 
+Incremento de primer acceso: las cuentas nuevas reciben clave provisoria y
+deben reemplazarla antes de operar; la restricción se comprueba en servidor.
+Cambio atómico con revocación de sesiones y recuperación OTP coherente.
+Se agrega Inicio en tracking/paneles y una vista compacta de actividad con
+opción de período completo. Ver [detalle y migración 008](PRIMER_ACCESO_Y_NAVEGACION.md).
+Validación acumulada de la selección aislada: 329 pruebas aprobadas y dos
+deseleccionadas, con recorridos Chrome de alta, cambio obligatorio y navegación.
+
 - [ ] Evaluar diferencias temporales de recuperación y compartir el límite
   por IP entre procesos; programar limpieza de registros sin actividad.
 - [ ] Aplicar las excepciones CSRF solamente a endpoints que lo necesiten.

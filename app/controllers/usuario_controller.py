@@ -49,8 +49,8 @@ class UsuarioController:
             hashed_password = Usuario.hashear_password(password)
 
             cursor.execute("""
-                INSERT INTO usuarios (nombre, email, tipo_usuario, credenciales_hash, activo)
-                VALUES (%s, %s, %s, %s, 1)
+                INSERT INTO usuarios (nombre, email, tipo_usuario, credenciales_hash, activo, debe_cambiar_password)
+                VALUES (%s, %s, %s, %s, 1, 1)
             """, (nombre.strip(), email.strip(), tipo_usuario, hashed_password))
             conn.commit()
         except (DuplicateError, ValidationError):
