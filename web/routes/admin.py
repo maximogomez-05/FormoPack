@@ -19,6 +19,7 @@ from app.controllers.logistica_controller import LogisticaController
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
 from app.controllers.usuario_controller import UsuarioController
 from app.services.actividad_operativa import ActividadOperativa
+from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.controllers.liquidacion_controller import LiquidacionController
 from config.settings import EmailConfig
 admin_bp = Blueprint("admin", __name__)
@@ -98,62 +99,16 @@ def dashboard():
 def actualizar_estado_envio(id_envio: int):
     """Permite al personal administrativo actualizar el estado de cualquier envío (antiguo o reciente)."""
     nuevo_estado = request.form.get("nuevo_estado", "").strip().lower()
-    ubicacion = request.form.get("ubicacion", "").strip() or "Planta Central FormoPack"
-    observacion = request.form.get("observacion", "").strip() or f"Estado actualizado a '{nuevo_estado}' manualmente."
-
-    estados_validos = {"recibido", "en_planta", "en_ruta", "entregado", "fallido", "devolucion", "siniestro"}
-    if nuevo_estado not in estados_validos:
-        flash(f"El estado '{nuevo_estado}' no es válido.", "danger")
-        return redirect(request.referrer or url_for("admin.dashboard"))
-
-    conn = None
     try:
-        db = DatabaseManager.get_instance()
-        conn = db.get_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT id_envio, nro_guia, estado_actual FROM envios WHERE id_envio = %s", (id_envio,))
-        envio = cursor.fetchone()
-        if not envio:
-            flash("El envío solicitado no existe.", "danger")
-            return redirect(request.referrer or url_for("admin.dashboard"))
-
-        estado_anterior = envio["estado_actual"]
-        nro_guia = envio["nro_guia"]
-
-        # Actualizar envío
-        es_dev = 1 if nuevo_estado == "devolucion" else 0
-        cursor.execute("""
-            UPDATE envios 
-            SET estado_actual = %s,
-                es_devolucion = CASE WHEN %s = 1 THEN 1 ELSE es_devolucion END
-            WHERE id_envio = %s
-        """, (nuevo_estado, es_dev, id_envio))
-
-        # Registrar en historial_estados para trazabilidad
-        cursor.execute("""
-            INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
-            VALUES (%s, %s, %s, %s)
-        """, (id_envio, nuevo_estado, ubicacion, observacion))
-
-        conn.commit()
-        cursor.close()
-
-        # Notificar por email asíncrono si está configurado
-        from app.services.servicio_notificacion import notificar_cambio_estado_async
-        notificar_cambio_estado_async(id_envio=id_envio, nuevo_estado=nuevo_estado, observacion=observacion)
-
-        flash(f"Envío {nro_guia}: estado actualizado de '{estado_anterior}' a '{nuevo_estado}' exitosamente.", "success")
-    except Exception as exc:
-        if conn:
-            conn.rollback()
-        logger.error("Error al actualizar estado del envío #%s: %s", id_envio, exc)
-        flash("Ocurrió un error al actualizar el estado del envío.", "danger")
-    finally:
-        if conn:
-            conn.close()
-
-    return redirect(request.referrer or url_for("admin.dashboard"))
+        OperacionesLogisticas().actualizar_manual(id_envio, nuevo_estado, session["usuario_id"],
+            request.form.get("ubicacion", "").strip() or "Planta Central FormoPack",
+            request.form.get("observacion", "").strip() or "Cambio operativo registrado por el personal")
+        flash("Estado del envío actualizado y registrado en el historial.", "success")
+    except ValidationError as error:
+        flash(_mensaje_usuario_error(error), "warning")
+    except DatabaseQueryError:
+        flash("No se pudo confirmar el cambio. Actualizá el panel antes de reintentar.", "danger")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/reportes/envios.csv", methods=["GET"])
@@ -211,7 +166,7 @@ def enviar_alertas_email():
 
 @admin_bp.route("/logistica", methods=["GET"])
 @login_required
-@rol_requerido("administrador", "recepcionista")
+@rol_requerido("administrador")
 def logistica():
     """Pantalla de logística con flota, despacho y ruteo (RF 3.0 a RF 3.3)."""
     logistica_ctrl = LogisticaController()
@@ -273,7 +228,7 @@ def datos_mapa_logistica():
 
 @admin_bp.route("/logistica/vehiculos/nuevo", methods=["POST"])
 @login_required
-@rol_requerido("administrador", "recepcionista")
+@rol_requerido("administrador")
 def registrar_vehiculo():
     """Registra un vehículo disponible desde la pantalla de logística."""
     try:
@@ -295,7 +250,7 @@ def registrar_vehiculo():
 
 @admin_bp.route("/logistica/hojas/nueva", methods=["POST"])
 @login_required
-@rol_requerido("administrador", "recepcionista")
+@rol_requerido("administrador")
 def crear_hoja_ruta():
     """Crea una hoja de ruta con envíos recibidos."""
     envios_ids = request.form.getlist('envios_ids')
@@ -308,7 +263,7 @@ def crear_hoja_ruta():
             request.form.get("nro_despacho", "").strip(),
             int(request.form.get("id_chofer", 0)),
             int(request.form.get("id_vehiculo", 0)),
-            envios_ids,
+            envios_ids, id_solicitante=session["usuario_id"],
         )
         flash("Hoja de ruta creada y envíos asignados correctamente.", "success")
     except (ValueError, TypeError):
@@ -331,7 +286,7 @@ def _obtener_choferes_disponibles() -> list:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """SELECT id_usuario, nombre FROM usuarios
-               WHERE tipo_usuario = 'chofer' AND activo = 1 ORDER BY nombre"""
+               WHERE tipo_usuario = 'chofer' AND activo = 1 AND NOT EXISTS (SELECT 1 FROM hojas_de_ruta h WHERE h.id_chofer=usuarios.id_usuario AND h.estado='abierta') ORDER BY nombre"""
         )
         return cursor.fetchall()
     except Exception as e:

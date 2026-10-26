@@ -21,6 +21,18 @@ from tests.test_recepcion_bd import envio, cliente
 from tests.test_regresion_paginas import aplicacion, db
 
 
+def test_preferencia_excluye_tarjetas_sin_alterar_busqueda():
+    servicio = object.__new__(MercadoPagoService)
+    servicio._sdk = MagicMock()
+    servicio._sdk.preference().create.return_value = {'status': 201, 'response': {'id': 'test'}}
+    servicio.crear_preferencia('GUIA-TEST', 'Envío', 500, 'orden-test')
+    payload = servicio._sdk.preference().create.call_args.args[0]
+    assert {t['id'] for t in payload['payment_methods']['excluded_payment_types']} == {'credit_card', 'debit_card', 'prepaid_card'}
+    servicio._sdk.payment().search.return_value = {'status': 200, 'response': {'results': []}}
+    assert servicio.buscar_pagos('GUIA-TEST') == []
+    assert 'payment_methods' not in servicio._sdk.payment().search.call_args.args[0]
+
+
 @pytest.fixture(autouse=True)
 def configuracion(monkeypatch):
     monkeypatch.setattr(C, "COLLECTOR_ID", "12345")

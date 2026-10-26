@@ -63,6 +63,11 @@ class MigrationManager:
                     continue
 
                 logger.info("Aplicando migración: %s...", version)
+                if version == "009_logistica":
+                    for columna in ("id_chofer", "id_vehiculo"):
+                        cur.execute(f"SELECT {columna} FROM hojas_de_ruta WHERE estado='abierta' GROUP BY {columna} HAVING COUNT(*)>1")
+                        if cur.fetchall():
+                            raise ValueError("Hay recursos con varias rutas abiertas. Revisar los despachos antes de migrar logística.")
                 if version == "007_pagos_mp":
                     cur.execute("""SELECT id_transaccion_ext FROM pagos WHERE id_transaccion_ext IS NOT NULL
                         GROUP BY id_transaccion_ext HAVING COUNT(*) > 1""")

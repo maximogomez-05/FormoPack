@@ -28,10 +28,10 @@
         <h2><i class="fa-solid fa-truck"></i> {{ hoja.patente }}</h2>
         <p>Capacidad {{ hoja.capacidad_kg }} kg · Emitida {{ hoja.fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
         {% set total_envios = hoja.envios|length %}
-        {% set resueltos = hoja.envios|selectattr('estado_actual', 'in', ['entregado', 'devolucion', 'siniestro'])|list|length %}
+        {% set resueltos = hoja.envios|selectattr('resolucion')|list|length %}
         <p style="margin-top: 5px; font-weight: bold; color: var(--primary-color);">{{ resueltos }} de {{ total_envios }} envíos resueltos</p>
       </div>
-      {% if hoja.envios|selectattr('estado_actual', 'in', ['en_planta', 'recibido'])|list|length > 0 and hoja.envios|selectattr('estado_actual', 'equalto', 'en_ruta')|list|length == 0 %}
+      {% if not hoja.fecha_inicio %}
       <form method="POST" action="{{ url_for('chofer.iniciar_hoja', id_hoja_ruta=hoja.id_hoja_ruta) }}">
         <button class="btn btn-primary" type="submit" onclick='return confirm("¿Confirmar inicio de ruta? Los envíos pasarán a estado En Tránsito.")'><i class="fa-solid fa-play"></i> Iniciar ruta</button>
       </form>
@@ -58,15 +58,10 @@
           {% if envio.tipo_intento %}<small>Intento {{ envio.cantidad_intentos }} · {{ envio.tipo_intento }}{% if envio.intento_fecha %} · {{ envio.intento_fecha.strftime('%d/%m %H:%M') }}{% endif %}{% if envio.ultimo_motivo_fallo %} · Motivo: {{ envio.ultimo_motivo_fallo|replace('_', ' ')|capitalize }}{% endif %}</small>{% endif %}
         </div>
         <div class="delivery-actions">
-          {% if envio.estado_actual in ['en_ruta', 'fallido'] %}
-          <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')"><i class="fa-solid fa-clipboard-check"></i> {% if envio.estado_actual == 'fallido' %}Registrar reintento{% else %}Registrar resultado{% endif %}</button>
-          {% if envio.estado_actual == 'fallido' %}
-          <form method="POST" action="{{ url_for('chofer.registrar_devolucion', id_hoja_ruta=hoja.id_hoja_ruta, id_envio=envio.id_envio) }}" class="delivery-return-form">
-            <label class="form-label" for="motivo-devolucion-{{ envio.id_envio }}">Motivo de devolución</label>
-            <textarea id="motivo-devolucion-{{ envio.id_envio }}" name="motivo_devolucion" class="form-control" rows="2" required placeholder="Indicá por qué vuelve a origen"></textarea>
-            <button type="button" class="btn btn-danger" onclick="if(confirm('¿Marcar este envío para devolución a origen?')) enviarDevolucion(this.closest('form'))"><i class="fa-solid fa-rotate-left"></i> Devolver a origen</button>
-          </form>
-          {% endif %}
+          {% if envio.estado_actual == 'en_ruta' and not envio.resolucion %}
+          <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')">Registrar resultado</button>
+          {% elif envio.estado_actual == 'fallido' %}
+          <span class="delivery-result">Visita registrada · {{ 'En custodia' if envio.cantidad_intentos >= 3 else 'Revisión en depósito' }}</span>
           {% elif envio.estado_actual in ['en_planta', 'recibido'] %}
           <span class="delivery-pending" title="Primero iniciá la ruta para registrar la entrega"><i class="fa-solid fa-hourglass-start"></i> Requiere iniciar ruta</span>
           {% else %}

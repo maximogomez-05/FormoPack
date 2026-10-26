@@ -19,7 +19,9 @@ class HojaRuta:
         id_vehiculo: int,
         fecha_emision: datetime | None = None,
         envios: list[dict[str, Any]] | None = None,
+        estado: str = "abierta", fecha_inicio=None, fecha_cierre=None,
     ) -> None:
+        self.estado, self.fecha_inicio, self.fecha_cierre = estado, fecha_inicio, fecha_cierre
         self._id_hoja_ruta = id_hoja_ruta
         self._nro_despacho = nro_despacho
         self._id_chofer = id_chofer
@@ -62,7 +64,9 @@ class HojaRuta:
 
     def to_dict(self) -> dict:
         return {
-            "id_hoja_ruta": self._id_hoja_ruta,
+            "id_hoja_ruta": self._id_hoja_ruta, "estado": self.estado,
+            "fecha_inicio": self.fecha_inicio.isoformat() if self.fecha_inicio else None,
+            "fecha_cierre": self.fecha_cierre.isoformat() if self.fecha_cierre else None,
             "nro_despacho": self._nro_despacho,
             "id_chofer": self._id_chofer,
             "id_vehiculo": self._id_vehiculo,

@@ -567,6 +567,7 @@ tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
 .eyebrow { color:var(--primary); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .driver-status { color:var(--success); font-size:13px; font-weight:600; }
 .offline-banner, .queue-banner { padding:14px 16px; margin-bottom:20px; border-radius:var(--radius-input); font-size:14px; display:flex; gap:12px; align-items:center; box-shadow: var(--shadow-sm); font-weight: 500; }
+.offline-banner[hidden], .queue-banner[hidden] { display:none; }
 .offline-banner { color:#7a5200; background:#fff5d6; border:1px solid #f0d47b; }
 .queue-banner { color:#174d72; background:#eaf5ff; border:1px solid #b8daf2; }
 .driver-route-head { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom: 20px; }

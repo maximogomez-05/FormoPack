@@ -8,6 +8,7 @@ from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
 from app.services.ruteo import ServicioRuteo
+from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.services.servicio_notificacion import notificar_cambio_estado_async
 from app.utils.exceptions import (
     DatabaseConnectionError,
@@ -22,8 +23,8 @@ logger = logging.getLogger(__name__)
 class LogisticaController:
     """Gestiona flota, despacho y ruteo."""
 
-    def __init__(self) -> None:
-        self.db = DatabaseManager.get_instance()
+    def __init__(self, db_manager=None) -> None:
+        self.db = db_manager or DatabaseManager.get_instance()
 
     # ─────────────────────────────────────────
     # RF 3.1: Gestión de Flota
@@ -96,111 +97,8 @@ class LogisticaController:
     # RF 3.2: Armado de Despachos
     # ─────────────────────────────────────────
 
-    def crear_hoja_ruta(
-        self,
-        nro_despacho: str,
-        id_chofer: int,
-        id_vehiculo: int,
-        envios_ids: List[int],
-    ) -> HojaRuta:
-        """Crea una nueva hoja de ruta y asigna envíos."""
-        if not nro_despacho.strip() or not envios_ids:
-            raise ValidationError(field="hoja_ruta", reason="El despacho y al menos un envío son obligatorios")
-
-        conn = None
-        cursor = None
-        id_hoja_ruta = None
-        try:
-            conn = self.db.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
-                "SELECT capacidad_kg, estado FROM vehiculos WHERE id_vehiculo = %s FOR UPDATE",
-                (id_vehiculo,),
-            )
-            vehiculo = cursor.fetchone()
-            if not vehiculo or vehiculo["estado"] != "disponible":
-                raise ValidationError(field="vehiculo", reason="El vehículo no existe o no está disponible")
-
-            cursor.execute(
-                "SELECT id_usuario FROM usuarios WHERE id_usuario = %s AND tipo_usuario = 'chofer' AND activo = 1",
-                (id_chofer,),
-            )
-            if not cursor.fetchone():
-                raise ValidationError(field="chofer", reason="El chofer no existe o no está activo")
-
-            placeholders = ",".join(["%s"] * len(envios_ids))
-            cursor.execute(
-                f"""SELECT COUNT(DISTINCT e.id_envio) AS cantidad,
-                           COALESCE(SUM(b.peso_real), 0) AS peso_total
-                    FROM envios e
-                    LEFT JOIN bultos b ON b.id_envio = e.id_envio
-                    WHERE e.id_envio IN ({placeholders})
-                      AND e.estado_actual = 'recibido'
-                      AND e.id_hoja_ruta IS NULL""",
-                envios_ids,
-            )
-            carga = cursor.fetchone()
-            if carga["cantidad"] != len(set(envios_ids)):
-                raise ValidationError(field="envios", reason="Solo se pueden asignar envíos recibidos y sin despacho")
-            if float(carga["peso_total"]) > float(vehiculo["capacidad_kg"]):
-                raise ValidationError(field="vehiculo", reason="La carga supera la capacidad del vehículo")
-
-            # Crear hoja de ruta
-            cursor.execute(
-                """INSERT INTO hojas_de_ruta (nro_despacho, id_chofer, id_vehiculo)
-                   VALUES (%s, %s, %s)""",
-                (nro_despacho, id_chofer, id_vehiculo)
-            )
-            id_hoja_ruta = cursor.lastrowid
-
-            # Asignar envíos a la hoja de ruta y cambiar estado
-            for id_envio in envios_ids:
-                cursor.execute(
-                    "UPDATE envios SET id_hoja_ruta = %s, estado_actual = 'en_planta' WHERE id_envio = %s",
-                    (id_hoja_ruta, id_envio)
-                )
-                cursor.execute(
-                    """INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
-                       VALUES (%s, %s, %s, %s)""",
-                    (id_envio, EstadosEnvio.EN_PLANTA, "Sucursal Origen", "Envío asignado a una hoja de ruta."),
-                )
-            cursor.execute(
-                "UPDATE vehiculos SET estado = 'en_ruta' WHERE id_vehiculo = %s",
-                (id_vehiculo,),
-            )
-
-            conn.commit()
-
-        except ValidationError:
-            if conn:
-                try: conn.rollback()
-                except Exception: pass
-            raise
-        except Exception as e:
-            if conn:
-                try: conn.rollback()
-                except Exception: pass
-            logger.error("Error al crear hoja de ruta: %s", e)
-            raise DatabaseQueryError(f"Error al crear hoja de ruta: {e}") from e
-        finally:
-            if cursor:
-                try: cursor.close()
-                except Exception: pass
-            if conn:
-                try: conn.close()
-                except Exception: pass
-
-        # Notificaciones asíncronas desacopladas (RF 5.4 / RF 6.2)
-        for id_envio in envios_ids:
-            notificar_cambio_estado_async(
-                id_envio,
-                nuevo_estado=EstadosEnvio.EN_PLANTA,
-                observacion="El envío ha sido asignado a una hoja de ruta.",
-            )
-
-        # Recuperar la hoja completa con conexión independiente
-        return self.obtener_hoja_ruta(id_hoja_ruta)
+    def crear_hoja_ruta(self, nro_despacho, id_chofer, id_vehiculo, envios_ids, id_solicitante=None):
+        return OperacionesLogisticas(self.db).crear(nro_despacho, id_chofer, id_vehiculo, envios_ids, id_solicitante)
 
     def obtener_hoja_ruta(self, id_hoja_ruta: int) -> Optional[HojaRuta]:
         """Obtiene una hoja de ruta con sus envíos."""
@@ -222,11 +120,11 @@ class LogisticaController:
 
             # Envíos asignados
             cursor.execute(
-                """SELECT e.id_envio, e.nro_guia, e.estado_actual,
+                """SELECT e.id_envio, e.nro_guia, COALESCE(a.resolucion,e.estado_actual) AS estado_actual,
                           l.distancia_km, l.nombre as localidad_destino
-                   FROM envios e
+                   FROM hojas_ruta_envios a JOIN envios e ON e.id_envio=a.id_envio
                    JOIN localidades l ON e.id_localidad_destino = l.id_localidad
-                   WHERE e.id_hoja_ruta = %s
+                   WHERE a.id_hoja_ruta = %s
                    ORDER BY l.distancia_km ASC""",
                 (id_hoja_ruta,)
             )
@@ -238,7 +136,7 @@ class LogisticaController:
                 id_chofer=hoja_row["id_chofer"],
                 id_vehiculo=hoja_row["id_vehiculo"],
                 fecha_emision=hoja_row.get("fecha_emision"),
-                envios=envios or []
+                envios=envios or [], estado=hoja_row["estado"], fecha_inicio=hoja_row.get("fecha_inicio"), fecha_cierre=hoja_row.get("fecha_cierre")
             )
 
         except Exception as e:
@@ -265,7 +163,7 @@ class LogisticaController:
                 SELECT
                     hr.id_hoja_ruta,
                     hr.nro_despacho,
-                    hr.fecha_emision,
+                    hr.fecha_emision, hr.estado, hr.fecha_inicio,
                     u.nombre as chofer_nombre,
                     v.patente,
                     COUNT(e.id_envio) as cantidad_envios,
@@ -273,8 +171,10 @@ class LogisticaController:
                 FROM hojas_de_ruta hr
                 JOIN usuarios u ON hr.id_chofer = u.id_usuario
                 JOIN vehiculos v ON hr.id_vehiculo = v.id_vehiculo
-                LEFT JOIN envios e ON hr.id_hoja_ruta = e.id_hoja_ruta
+                LEFT JOIN hojas_ruta_envios a ON a.id_hoja_ruta=hr.id_hoja_ruta
+                LEFT JOIN envios e ON e.id_envio=a.id_envio
                 LEFT JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+                WHERE hr.estado='abierta'
                 GROUP BY hr.id_hoja_ruta
                 ORDER BY hr.fecha_emision DESC
                 LIMIT %s OFFSET %s
@@ -418,9 +318,10 @@ class LogisticaController:
                 FROM envios e
                 JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                 LEFT JOIN bultos b ON e.id_envio = b.id_envio
-                WHERE e.estado_actual IN (%s, %s)
+                WHERE (e.estado_actual IN (%s, %s) OR (e.estado_actual='fallido'
+                  AND (SELECT COUNT(*) FROM intentos_entrega i WHERE i.id_envio=e.id_envio AND i.tipo_intento='fallido') BETWEEN 1 AND 2))
                   AND e.id_hoja_ruta IS NULL
-                  AND e.estado_actual NOT IN ('entregado', 'fallido', 'devolucion', 'siniestro')
+                  AND NOT EXISTS (SELECT 1 FROM hojas_ruta_envios a JOIN hojas_de_ruta h ON h.id_hoja_ruta=a.id_hoja_ruta WHERE a.id_envio=e.id_envio AND h.estado='abierta')
                 GROUP BY e.id_envio
                 ORDER BY l.distancia_km ASC
                 LIMIT %s OFFSET %s

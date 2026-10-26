@@ -176,11 +176,17 @@ Mercado Pago de prueba, desconexiones y notificaciones repetidas.
 
 Requisitos: RF 3.1–3.5, 4.5, 5.5 y 6.1.
 
-- [ ] Centralizar en una clase las transiciones de envío y sus precondiciones;
+Incremento 3A: despacho y visitas con historial independiente, reserva/inicio,
+restricciones SQL, reintentos y cierre operativo implementados. Ver
+[reglas, migración y límites](LOGISTICA_ESTADOS.md). El cierre distingue visita
+resuelta de encomienda finalizada; RF 6.1 requiere ajustar esa precisión.
+Retiro físico, seguro y endurecimiento de evidencias todavía están pendientes.
+
+- [x] Centralizar en una clase las transiciones de envío y sus precondiciones;
   aplicar las mismas reglas desde chofer, recepción y administración.
 - [ ] Registrar actor, momento y motivo; impedir entrega sin evidencia requerida.
-- [ ] Unificar disponibilidad en depósito y criterios de selección de despacho.
-- [ ] Impedir asignar el mismo envío o recurso a despachos incompatibles,
+- [x] Unificar disponibilidad en depósito y criterios de selección de despacho.
+- [x] Impedir asignar el mismo envío o recurso a despachos incompatibles,
   incluso ante solicitudes simultáneas.
 - [ ] Definir reintento, custodia al tercer fallo, retiro en sucursal y devolución;
   impedir nuevos intentos domiciliarios al alcanzar el límite.
@@ -241,8 +247,9 @@ para evaluación. Un diagrama no sustituye una funcionalidad exigida por un RF.
 
 Requisitos: RNF 1.1–1.2, 2.2, 3.1–3.2 y 4.1.
 
-- [ ] Elegir hosting a partir de persistencia, MySQL, concurrencia, costos y
-  objetivos operativos; separar pruebas de producción.
+- [x] Elegir proveedor: Hostinger VPS, indicado por el usuario.
+- [ ] Contratar y dimensionar el VPS; configurar persistencia, MySQL y separación
+  entre pruebas y producción. La infraestructura todavía no está provisionada.
 - [ ] Desactivar debug; servidor WSGI, HTTPS, secretos y usuario SQL con
   privilegios mínimos. Evitar DDL y usuarios semilla durante el arranque web.
 - [ ] Unificar migraciones compatibles con la versión del motor elegido;

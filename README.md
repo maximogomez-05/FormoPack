@@ -93,6 +93,16 @@ Si querés levantar este proyecto en una computadora nueva o pasárselo a un pro
 
 ## 📁 Estructura del Proyecto
 
+Para una instalación existente, respaldar la base y ejecutar las migraciones
+pendientes antes de iniciar la web. La migración 009 requiere resolver cualquier
+chofer o vehículo con varias rutas abiertas; no elegir ni borrar rutas a ciegas.
+Ver [estados y logística](docs/LOGISTICA_ESTADOS.md) para el procedimiento, las
+reglas actuales y sus límites.
+
+```powershell
+py -B -m app.core.migrations --desde 009
+```
+
 ```text
 FormoPack/
 ├── app/

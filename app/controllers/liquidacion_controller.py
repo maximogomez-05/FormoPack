@@ -85,14 +85,15 @@ class LiquidacionController:
                     hr.fecha_emision,
                     v.patente,
                     COUNT(e.id_envio) AS cant_envios,
-                    COALESCE(SUM(CASE WHEN e.estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
-                    COALESCE(SUM(CASE WHEN e.estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
-                    COALESCE(SUM(CASE WHEN e.estado_actual NOT IN ('entregado', 'fallido') THEN 1 ELSE 0 END), 0) AS pendientes,
+                    COALESCE(SUM(CASE WHEN a.resolucion = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
+                    COALESCE(SUM(CASE WHEN a.resolucion = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
+                    COALESCE(SUM(CASE WHEN a.resolucion IS NULL THEN 1 ELSE 0 END), 0) AS pendientes,
                     COALESCE(SUM(e.costo_total), 0) AS monto,
                     COALESCE(MAX(l.distancia_km), 0) AS max_distancia
                 FROM hojas_de_ruta hr
                 JOIN vehiculos v ON hr.id_vehiculo = v.id_vehiculo
-                LEFT JOIN envios e ON e.id_hoja_ruta = hr.id_hoja_ruta
+                LEFT JOIN hojas_ruta_envios a ON a.id_hoja_ruta=hr.id_hoja_ruta
+                LEFT JOIN envios e ON e.id_envio=a.id_envio
                 LEFT JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                 WHERE hr.id_chofer = %s
                   AND DATE(hr.fecha_emision) BETWEEN %s AND %s
@@ -166,12 +167,13 @@ class LiquidacionController:
                     u.nombre AS nombre_chofer,
                     COUNT(DISTINCT hr.id_hoja_ruta) AS total_hojas,
                     COUNT(e.id_envio) AS total_envios,
-                    COALESCE(SUM(CASE WHEN e.estado_actual = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
-                    COALESCE(SUM(CASE WHEN e.estado_actual = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
+                    COALESCE(SUM(CASE WHEN a.resolucion = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
+                    COALESCE(SUM(CASE WHEN a.resolucion = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
                     COALESCE(SUM(e.costo_total), 0) AS monto_facturado
                 FROM usuarios u
                 INNER JOIN hojas_de_ruta hr ON u.id_usuario = hr.id_chofer
-                LEFT JOIN envios e ON e.id_hoja_ruta = hr.id_hoja_ruta
+                LEFT JOIN hojas_ruta_envios a ON a.id_hoja_ruta=hr.id_hoja_ruta
+                LEFT JOIN envios e ON e.id_envio=a.id_envio
                 WHERE u.tipo_usuario = 'chofer'
                   AND DATE(hr.fecha_emision) BETWEEN %s AND %s
                 GROUP BY u.id_usuario

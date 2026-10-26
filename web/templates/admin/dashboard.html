@@ -334,24 +334,21 @@
       <div class="form-group" style="margin-bottom:16px;">
         <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Nuevo Estado Operativo</label>
         <select name="nuevo_estado" id="modalNuevoEstado" class="form-control" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:14px;">
-          <option value="recibido">Recibido (En sucursal)</option>
           <option value="en_planta">En Planta (Centro de distribución / Clasificación)</option>
-          <option value="en_ruta">En Ruta (Despachado a reparto)</option>
-          <option value="entregado">Entregado (Entrega exitosa al destinatario)</option>
-          <option value="fallido">Fallido (Intento de entrega sin éxito)</option>
+          {% if session.rol == 'administrador' %}
           <option value="devolucion">Devolución (En retorno al remitente)</option>
-          <option value="siniestro">Siniestro (Incidencia / Daño o extravío)</option>
+          <option value="siniestro">Siniestro (Incidencia / Daño o extravío)</option>{% endif %}
         </select>
       </div>
 
       <div class="form-group" style="margin-bottom:16px;">
         <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Ubicación del Movimiento</label>
-        <input type="text" name="ubicacion" id="modalUbicacion" class="form-control" value="Planta Central FormoPack" placeholder="Ej: Sucursal Central, Almacén Formosa, etc." style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:14px;">
+        <input type="text" name="ubicacion" maxlength="100" id="modalUbicacion" class="form-control" value="Planta Central FormoPack" placeholder="Ej: Sucursal Central, Almacén Formosa, etc." style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:14px;">
       </div>
 
       <div class="form-group" style="margin-bottom:20px;">
         <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Observación / Motivo</label>
-        <textarea name="observacion" id="modalObservacion" rows="3" class="form-control" placeholder="Detalle informativo del cambio (ej: Retirado por titular con DNI, reprogramado para turno tarde, etc.)" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;"></textarea>
+        <textarea name="observacion" maxlength="1000" id="modalObservacion" rows="3" class="form-control" placeholder="Detalle informativo del cambio (ej: recepción en depósito, devolución o revisión de una incidencia)" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;"></textarea>
       </div>
 
       <div style="display:flex; justify-content:flex-end; gap:10px;">

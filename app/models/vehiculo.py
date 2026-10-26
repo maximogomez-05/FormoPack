@@ -1,6 +1,7 @@
 """Modelo de Vehículo (RF 3.1 / RF 3.2)."""
 
 from __future__ import annotations
+from decimal import Decimal
 
 from app.utils.exceptions import ValidationError
 
@@ -8,7 +9,7 @@ from app.utils.exceptions import ValidationError
 class Vehiculo:
     """Representa un vehículo de la flota."""
 
-    ESTADOS_VALIDOS = {"disponible", "en_ruta", "mantenimiento", "fuera_de_servicio"}
+    ESTADOS_VALIDOS = {"disponible", "reservado", "en_ruta", "mantenimiento", "fuera_de_servicio"}
 
     def __init__(
         self,
@@ -46,11 +47,12 @@ class Vehiculo:
     @staticmethod
     def validar_datos(patente: str, capacidad_kg: float) -> None:
         """Valida patente y capacidad del vehículo."""
-        patente_limpia = (patente or "").strip()
-        if not patente_limpia or len(patente_limpia) < 3:
-            raise ValidationError(field="patente", reason="La patente es obligatoria y debe tener al menos 3 caracteres")
-        if capacidad_kg <= 0:
-            raise ValidationError(field="capacidad_kg", reason="La capacidad debe ser mayor a cero")
+        from app.services.validacion_entrada import ValidacionEntrada as V
+        import re
+        patente_limpia = V.texto(patente, "patente", 3, 10).upper()
+        if not re.fullmatch(r"[A-Z0-9-]+", patente_limpia) or not any(c.isalpha() for c in patente_limpia) or not any(c.isdigit() for c in patente_limpia):
+            raise ValidationError("patente", "Revisá la patente: letras, números y guiones, hasta diez caracteres")
+        V.decimal(capacidad_kg, "capacidad_kg", 0.01, Decimal("99999999.99"))
 
     def esta_disponible(self) -> bool:
         return self._estado == "disponible"

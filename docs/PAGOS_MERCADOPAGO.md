@@ -143,7 +143,29 @@ pagos históricos automáticamente. Sigue pendiente una cola persistente de
 notificaciones, supervisión de discrepancias y conciliación administrativa de
 ingresos fuera de turno. Los límites por IP siguen en memoria hasta el despliegue.
 
-## Diagramas
+## Alcance aclarado el 26/10/2026
+
+El objetivo es acreditar dinero real mediante Mercado Pago y emitir comprobantes
+internos, sin integración fiscal con ARCA/AFIP. El medio de cobro y la emisión
+fiscal son responsabilidades distintas; no se certifican requisitos tributarios.
+La captura de credenciales compartida expuso un Access Token: debe revocarse y
+regenerarse en Developers. El reemplazo se configura únicamente en `.env`, fuera
+del repositorio. No se incorporó la credencial de la imagen al código.
+
+Las nuevas preferencias excluyen crédito, débito y prepago mediante
+`excluded_payment_types`, según la
+[documentación oficial](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro-preferences/additional-settings/payment-methods).
+Esto no cambia preferencias ya emitidas ni certifica una transferencia bancaria
+directa: Checkout Pro muestra los medios restantes habilitados por el proveedor.
+Una futura demostración de tarjetas debe quedar identificada y separada de
+ingresos reales; esa demostración todavía no se implementó.
+
+Hostinger VPS es la opción prevista por el usuario, aún sin contratar. El
+despliegue y la prueba auténtica del webhook siguen pendientes; tener tokens
+no demuestra que la integración esté operativa. No se activó el modo de cobro
+real ni se efectuaron cargos como parte de este incremento.
+
+## Cambios para diagramas
 
 Agregar la orden local y sus relaciones en el DER, el índice de pago externo y
 las clases de firma, validación y conciliación. Las secuencias deben reflejar

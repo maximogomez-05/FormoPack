@@ -490,6 +490,12 @@
     'default': '#64748b'
   };
 
+  (function inicializarMapa() {
+  if (!window.L) {
+    document.getElementById('mapa-live-status').textContent = 'Mapa no disponible. Podés continuar operando y consultar las tablas de envíos.';
+    document.getElementById('mapa-rutas').textContent = 'No se pudo cargar el mapa. Revisá tu conexión y actualizá la página.';
+    return;
+  }
   const map = L.map('mapa-rutas', { zoomControl: true }).setView([-24.8, -60.0], 7);
 
   window.addEventListener('load', function () {
@@ -712,6 +718,7 @@
   }));
   document.getElementById('mapa-refresh').addEventListener('click', () => refrescarEnvios(true));
   window.setInterval(() => refrescarEnvios(false), 30000);
+  })();
 
   function toggleAll(source) {
     const checkboxes = document.querySelectorAll('.chk-envio');

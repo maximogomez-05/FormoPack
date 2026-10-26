@@ -28,8 +28,7 @@ def panel():
         return render_template("chofer/panel.html", **data)
     except Exception as exc:
         logger.exception("Error al cargar panel del chofer")
-        flash(f"No se pudo cargar tu operación: {exc}", "danger")
-        return render_template("chofer/panel.html", hojas=[])
+        raise DatabaseQueryError("No se pudo cargar tu operación. Intentá nuevamente.") from exc
 
 
 @chofer_bp.route("/chofer/hojas/<int:id_hoja_ruta>/iniciar", methods=["POST"])
@@ -41,7 +40,7 @@ def iniciar_hoja(id_hoja_ruta: int):
         ChoferController().iniciar_hoja(session["usuario_id"], id_hoja_ruta)
         flash("Ruta iniciada. Los envíos ahora figuran en tránsito.", "success")
     except (ValidationError, DatabaseQueryError) as exc:
-        flash(str(exc), "danger")
+        flash(exc.message if isinstance(exc, ValidationError) else "No se pudo confirmar la operación. Actualizá antes de reintentar.", "danger")
     return redirect(url_for("chofer.panel"))
 
 
@@ -106,14 +105,14 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
     except (ValidationError, DatabaseQueryError) as exc:
         _eliminar_foto(foto_path)
         if request.headers.get("X-Offline-Sync") == "1":
-            return jsonify({"ok": False, "error": str(exc)}), 400
-        flash(str(exc), "danger")
+            return jsonify({"ok": False, "error": exc.message if isinstance(exc, ValidationError) else "No se pudo guardar la operación. Actualizá antes de reintentar."}), 400 if isinstance(exc, ValidationError) else 503
+        flash(exc.message if isinstance(exc, ValidationError) else "No se pudo confirmar la operación. Actualizá antes de reintentar.", "danger")
     except Exception as exc:
         _eliminar_foto(foto_path)
         logger.exception("Error al registrar entrega")
         if request.headers.get("X-Offline-Sync") == "1":
             return jsonify({"ok": False, "error": "Error inesperado al sincronizar"}), 500
-        flash(f"No se pudo registrar la entrega: {exc}", "danger")
+        flash("No se pudo registrar la entrega. Actualizá antes de reintentar.", "danger")
     return redirect(url_for("chofer.panel"))
 
 
@@ -134,13 +133,13 @@ def registrar_devolucion(id_hoja_ruta: int, id_envio: int):
         flash("El envío fue marcado para devolución a origen.", "success")
     except (ValidationError, DatabaseQueryError) as exc:
         if request.headers.get("X-Offline-Sync") == "1":
-            return jsonify({"ok": False, "error": str(exc)}), 400
-        flash(str(exc), "danger")
+            return jsonify({"ok": False, "error": exc.message if isinstance(exc, ValidationError) else "No se pudo guardar la operación. Actualizá antes de reintentar."}), 400 if isinstance(exc, ValidationError) else 503
+        flash(exc.message if isinstance(exc, ValidationError) else "No se pudo confirmar la operación. Actualizá antes de reintentar.", "danger")
     except Exception as exc:
         logger.exception("Error al registrar devolución offline")
         if request.headers.get("X-Offline-Sync") == "1":
             return jsonify({"ok": False, "error": "Error inesperado al sincronizar devolución"}), 500
-        flash(f"No se pudo registrar la devolución: {exc}", "danger")
+        flash("No se pudo registrar la devolución. Actualizá antes de reintentar.", "danger")
     return redirect(url_for("chofer.panel"))
 
 

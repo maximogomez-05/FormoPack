@@ -31,6 +31,7 @@ class MercadoPagoService:
         return self._respuesta(lambda: self._sdk.preference().create({
             "items": [{"title": f"FormoPack — {nro_guia}", "description": descripcion,
                        "quantity": 1, "unit_price": monto, "currency_id": "ARS"}],
+            "payment_methods": {"excluded_payment_types": [{"id": "credit_card"}, {"id": "debit_card"}, {"id": "prepaid_card"}]},
             "external_reference": nro_guia,
             "metadata": {"formopack_orden": id_orden},
             "back_urls": {"success": cfg.SUCCESS_URL, "failure": cfg.FAILURE_URL, "pending": cfg.PENDING_URL},
