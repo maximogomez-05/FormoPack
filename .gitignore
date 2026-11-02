@@ -32,3 +32,7 @@ Thumbs.db
 
 # Flask session
 .flask_session/
+
+# Archivos temporales de pruebas y perfil
+.chrome_profile/
+session_cookies*.txt

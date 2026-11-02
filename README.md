@@ -1,125 +1,184 @@
-# FormoPack Express 📦🚚
+# FormoPack Express — Sistema de Gestión Logística y Distribución
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Flask](https://img.shields.io/badge/Flask-Web_Framework-black)
-![MySQL](https://img.shields.io/badge/MySQL-8.0+-orange.svg)
-![Estado](https://img.shields.io/badge/Estado-En_validación-yellow.svg)
+Sistema integral de gestión logística, trazabilidad y facturación desarrollado para el Seminario de Integración. La plataforma automatiza la recepción de encomiendas en Formosa Capital y su distribución hacia las distintas localidades del interior de la provincia (Clorinda, Pirané, El Colorado, Las Lomitas, entre otras), eliminando el uso de planillas físicas y unificando la administración en mostrador, el despacho de flota y la operación en calle de los choferes.
 
-El proyecto está en una etapa de validación y ajustes previos al despliegue.
-El [plan de implementación](docs/PLAN_IMPLEMENTACION.md) registra requisitos,
-criterios de aceptación, incrementos terminados y cambios para los diagramas.
+---
 
-**Instalaciones existentes:** antes de usar esta versión, aplicar la migración
-de [seguridad de acceso](docs/SEGURIDAD_ACCESO.md). Con la aplicación detenida y
-un respaldo de la base, ejecutar `py -m app.core.migrations --desde 005` desde
-la raíz del proyecto. No volver a inicializar una base de trabajo como mecanismo
-de actualización.
+## Arquitectura y Tecnologías
 
-La actualización también incluye [soporte exclusivo y cierre de chats](docs/SOPORTE.md).
-Si la migración 005 ya estaba aplicada, ejecutar `py -m app.core.migrations --desde 006`
-con respaldo previo y la aplicación detenida. Las migraciones se ejecutan fuera
-del arranque web.
+El sistema está construido bajo principios de Programación Orientada a Objetos (POO), arquitectura modular por capas y separación estricta de responsabilidades:
 
-Para una instalación con 005 y 006 aplicadas, el incremento de
-[pagos verificados y acabado visual](docs/PAGOS_MERCADOPAGO.md) requiere
-`py -m app.core.migrations --desde 007`, con aplicación detenida y respaldo
-comprobado. Configurar `MP_COLLECTOR_ID`, `MP_WEBHOOK_SECRET` y `MP_TEST_MODE`
-además del token; una referencia QR manual ya no acredita un pago de Mercado Pago.
+- **Lenguaje y Framework:** Python 3.10+ con Flask (Blueprints modulares y plantillas Jinja2).
+- **Base de Datos:** MySQL 8.0+ (modelo relacional normalizado en 3FN, conexión mediante DatabaseManager bajo patrón Singleton).
+- **Seguridad:** Cifrado de credenciales con Bcrypt, control de acceso basado en roles (RBAC), protección contra ataques CSRF, validación estricta de estados y protección Post/Redirect/Get (PRG).
+- **Frontend y Diseño:** HTML5 semántico, CSS3 corporativo refinado, tipografías Plus Jakarta Sans y JetBrains Mono, Vanilla JS sin dependencias pesadas.
+- **Geolocalización y Mapas:** Leaflet.js con OpenStreetMap y capas de telemetría en vivo.
+- **Generación de Documentos:** ReportLab para constancias internas y actas de recepción en formato PDF.
 
-El incremento de [primer acceso y navegación](docs/PRIMER_ACCESO_Y_NAVEGACION.md)
-requiere `py -m app.core.migrations --desde 008`. Las cuentas nuevas deben
-reemplazar su contraseña provisoria antes de operar; las existentes se conservan.
+---
 
-**FormoPack Express** es un Sistema de Gestión Logística integral diseñado para automatizar el registro, cotización, seguimiento y entrega de encomiendas. El objetivo principal es erradicar el uso de papel y planillas manuales, unificando la administración en mostrador, la logística (armado de hojas de ruta) y la operación en calle mediante una aplicación web *Mobile-First* para los choferes.
+## Módulos del Sistema
 
-## 🏗️ Arquitectura y Tecnologías
+### 1. Tablero Operativo (Dashboard Central)
+- **Atención requerida para iniciar la jornada:** Muestra de forma prioritaria los envíos listos para despacho, las visitas que admiten reprogramación tras intentos fallidos, las encomiendas pendientes de ingreso a central y los paquetes en resguardo con plazo vencido.
+- **Operación de reparto:** Distingue los envíos acumulados del día de la situación en tiempo real de la flota (en ruta, en preparación o en planta).
+- **Caja del día:** Separa el dinero efectivamente recaudado (efectivo y digital) del valor bruto tarifado de las guías registradas.
+- **Reloj operativo en vivo:** Indicador de hora y fecha oficial de despacho (Formosa, UTC-3) con segundero continuo.
 
-El proyecto está construido bajo una arquitectura modular y Programación Orientada a Objetos (POO) estricta, priorizando la escalabilidad y el rendimiento.
+### 2. Recepción, Cotización y Caja
+- Cotizador automático por peso, dimensiones volumétricas y localidad de destino.
+- Registro y gestión de clientes remitentes y destinatarios.
+- Cobro en mostrador mediante efectivo y pagos digitales (Mercado Pago).
+- Turnos de caja con control de apertura y cierre de turno.
 
-- **Backend:** Python + Flask
-- **Base de Datos:** MySQL (Modelo Relacional normalizado en 3FN)
-- **Seguridad:** Cifrado de credenciales con Bcrypt (Contraseñas seguras), protección PRG contra reenvíos y headers Anti-Caché.
-- **Integraciones:** Mercado Pago (Checkout Pro), Servicio SMTP Email (HTML Remitos), Mapas Interactivos (Leaflet.js).
-- **Frontend Móvil:** Panel *Mobile-First* (PWA) con capacidades Offline (Service Workers).
+### 3. Logística, Despacho y Flota
+- Registro de vehículos de transporte y capacidad de carga.
+- Armado de hojas de ruta y asignación de encomiendas por cercanía geográfica.
+- Mapa de operaciones con visualización de rutas provinciales (RN 11, RP 81) y estado de unidades en tránsito.
 
-## 📊 Módulos del Sistema
+### 4. Custodia y Devoluciones en Central
+- Control de encomiendas que retornan a Formosa Capital tras intentos fallidos o cancelaciones.
+- Gestión del plazo reglamentario de 15 días corridos de resguardo en depósito central.
+- Acta de entrega presencial al remitente con acreditación de identidad (DNI) y captura de firma digital en pantalla.
+- Descarga de constancia firmada en formato PDF.
 
-Los siguientes módulos tienen implementación. Su validación integral y los
-pendientes se detallan en el plan; esta lista no certifica cumplimiento total:
+### 5. Portal de Seguimiento Público (Tracking)
+- Búsqueda de guías con historial completo de eventos y marcas de tiempo.
+- Geolocalización de la unidad en tránsito sobre mapa interactivo.
+- Botones de acceso directo con guías de prueba para demostraciones.
+- Canal integrado de atención y soporte al cliente en línea.
 
-- [x] **RF 1: Gestión de Usuarios:** Autenticación y control de accesos por roles (Administrador, Recepcionista, Chofer).
-- [x] **RF 2: Recepción y Facturación:** Cotizador automático, gestión de clientes, cobro en efectivo y cobro dinámico con código QR vía **Mercado Pago**.
-- [x] **RF 3: Logística y Despacho:** Gestión de flota y vehículos, ruteo automático por geolocalización, generación de despachos y asignación de Hojas de Ruta.
-- [x] **RF 4: App Móvil para Choferes (PWA):** Interfaz para celular. Prueba de Entrega (POD) con captura de firma digital en pantalla y sincronización offline en zonas sin cobertura.
-- [x] **RF 5: Tracking y Dashboards:** Panel gerencial con estadísticas financieras, portal público de seguimiento de envíos interactivo, y motor de **Notificaciones por Email Automáticas** ante cambios de estado.
+### 6. Aplicación de Reparto para Choferes (Mobile-First)
+- Interfaz adaptada a dispositivos móviles para choferes en ruta.
+- Registro de entregas efectivas con captura de firma digital del receptor.
+- Registro de intentos fallidos y causas de no entrega para reprogramación operativa.
 
-## 🚀 Instalación para ejecutar en OTRA PC
+### 7. Gestión de Personal y Usuarios
+- Directorio administrativo de cuentas con filtro por rol y buscador en tiempo real.
+- Roles operativos diferenciados: Administrador, Recepcionista y Chofer.
+- Suspensión y reactivación de accesos con confirmación de seguridad y protección contra auto-desactivación.
 
-Si querés levantar este proyecto en una computadora nueva o pasárselo a un profesor, asegurate de seguir estos pasos EXACTAMENTE en orden:
+---
 
-### Prerrequisitos
-- Python 3.10 o superior
-- Servidor MySQL 8.0+ (Por ejemplo: XAMPP)
+## Instalación y Configuración Local
 
-### Pasos
-1. **Crear la Base de Datos:**
-   - Abrí phpMyAdmin (o tu gestor de MySQL).
-   - Ejecutá el archivo completo que está en `scripts/init_database.sql`. Esto va a crear la base de datos `formopack_db`, construir todas las tablas y cargar datos semilla (localidades, etc).
-   - Si la base ya existía antes del seguimiento GPS, ejecutá una vez `scripts/migracion_ubicaciones_gps.sql` sobre `formopack_db` para crear la tabla de última ubicación de ruta.
+### Requisitos Previos
+- Python 3.10 o superior instalado.
+- Servidor MySQL 8.0+ en ejecución (puerto estándar 3306).
+- Git.
 
-2. **Configurar las Variables de Entorno (.env):**
-   - En la carpeta raíz del proyecto, hacé una copia del archivo `.env.example` y nombralo `.env`.
-   - Abrí el `.env` y asegurate de que los datos de tu Base de Datos coincidan (usuario `root`, sin contraseña, puerto `3306`).
-   - Para enviar alertas por Gmail, completá `GMAIL_USER`, `GMAIL_APP_PASSWORD` y `ALERTAS_EMAIL` usando los nombres de `.env.example`. La contraseña debe ser una contraseña de aplicación de Google; requiere tener habilitada la verificación en dos pasos. No uses ni compartas tu contraseña habitual.
-   - Mercado Pago es opcional; completá sus credenciales solo si querés probar esa integración.
+### Pasos de Instalación
 
-3. **Crear Entorno Virtual e Instalar Dependencias:**
-   Abrí la terminal en la carpeta del proyecto y ejecutá:
+1. **Clonar el repositorio:**
    ```bash
-   python -m venv venv
+   git clone https://github.com/maximogomez-05/formopack.git
+   cd formopack
+   ```
+
+2. **Crear y activar el entorno virtual:**
+   ```bash
    # En Windows:
+   py -m venv venv
    venv\Scripts\activate
-   # En Linux/Mac:
+
+   # En Linux / macOS:
+   python3 -m venv venv
    source venv/bin/activate
-   
+   ```
+
+3. **Instalar dependencias:**
+   ```bash
    pip install -r requirements.txt
    ```
 
-4. **Ejecutar el Servidor:**
+4. **Configurar la base de datos:**
+   - Crear una base de datos llamada `formopack_db` en el servidor MySQL.
+   - Ejecutar el script de inicialización de estructura:
+     ```bash
+     mysql -u root -p formopack_db < scripts/init_database.sql
+     ```
+   - Si la base de datos ya existía, aplicar las migraciones pendientes con:
+     ```bash
+     py -m app.core.migrations
+     ```
+
+5. **Configurar las variables de entorno:**
+   - Crear un archivo `.env` en la raíz del proyecto tomando como base `.env.example`:
+     ```env
+     SECRET_KEY=clave_secreta_de_desarrollo
+     DB_HOST=127.0.0.1
+     DB_PORT=3306
+     DB_USER=root
+     DB_PASSWORD=
+     DB_NAME=formopack_db
+     PORT=5050
+     DEBUG=True
+     ```
+
+6. **Poblar datos de demostración (Opcional):**
+   Para cargar un escenario completo de prueba (encomiendas en ruta, entregas con firma, retornos en custodia y usuarios de prueba):
    ```bash
-   python run.py
+   py scripts/seed_demo.py
    ```
-   *El sistema estará vivo y funcionando en: http://localhost:5050*
 
-## 📁 Estructura del Proyecto
+7. **Iniciar la aplicación:**
+   ```bash
+   py run.py
+   ```
+   La aplicación quedará accesible en el navegador en: `http://localhost:5050`
 
-Para una instalación existente, respaldar la base y ejecutar las migraciones
-pendientes antes de iniciar la web. La migración 009 requiere resolver cualquier
-chofer o vehículo con varias rutas abiertas; no elegir ni borrar rutas a ciegas.
-Ver [estados y logística](docs/LOGISTICA_ESTADOS.md) para el procedimiento, las
-reglas actuales y sus límites.
+---
 
-```powershell
-py -B -m app.core.migrations --desde 009
+## Cuentas de Acceso para Pruebas
+
+Para evaluar los distintos roles del sistema, se encuentran disponibles las siguientes cuentas predeterminadas:
+
+| Rol | Correo Electrónico | Contraseña | Alcance de Operación |
+| :--- | :--- | :--- | :--- |
+| **Administrador** | `admin@formopack.com` | `admin123` | Control total del sistema, comprobantes, logística, usuarios y liquidaciones. |
+| **Recepcionista** | `recepcion@formopack.com` | `recep456` | Cotizador de envíos, nuevo remito, clientes, arqueo de caja y devoluciones en central. |
+| **Chofer** | `chofer@formopack.com` | `chofer789` | Panel de entregas asignadas, telemetría GPS y captura de firma en destino. |
+
+---
+
+## Pruebas Automatizadas
+
+El proyecto incluye un conjunto de pruebas unitarias y de integración desarrolladas con `pytest`:
+
+```bash
+# Ejecutar todas las pruebas del proyecto
+py -m pytest
+
+# Ejecutar pruebas del tablero operativo y comprobantes
+py -m pytest tests/test_dashboard_pedidos.py tests/test_admin_comprobantes.py
 ```
+
+---
+
+## Estructura del Repositorio
 
 ```text
 FormoPack/
 ├── app/
-│   ├── controllers/   # Lógica central del negocio (Controladores)
-│   ├── core/          # Conexiones troncales (Ej: Database Manager Singleton)
-│   ├── models/        # Entidades del negocio (POO: Envio, Cliente, Pago)
-│   ├── services/      # Servicios de Terceros (Cotizador, MercadoPago, Emails)
-│   └── utils/         # Excepciones personalizadas
+│   ├── controllers/      # Controladores de la lógica de negocio
+│   ├── core/             # Conexión a base de datos y migraciones
+│   ├── models/           # Entidades del modelo de dominio (POO)
+│   ├── services/         # Servicios de cotización, pagos y logística
+│   └── utils/            # Excepciones y utilidades de validación
+├── config/               # Configuración del entorno y roles
+├── docs/                 # Documentación técnica, estados y plan
+├── scripts/              # Scripts de inicialización SQL y semillas de demo
+├── tests/                # Suite de pruebas automatizadas (pytest)
 ├── web/
-│   ├── routes/        # Enrutadores Flask (Views: admin, chofer, recepcion)
-│   ├── static/        # Archivos estáticos (CSS SaaS, JS, PWA, Imágenes Locales)
-│   └── templates/     # Interfaces de usuario en Jinja2 (HTML)
-├── config/            # Configuraciones globales del entorno
-├── scripts/           # init_database.sql (Toda la estructura SQL oficial)
-├── run.py             # Punto de entrada de la aplicación web
-└── requirements.txt   # Dependencias de Python
+│   ├── routes/           # Enrutadores Flask por perfil de usuario
+│   ├── security/         # Manejo de sesiones y autenticación
+│   ├── static/           # Archivos estáticos (CSS, JS, iconos, imágenes)
+│   └── templates/        # Plantillas HTML con motor Jinja2
+├── .env.example          # Plantilla de variables de entorno
+├── requirements.txt      # Lista de dependencias de Python
+└── run.py                # Punto de entrada de ejecución del servidor
 ```
 
 ---
-*Desarrollado para el Seminario de Integración.*
+
+*Proyecto desarrollado para el Seminario de Integración.*
