@@ -26,6 +26,41 @@ admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
 
+def formato_pesos_ars(monto: float | int | None) -> str:
+    """Formatea un importe en pesos argentinos con dos decimales y separadores de miles estándar."""
+    if monto is None:
+        return "No disponible"
+    try:
+        val = float(monto)
+    except (ValueError, TypeError):
+        return "No disponible"
+    entero, decimal = f"{val:,.2f}".split(".")
+    return f"$ {entero.replace(',', '.')},{decimal}"
+
+
+@admin_bp.app_template_filter("pesos_ars")
+def pesos_ars_filter(val):
+    return formato_pesos_ars(val)
+
+
+@admin_bp.app_template_filter("fecha_formato")
+def fecha_formato_filter(dt, incluir_hora=True):
+    """Formatea objetos datetime o date a formato amigable argentino DD/MM/AAAA [HH:MM hs]."""
+    if not dt:
+        return "—"
+    try:
+        import datetime
+        if isinstance(dt, datetime.datetime):
+            if incluir_hora and (dt.hour != 0 or dt.minute != 0):
+                return dt.strftime("%d/%m/%Y %H:%M hs")
+            return dt.strftime("%d/%m/%Y")
+        if isinstance(dt, datetime.date):
+            return dt.strftime("%d/%m/%Y")
+        return str(dt)
+    except Exception:
+        return str(dt)
+
+
 def _mensaje_usuario_error(excepcion: Exception, fallback: str = "Ocurrió un error inesperado.") -> str:
     """Convierte excepciones internas en mensajes útiles para la UI."""
     if hasattr(excepcion, "message"):
@@ -63,14 +98,55 @@ def dashboard():
     filtros = {
         "q": request.args.get("q", "").strip(),
         "estado": request.args.get("estado", "").strip(),
+        "pendiente": request.args.get("pendiente", "").strip(),
         "limite": request.args.get("limite", "25").strip(),
     }
     metricas = _obtener_metricas()
+    pendientes = _obtener_pendientes_operativos()
     actividad = ActividadOperativa(_obtener_historico_metricas())
     mostrar_todos = request.args.get("actividad") == "todos"
     historico = actividad.filas(mostrar_todos)
     ultimos_envios = _obtener_ultimos_envios(filtros=filtros)
     alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
+
+    info_pendientes = {
+        "despacho": {
+            "clave": "despacho",
+            "titulo": "Envíos listos para despachar",
+            "descripcion": "Envíos recibidos o en planta en espera de asignación a un vehículo o salida al interior.",
+            "badge": "badge-recibido",
+            "icono": "fa-boxes-packing",
+        },
+        "reprogramacion": {
+            "clave": "reprogramacion",
+            "titulo": "Visitas para reprogramar",
+            "descripcion": "Envíos con 1 o 2 intentos domiciliarios fallidos y hoja previa cerrada.",
+            "badge": "badge-fallido",
+            "icono": "fa-calendar-rotate-left",
+        },
+        "ingreso_central": {
+            "clave": "ingreso_central",
+            "titulo": "Llegada pendiente a central",
+            "descripcion": "Envíos en retorno a Formosa Capital pendientes de confirmar ingreso físico.",
+            "badge": "badge-devolucion",
+            "icono": "fa-warehouse",
+        },
+        "retiro_remitente": {
+            "clave": "retiro_remitente",
+            "titulo": "Disponibles para retiro por remitente",
+            "descripcion": "Paquetes en depósito central esperando retiro presencial con DNI y firma.",
+            "badge": "badge-retiro_remitente",
+            "icono": "fa-hand-holding-box",
+        },
+        "retiro_vencido": {
+            "clave": "retiro_vencido",
+            "titulo": "Retiros con plazo de 15 días vencido",
+            "descripcion": "Paquetes en depósito que superaron el plazo de 15 días hábiles y continúan en resguardo.",
+            "badge": "badge-fallido",
+            "icono": "fa-clock",
+        },
+    }
+    filtro_pendiente_activo = info_pendientes.get(filtros.get("pendiente"))
 
     estados_disponibles = [
         {"codigo": "recibido", "nombre": "Recibido"},
@@ -87,6 +163,8 @@ def dashboard():
     return render_template(
         "admin/dashboard.html",
         metricas=metricas,
+        pendientes=pendientes,
+        filtro_pendiente_activo=filtro_pendiente_activo,
         historico=historico, actividad=actividad, mostrar_todos=mostrar_todos,
         ultimos_envios=ultimos_envios,
         alertas=alertas,
@@ -681,8 +759,96 @@ def exportar_comprobantes_csv():
 # ──────────────────────────────────────────
 # Helpers internos
 # ──────────────────────────────────────────
+def _obtener_pendientes_operativos() -> dict:
+    """Obtiene las cuatro categorías operativas de pendientes que requieren acción en planta y central."""
+    conn = None
+    try:
+        db = DatabaseManager.get_instance()
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Envíos listos para despachar (recibidos o en planta sin asignación activa a hoja abierta)
+        cursor.execute("""
+            SELECT COUNT(*) AS c
+            FROM envios e
+            WHERE e.estado_actual IN ('recibido', 'en_planta')
+              AND e.id_hoja_ruta IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM hojas_ruta_envios a
+                  JOIN hojas_de_ruta h ON h.id_hoja_ruta = a.id_hoja_ruta
+                  WHERE a.id_envio = e.id_envio AND h.estado = 'abierta'
+              )
+        """)
+        listos_despacho = int((cursor.fetchone() or {}).get("c", 0))
+
+        # 2. Visitas que admiten reprogramación (1 o 2 fallos domiciliarios, sin hoja abierta)
+        cursor.execute("""
+            SELECT COUNT(*) AS c
+            FROM envios e
+            WHERE e.estado_actual = 'fallido'
+              AND (
+                  SELECT COUNT(*) FROM intentos_entrega i
+                  WHERE i.id_envio = e.id_envio AND i.tipo_intento = 'fallido'
+              ) BETWEEN 1 AND 2
+              AND e.id_hoja_ruta IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM hojas_ruta_envios a
+                  JOIN hojas_de_ruta h ON h.id_hoja_ruta = a.id_hoja_ruta
+                  WHERE a.id_envio = e.id_envio AND h.estado = 'abierta'
+              )
+        """)
+        reprogramacion = int((cursor.fetchone() or {}).get("c", 0))
+
+        # 3. Paquetes pendientes de ingreso físico a central (en retorno tras 3 fallos o cancelación)
+        cursor.execute("""
+            SELECT COUNT(*) AS c
+            FROM envios e
+            WHERE e.estado_actual = 'devolucion'
+        """)
+        ingreso_central = int((cursor.fetchone() or {}).get("c", 0))
+
+        # 4. Disponibles para retiro por el remitente y conteo de los que tienen plazo vencido (>15 días hábiles)
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN r.vence < CURDATE() AND r.retiro IS NULL THEN 1 ELSE 0 END), 0) AS vencidos
+            FROM envios e
+            LEFT JOIN retiros_central r ON r.id_envio = e.id_envio
+            WHERE e.estado_actual = 'retiro_remitente'
+        """)
+        retiros = cursor.fetchone() or {}
+        retiro_remitente = int(retiros.get("total", 0))
+        retiro_vencido = int(retiros.get("vencidos", 0))
+
+        total = listos_despacho + reprogramacion + ingreso_central + retiro_remitente
+
+        return {
+            "total": total,
+            "listos_despacho": listos_despacho,
+            "reprogramacion": reprogramacion,
+            "ingreso_central": ingreso_central,
+            "retiro_remitente": retiro_remitente,
+            "retiro_vencido": retiro_vencido,
+            "error": False,
+        }
+    except Exception as e:
+        logger.error("Error al obtener pendientes operativos: %s", e)
+        return {
+            "total": 0,
+            "listos_despacho": 0,
+            "reprogramacion": 0,
+            "ingreso_central": 0,
+            "retiro_remitente": 0,
+            "retiro_vencido": 0,
+            "error": True,
+        }
+    finally:
+        if conn:
+            conn.close()
+
+
 def _obtener_metricas() -> dict | None:
-    """Obtiene métricas operativas y del día desde la BD."""
+    """Obtiene métricas operativas y del día desde la BD diferenciando hoy vs ahora y estado de caja."""
     conn = None
     try:
         db = DatabaseManager.get_instance()
@@ -700,10 +866,6 @@ def _obtener_metricas() -> dict | None:
         m_hoy = cursor.fetchone() or {}
 
         # 2. Estados operacionales REALES de todos los paquetes activos en sistema:
-        # - en_ruta: todos los envíos actualmente en reparto (independientemente del día de creación)
-        # - fallidos: entregas fallidas activas / incidencias pendientes de resolución
-        # - en_planta: paquetes clasificados en centro de distribución
-        # - recibidos: paquetes recibidos en mostrador pendientes de asignación
         cursor.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN estado_actual = 'en_ruta' THEN 1 ELSE 0 END), 0) AS en_ruta,
@@ -715,7 +877,7 @@ def _obtener_metricas() -> dict | None:
         """)
         m_estados = cursor.fetchone() or {}
 
-        # 3. Envíos Entregados HOY (realmente entregados en la fecha actual, buscando en historial o fecha_creacion)
+        # 3. Envíos Entregados HOY (realmente entregados en la fecha actual)
         cursor.execute("""
             SELECT COUNT(DISTINCT id_envio) AS entregados_hoy
             FROM historial_estados
@@ -733,7 +895,27 @@ def _obtener_metricas() -> dict | None:
             r2 = cursor.fetchone() or {}
             entregados_hoy = int(r2.get("c", 0))
 
-        # 4. Caja del día (pagos cobrados hoy)
+        # 4. Envíos asignados en preparación (en hojas de ruta abiertas que aún no salieron a ruta)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT e.id_envio) AS c
+            FROM envios e
+            WHERE e.estado_actual != 'en_ruta'
+              AND (
+                  (e.id_hoja_ruta IS NOT NULL AND EXISTS (
+                      SELECT 1 FROM hojas_de_ruta h
+                      WHERE h.id_hoja_ruta = e.id_hoja_ruta AND h.estado = 'abierta' AND h.fecha_inicio IS NULL
+                  ))
+                  OR EXISTS (
+                      SELECT 1 FROM hojas_ruta_envios a
+                      JOIN hojas_de_ruta h ON h.id_hoja_ruta = a.id_hoja_ruta
+                      WHERE a.id_envio = e.id_envio AND h.estado = 'abierta' AND a.resolucion IS NULL AND h.fecha_inicio IS NULL
+                  )
+              )
+        """)
+        m_prep = cursor.fetchone() or {}
+        en_preparacion = int(m_prep.get("c", 0))
+
+        # 5. Caja del día (pagos cobrados hoy)
         cursor.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN tipo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS efectivo_hoy,
@@ -743,19 +925,27 @@ def _obtener_metricas() -> dict | None:
             WHERE DATE(fecha) = CURDATE()
         """)
         caja = cursor.fetchone() or {}
+        efectivo_hoy = float(caja.get("efectivo_hoy", 0.0))
+        digital_hoy = float(caja.get("digital_hoy", 0.0))
+        pagos_hoy = int(caja.get("pagos_hoy", 0))
+        total_cobrado_hoy = efectivo_hoy + digital_hoy
 
         return {
             "total_envios": int(m_hoy.get("total_envios_hoy", 0)),
-            "facturado_total": float(m_hoy.get("facturado_hoy", 0)),
+            "facturado_total": float(m_hoy.get("facturado_hoy", 0.0)),
             "recibidos": int(m_estados.get("recibidos", 0)),
             "en_planta": int(m_estados.get("en_planta", 0)),
             "entregados": entregados_hoy,
             "fallidos": int(m_estados.get("fallidos", 0)),
             "en_ruta": int(m_estados.get("en_ruta", 0)),
+            "en_preparacion": en_preparacion,
             "total_acumulado": int(m_estados.get("total_acumulado", 0)),
-            "efectivo_hoy": float(caja.get("efectivo_hoy", 0)),
-            "digital_hoy": float(caja.get("digital_hoy", 0)),
-            "pagos_hoy": int(caja.get("pagos_hoy", 0)),
+            "efectivo_hoy": efectivo_hoy,
+            "digital_hoy": digital_hoy,
+            "total_cobrado_hoy": total_cobrado_hoy,
+            "pagos_hoy": pagos_hoy,
+            "caja_disponible": True,
+            "operacion_disponible": True,
         }
     except Exception as e:
         logger.error("Error al obtener métricas: %s", e)
@@ -766,12 +956,13 @@ def _obtener_metricas() -> dict | None:
 
 
 def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> list:
-    """Obtiene envíos registrados con soporte de búsqueda, filtro por estado y límite configurable."""
+    """Obtiene envíos registrados con soporte de búsqueda, filtro por estado, filtro operativo y límite configurable."""
     conn = None
     try:
         filtros = filtros or {}
         q = filtros.get("q", "").strip()
         estado = filtros.get("estado", "").strip()
+        pendiente = filtros.get("pendiente", "").strip()
         limite_val = filtros.get("limite", limite)
         try:
             limite_num = int(limite_val) if limite_val not in ("todos", "0", "") else 500
@@ -796,6 +987,37 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
             where_clauses.append("e.estado_actual = %s")
             params.append(estado)
 
+        if pendiente == "despacho":
+            where_clauses.append("""
+                e.estado_actual IN ('recibido', 'en_planta')
+                AND e.id_hoja_ruta IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM hojas_ruta_envios a
+                    JOIN hojas_de_ruta h ON h.id_hoja_ruta = a.id_hoja_ruta
+                    WHERE a.id_envio = e.id_envio AND h.estado = 'abierta'
+                )
+            """)
+        elif pendiente == "reprogramacion":
+            where_clauses.append("""
+                e.estado_actual = 'fallido'
+                AND (
+                    SELECT COUNT(*) FROM intentos_entrega i
+                    WHERE i.id_envio = e.id_envio AND i.tipo_intento = 'fallido'
+                ) BETWEEN 1 AND 2
+                AND e.id_hoja_ruta IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM hojas_ruta_envios a
+                    JOIN hojas_de_ruta h ON h.id_hoja_ruta = a.id_hoja_ruta
+                    WHERE a.id_envio = e.id_envio AND h.estado = 'abierta'
+                )
+            """)
+        elif pendiente == "ingreso_central":
+            where_clauses.append("e.estado_actual = 'devolucion'")
+        elif pendiente == "retiro_remitente":
+            where_clauses.append("e.estado_actual = 'retiro_remitente'")
+        elif pendiente == "retiro_vencido":
+            where_clauses.append("e.estado_actual = 'retiro_remitente' AND r.vence < CURDATE() AND r.retiro IS NULL")
+
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
         sql = f"""
@@ -810,11 +1032,14 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
                 cr.nombre_completo AS remitente,
                 cd.nombre_completo AS destinatario,
                 l.nombre AS localidad_destino,
-                EXISTS (SELECT 1 FROM pagos p WHERE p.id_envio = e.id_envio) AS esta_pagado
+                EXISTS (SELECT 1 FROM pagos p WHERE p.id_envio = e.id_envio) AS esta_pagado,
+                r.vence AS fecha_vence_retiro,
+                (r.vence < CURDATE() AND r.retiro IS NULL) AS retiro_vencido
             FROM envios e
             JOIN clientes cr ON e.id_remitente = cr.id_cliente
             JOIN clientes cd ON e.id_destinatario = cd.id_cliente
             JOIN localidades l ON e.id_localidad_destino = l.id_localidad
+            LEFT JOIN retiros_central r ON r.id_envio = e.id_envio
             {where_sql}
             ORDER BY e.fecha_creacion DESC
             LIMIT %s

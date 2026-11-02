@@ -13,6 +13,9 @@ class EstadoEnvio:
 
     @classmethod
     def validar_manual(cls, anterior, nuevo, rol, ruta_actual, fallos):
+        estados_validos = {"recibido", "en_planta", "en_ruta", "entregado", "fallido", "devolucion", "retiro_remitente", "devuelto_remitente", "siniestro"}
+        if nuevo not in estados_validos:
+            raise ValidationError("estado", "El estado seleccionado no es válido")
         if anterior in cls.TERMINALES:
             raise ValidationError("estado", "El envío está finalizado y no puede reabrirse desde este formulario")
         permitidos = {"recibido": {"en_planta", "devolucion", "siniestro"}, "en_planta": {"siniestro", "devolucion"},

@@ -1,33 +1,404 @@
 {% extends "base.html" %}
-{% block page_title %}Devoluciones en central{% endblock %}
+{% block page_title %}Devoluciones en Central · Custodia y Logística Inversa{% endblock %}
+
 {% block content %}
-<h1>Devoluciones en central</h1>
-{% for e in envios %}
-<article class="card">
-<h2>{{ e.nro_guia }} · {{ e.nombre_completo }}</h2>
-{% if e.estado_actual == 'devolucion' %}
-<p>Pendiente de llegada a Formosa Capital. Confirmá únicamente al recibir el paquete.</p>
-<form method="post" action="{{ url_for('admin.confirmar_retorno',id_envio=e.id_envio) }}">
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary" name="accion" value="ingreso">Confirmar ingreso físico</button></form>
-{% elif e.estado_actual == 'retiro_remitente' %}
-<p>Disponible desde {{ e.ingreso }} · Plazo hasta {{ e.vence }}.</p>
-{% if e.vencido %}<p role="alert"><strong>Plazo vencido. Revisar con administración. El paquete continúa en resguardo.</strong></p>{% endif %}
-<details><summary>Registrar retiro del remitente</summary>
-<form method="post" action="{{ url_for('admin.confirmar_retorno',id_envio=e.id_envio) }}" class="firma-retiro">
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-<label>DNI presentado por el remitente <input class="form-control" required name="dni" inputmode="numeric" pattern="[0-9]{7,15}" maxlength="15"></label>
-<p>Firma del remitente</p><canvas width="560" height="170" aria-label="Firma del remitente" style="width:100%;max-width:560px;touch-action:none;border:1px solid #718096;background:white"></canvas>
-<input type="hidden" name="firma"><button type="button" class="btn btn-secondary">Borrar firma</button>
-<button class="btn btn-primary" name="accion" value="retiro">Confirmar devolución</button></form></details>
-{% else %}<p>Devuelto al remitente · {{ e.retiro }}</p><a href="{{ url_for('admin.constancia_retorno',id_envio=e.id_envio) }}">Descargar constancia firmada (PDF)</a>{% endif %}
-</article>{% else %}<p>No hay devoluciones registradas.</p>{% endfor %}
+<div class="retornos-hero">
+  <div class="retornos-hero-title">
+    <div class="section-eyebrow"><i class="fa-solid fa-warehouse"></i> Centro de Distribución Formosa Capital</div>
+    <h1><i class="fa-solid fa-boxes-packing" style="color:var(--fp-blue-primary);"></i> Custodia y Devoluciones en Central</h1>
+    <p>Recepción física de encomiendas retornadas del interior, resguardo en depósito central y entrega presencial al remitente con acreditación de identidad.</p>
+  </div>
+</div>
+
+{% set total_envios = envios|length %}
+{% set cant_vencidos = envios|selectattr('vencido')|list|length %}
+{% set cant_deposito = envios|rejectattr('vencido')|selectattr('estado_actual', 'equalto', 'retiro_remitente')|list|length %}
+{% set cant_pendientes_ingreso = envios|selectattr('estado_actual', 'equalto', 'devolucion')|list|length %}
+{% set cant_entregados = envios|selectattr('estado_actual', 'equalto', 'devuelto_remitente')|list|length %}
+
+<!-- Resumen Operativo -->
+<div class="retornos-kpi-grid">
+  <div class="retorno-kpi-card">
+    <div class="retorno-kpi-kicker"><i class="fa-solid fa-box-archive text-muted"></i> En Depósito (Vigentes)</div>
+    <div class="retorno-kpi-val">{{ cant_deposito }}</div>
+    <div class="retorno-kpi-sub">Listos para retiro en mostrador</div>
+  </div>
+  <div class="retorno-kpi-card">
+    <div class="retorno-kpi-kicker"><i class="fa-solid fa-clock-rotate-left text-muted"></i> Plazo Vencido</div>
+    <div class="retorno-kpi-val" {% if cant_vencidos > 0 %}style="color:var(--fp-status-warn);"{% endif %}>{{ cant_vencidos }}</div>
+    <div class="retorno-kpi-sub">Excedieron 15 días reglamentarios</div>
+  </div>
+  <div class="retorno-kpi-card">
+    <div class="retorno-kpi-kicker"><i class="fa-solid fa-truck-ramp-box text-muted"></i> Tránsito a Central</div>
+    <div class="retorno-kpi-val">{{ cant_pendientes_ingreso }}</div>
+    <div class="retorno-kpi-sub">Pendientes de ingreso físico</div>
+  </div>
+  <div class="retorno-kpi-card">
+    <div class="retorno-kpi-kicker"><i class="fa-solid fa-clipboard-check text-muted"></i> Devueltos Efectivos</div>
+    <div class="retorno-kpi-val">{{ cant_entregados }}</div>
+    <div class="retorno-kpi-sub">Constancias archivadas</div>
+  </div>
+</div>
+
+{% if envios %}
+<!-- Barra de Herramientas: Filtros y Búsqueda -->
+<div class="retornos-toolbar">
+  <div class="retornos-tabs" role="tablist">
+    <button type="button" class="tab-btn active" data-filter="todos">
+      Todos <span class="tab-badge">{{ total_envios }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="retiro_remitente">
+      En Mostrador <span class="tab-badge">{{ cant_deposito }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="vencido">
+      Plazo Vencido <span class="tab-badge" {% if cant_vencidos > 0 %}style="background:#fef3c7;color:#92400e;"{% endif %}>{{ cant_vencidos }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="devolucion">
+      Pendiente Ingreso <span class="tab-badge">{{ cant_pendientes_ingreso }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="devuelto_remitente">
+      Devueltos <span class="tab-badge">{{ cant_entregados }}</span>
+    </button>
+  </div>
+  <div class="retornos-search-box">
+    <i class="fa-solid fa-magnifying-glass retornos-search-icon"></i>
+    <input type="text" id="busquedaRetornos" placeholder="Filtrar por guía o remitente..." aria-label="Filtrar por guía o remitente">
+  </div>
+</div>
+
+<!-- Listado de Encomiendas en Custodia / Retorno -->
+<div class="retornos-list" id="retornosList">
+  {% for e in envios %}
+  <article class="retorno-docket {% if e.vencido %}is-vencido{% endif %}"
+           data-estado="{{ e.estado_actual }}"
+           data-vencido="{{ 1 if e.vencido else 0 }}"
+           data-search="{{ e.nro_guia|lower }} {{ e.nombre_completo|lower }}">
+    
+    <!-- Encabezado del Acta -->
+    <div class="docket-header">
+      <div class="docket-guia-wrap">
+        <a href="{{ url_for('admin.tracking_publico', guia=e.nro_guia) }}" class="guia-code" title="Ver seguimiento de la guía">{{ e.nro_guia }}</a>
+        <button type="button" class="btn-copy-guia" data-guia="{{ e.nro_guia }}" title="Copiar guía al portapapeles">
+          <i class="fa-regular fa-copy"></i>
+        </button>
+        <span class="docket-client-name">
+          <i class="fa-solid fa-user-tag text-muted" style="margin-right:4px;"></i>{{ e.nombre_completo }}
+        </span>
+      </div>
+
+      <div>
+        {% if e.estado_actual == 'devolucion' %}
+          <span class="docket-status-badge docket-status-devolucion">
+            <i class="fa-solid fa-truck-moving"></i> En tránsito a central
+          </span>
+        {% elif e.estado_actual == 'retiro_remitente' %}
+          {% if e.vencido %}
+            <span class="docket-status-badge docket-status-vencido">
+              <i class="fa-solid fa-triangle-exclamation"></i> Plazo vencido (en resguardo)
+            </span>
+          {% else %}
+            <span class="docket-status-badge docket-status-retiro">
+              <i class="fa-solid fa-box-archive"></i> Disponible para retiro
+            </span>
+          {% endif %}
+        {% else %}
+          <span class="docket-status-badge docket-status-entregado">
+            <i class="fa-solid fa-file-circle-check"></i> Devuelto al remitente
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Cuerpo con Metadatos Operativos -->
+    <div class="docket-body">
+      <div class="docket-grid">
+        <div>
+          <div class="docket-cell-label">Ingreso a depósito</div>
+          <div class="docket-cell-val">
+            {% if e.ingreso %}
+              {{ e.ingreso|fecha_formato }}
+            {% else %}
+              <span class="text-muted" style="font-weight:normal;">Pendiente de recepción</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div class="docket-cell-label">Límite de resguardo</div>
+          <div class="docket-cell-val">
+            {% if e.vence %}
+              {{ e.vence|fecha_formato(incluir_hora=False) }}
+            {% else %}
+              <span class="text-muted" style="font-weight:normal;">—</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div class="docket-cell-label">Ubicación operativa</div>
+          <div class="docket-cell-val" style="font-family:var(--font-sans);font-weight:500;">
+            {% if e.estado_actual == 'devolucion' %}
+              Móvil en retorno a Formosa Capital
+            {% elif e.estado_actual == 'retiro_remitente' %}
+              Mostrador de Atención Central
+            {% else %}
+              Entregado al remitente (Archivado)
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if e.vencido %}
+      <div class="docket-vencido-notice" role="alert">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <div>
+          <strong>Plazo reglamentario cumplido.</strong> El plazo estipulado de 15 días corridos venció el 
+          <span class="mono-data">{{ e.vence|fecha_formato(incluir_hora=False) }}</span>. 
+          El paquete continúa bajo resguardo y custodia física en depósito central. Para proceder a su entrega presencial, coordiná con administración la actualización del legajo.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Acciones según el estado logístico -->
+    <div class="docket-actions">
+      {% if e.estado_actual == 'devolucion' %}
+        <div class="docket-action-ingreso">
+          <form method="post" action="{{ url_for('admin.confirmar_retorno', id_envio=e.id_envio) }}" class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary" name="accion" value="ingreso">
+              <i class="fa-solid fa-box-archive"></i> Confirmar ingreso físico a depósito
+            </button>
+            <span class="docket-action-hint">
+              <i class="fa-solid fa-circle-info text-muted"></i> Verificá el bulto y la guía física antes de confirmar el ingreso a custodia.
+            </span>
+          </form>
+        </div>
+
+      {% elif e.estado_actual == 'retiro_remitente' %}
+        <details class="docket-disclosure">
+          <summary>
+            <i class="fa-solid fa-signature"></i>
+            <span>Registrar entrega presencial al remitente</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </summary>
+
+          <div class="firma-drawer-box">
+            <form method="post" action="{{ url_for('admin.confirmar_retorno', id_envio=e.id_envio) }}" class="firma-retiro">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              
+              <div class="firma-drawer-intro">
+                <i class="fa-solid fa-id-card text-muted"></i>
+                <strong>Identificación del receptor:</strong> Solicitá el DNI original del remitente o apoderado autorizado, registralo a continuación y hacé firmar la conformidad de retiro.
+              </div>
+
+              <div class="form-group" style="margin-bottom:14px;">
+                <label for="dni-{{ e.id_envio }}" class="form-label" style="font-weight:700;font-size:12px;color:var(--fp-text-ink);display:block;margin-bottom:5px;">
+                  DNI presentado por el remitente o autorizado *
+                </label>
+                <input id="dni-{{ e.id_envio }}"
+                       class="form-control mono-data"
+                       required
+                       name="dni"
+                       inputmode="numeric"
+                       pattern="[0-9]{7,15}"
+                       maxlength="15"
+                       placeholder="Número de documento sin puntos (ej: 34123456)"
+                       style="max-width:320px;">
+              </div>
+
+              <div class="firma-pad-wrap">
+                <div class="firma-pad-header">
+                  <span><i class="fa-solid fa-pen-nib"></i> Firma digital de conformidad</span>
+                  <button type="button" class="btn-clear-firma">
+                    <i class="fa-solid fa-rotate-left"></i> Limpiar firma
+                  </button>
+                </div>
+                <canvas width="560" height="160" aria-label="Firma del remitente" class="firma-canvas"></canvas>
+                <div class="firma-guide-hint">Firme con el mouse, pantalla táctil o lápiz dentro del recuadro blanco.</div>
+              </div>
+
+              <input type="hidden" name="firma">
+
+              <div class="firma-submit-row">
+                <button class="btn btn-primary" name="accion" value="retiro">
+                  <i class="fa-solid fa-check"></i> Confirmar entrega y archivar constancia
+                </button>
+              </div>
+            </form>
+          </div>
+        </details>
+
+      {% else %}
+        <div class="docket-action-devuelto">
+          <div class="text-sm">
+            <strong>Entregado en mostrador:</strong> <span class="mono-data">{{ e.retiro|fecha_formato }}</span>
+          </div>
+          <a href="{{ url_for('admin.constancia_retorno', id_envio=e.id_envio) }}" class="btn btn-outline-secondary btn-sm" target="_blank">
+            <i class="fa-solid fa-file-pdf"></i> Descargar constancia firmada (PDF)
+          </a>
+        </div>
+      {% endif %}
+    </div>
+
+  </article>
+  {% endfor %}
+
+  <!-- Mensaje de filtro sin resultados -->
+  <div id="retornosEmptyFilter" class="activity-empty" style="display:none;background:#ffffff;border:1px solid var(--fp-surface-border);border-radius:8px;padding:36px 20px;">
+    <i class="fa-solid fa-magnifying-glass fa-2x text-muted" style="margin-bottom:12px;display:block;"></i>
+    <h3 style="font-size:16px;color:var(--fp-text-ink);margin:0 0 6px;">No se encontraron devoluciones</h3>
+    <p style="font-size:13px;color:var(--fp-text-muted);margin:0;">No hay encomiendas que coincidan con la búsqueda o el filtro activo.</p>
+  </div>
+</div>
+
+{% else %}
+<div class="activity-empty" style="background:#ffffff;border:1px solid var(--fp-surface-border);border-radius:8px;padding:48px 24px;text-align:center;">
+  <i class="fa-solid fa-circle-check fa-3x" style="color:var(--fp-status-ok);margin-bottom:14px;display:block;"></i>
+  <h3 style="font-size:18px;color:var(--fp-text-ink);margin:0 0 8px;">Sin devoluciones registradas</h3>
+  <p style="font-size:14px;color:var(--fp-text-muted);max-width:480px;margin:0 auto;">
+    No hay encomiendas en proceso de retorno, custodia o resguardo en planta central en este momento.
+  </p>
+</div>
+{% endif %}
+
 <script>
-for (const form of document.querySelectorAll('.firma-retiro')) {
- const canvas=form.querySelector('canvas'), ctx=canvas.getContext('2d');
- function punto(e){const r=canvas.getBoundingClientRect();return [(e.clientX-r.left)*canvas.width/r.width,(e.clientY-r.top)*canvas.height/r.height];}
- canvas.onpointerdown=e=>{canvas.setPointerCapture(e.pointerId);ctx.beginPath();ctx.moveTo(...punto(e));};
- canvas.onpointermove=e=>{if(canvas.hasPointerCapture(e.pointerId)){ctx.lineTo(...punto(e));ctx.stroke();}};
- form.querySelector('[type=button]').onclick=()=>ctx.clearRect(0,0,canvas.width,canvas.height);
- form.onsubmit=()=>{form.elements.firma.value=canvas.toDataURL('image/png');};
-}
-</script>{% endblock %}
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Manejo de firma en canvas para retiros
+  for (const form of document.querySelectorAll('.firma-retiro')) {
+    const canvas = form.querySelector('canvas');
+    if (!canvas) continue;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+
+    let firmado = false;
+
+    function punto(e) {
+      const r = canvas.getBoundingClientRect();
+      return [
+        (e.clientX - r.left) * canvas.width / r.width,
+        (e.clientY - r.top) * canvas.height / r.height
+      ];
+    }
+
+    canvas.onpointerdown = e => {
+      canvas.setPointerCapture(e.pointerId);
+      ctx.beginPath();
+      ctx.moveTo(...punto(e));
+      firmado = true;
+    };
+
+    canvas.onpointermove = e => {
+      if (canvas.hasPointerCapture(e.pointerId)) {
+        ctx.lineTo(...punto(e));
+        ctx.stroke();
+      }
+    };
+
+    const clearBtn = form.querySelector('.btn-clear-firma');
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        firmado = false;
+      };
+    }
+
+    form.onsubmit = e => {
+      if (!firmado) {
+        alert('Por favor solicitá al remitente que firme en el recuadro antes de confirmar.');
+        e.preventDefault();
+        return false;
+      }
+      form.elements.firma.value = canvas.toDataURL('image/png');
+    };
+  }
+
+  // 2. Copiado rápido de guías
+  document.querySelectorAll('.btn-copy-guia').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const guia = btn.dataset.guia;
+      if (!guia) return;
+      try {
+        await navigator.clipboard.writeText(guia);
+        const icon = btn.querySelector('i');
+        btn.classList.add('copied');
+        if (icon) {
+          icon.className = 'fa-solid fa-check';
+        }
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          if (icon) {
+            icon.className = 'fa-regular fa-copy';
+          }
+        }, 1500);
+      } catch (err) {
+        console.warn('Error al copiar guía:', err);
+      }
+    });
+  });
+
+  // 3. Filtrado por pestañas y búsqueda en vivo
+  const tabs = document.querySelectorAll('.tab-btn');
+  const searchInput = document.getElementById('busquedaRetornos');
+  const dockets = document.querySelectorAll('.retorno-docket');
+  const emptyFilter = document.getElementById('retornosEmptyFilter');
+
+  let activeFilter = 'todos';
+  let searchTerm = '';
+
+  function aplicarFiltros() {
+    let visibles = 0;
+    dockets.forEach(docket => {
+      const estado = docket.dataset.estado;
+      const vencido = docket.dataset.vencido === '1';
+      const searchData = docket.dataset.search || '';
+
+      let matchFilter = false;
+      if (activeFilter === 'todos') {
+        matchFilter = true;
+      } else if (activeFilter === 'vencido') {
+        matchFilter = vencido;
+      } else if (activeFilter === estado) {
+        matchFilter = true;
+      }
+
+      let matchSearch = true;
+      if (searchTerm.trim() !== '') {
+        matchSearch = searchData.includes(searchTerm.toLowerCase());
+      }
+
+      if (matchFilter && matchSearch) {
+        docket.style.display = '';
+        visibles++;
+      } else {
+        docket.style.display = 'none';
+      }
+    });
+
+    if (emptyFilter) {
+      emptyFilter.style.display = (visibles === 0) ? 'block' : 'none';
+    }
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = tab.dataset.filter;
+      aplicarFiltros();
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchTerm = e.target.value;
+      aplicarFiltros();
+    });
+  }
+});
+</script>
+{% endblock %}

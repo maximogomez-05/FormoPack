@@ -86,6 +86,7 @@ class TestComprobantesAdmin(unittest.TestCase):
             sess["usuario_id"] = 1
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
+            sess["version_sesion"] = 0
 
         response = self.client.get("/admin/comprobantes")
         self.assertEqual(response.status_code, 200)
@@ -133,6 +134,7 @@ class TestComprobantesAdmin(unittest.TestCase):
             sess["usuario_id"] = 1
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
+            sess["version_sesion"] = 0
 
         response = self.client.get("/admin/comprobantes/exportar.csv")
         self.assertEqual(response.status_code, 200)
@@ -170,6 +172,7 @@ class TestComprobantesAdmin(unittest.TestCase):
             sess["usuario_id"] = 1
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
+            sess["version_sesion"] = 0
 
         response = self.client.get("/admin/comprobantes")
         self.assertEqual(response.status_code, 200)
@@ -231,6 +234,7 @@ class TestComprobantesAdmin(unittest.TestCase):
             sess["usuario_id"] = 1
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
+            sess["version_sesion"] = 0
 
         response = self.client.get("/admin/comprobantes")
         self.assertEqual(response.status_code, 200)

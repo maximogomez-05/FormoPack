@@ -16,6 +16,7 @@ def client():
             sess["usuario_id"] = 1
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
+            sess["version_sesion"] = 0
         yield client
 
 
@@ -76,9 +77,9 @@ def test_actualizar_estado_envio_exitoso(client):
     """Valida la actualización del estado de un envío y el registro en historial_estados."""
     db = DatabaseManager.get_instance()
 
-    # Seleccionar un envío de prueba existente
+    # Seleccionar un envío de prueba existente en estado recibido
     with db.cursor(dictionary=True) as cur:
-        cur.execute("SELECT id_envio, estado_actual FROM envios LIMIT 1")
+        cur.execute("SELECT id_envio, estado_actual FROM envios WHERE estado_actual = 'recibido' LIMIT 1")
         envio_fila = cur.fetchone()
 
     if not envio_fila:
@@ -86,7 +87,7 @@ def test_actualizar_estado_envio_exitoso(client):
 
     id_test = envio_fila["id_envio"]
     estado_original = envio_fila["estado_actual"]
-    nuevo_estado_test = "recibido" if estado_original != "recibido" else "en_planta"
+    nuevo_estado_test = "en_planta"
 
     # Actualizar estado
     res = client.post(
@@ -115,15 +116,13 @@ def test_actualizar_estado_envio_exitoso(client):
         assert hist["estado"] == nuevo_estado_test
         assert "Cambio de estado administrativo" in hist["observacion"]
 
-    # Restaurar al estado previo
-    client.post(
-        f"/admin/envios/{id_test}/actualizar-estado",
-        data={
-            "nuevo_estado": estado_original,
-            "ubicacion": "Planta Central",
-            "observacion": "Restaurado tras prueba unitaria",
-        },
-    )
+    # Restaurar al estado previo en base de datos
+    with db.cursor() as cur:
+        cur.execute("UPDATE envios SET estado_actual = %s WHERE id_envio = %s", (estado_original, id_test))
+        cur.execute("DELETE FROM historial_estados WHERE id_envio = %s ORDER BY id_historial DESC LIMIT 1", (id_test,))
+    conn = db.get_connection()
+    conn.commit()
+    conn.close()
 
 
 def test_actualizar_estado_invalido_es_rechazado(client):
@@ -151,6 +150,7 @@ def test_dashboard_render_admin_y_recepcionista(client):
     with client.session_transaction() as sess:
         sess["rol"] = "recepcionista"
         sess["nombre"] = "Recepcionista Test"
+        sess["version_sesion"] = 0
     res_rec = client.get("/admin/dashboard")
     assert res_rec.status_code == 200
     html_rec = res_rec.get_data(as_text=True)
