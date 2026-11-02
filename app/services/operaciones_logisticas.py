@@ -1,5 +1,7 @@
 """Despacho y resolución de visitas con bloqueos y trazabilidad compartidos."""
 
+import hashlib
+import json
 import logging
 import re
 from contextlib import contextmanager
@@ -177,7 +179,7 @@ class OperacionesLogisticas:
                 eventos.append((envio["id_envio"], "en_ruta", "Ruta iniciada por el chofer"))
         self._avisar(eventos)
 
-    def entregar(self, chofer, ruta_id, envio_id, tipo_intento, dni_receptor=None, firma_receptor=None, foto_remito=None, coordenadas_gps=None, motivo_fallo=None):
+    def entregar(self, chofer, ruta_id, envio_id, tipo_intento, dni_receptor=None, firma_receptor=None, foto_remito=None, coordenadas_gps=None, motivo_fallo=None, clave=None, huella_foto=None):
         chofer, ruta_id, envio_id = V.entero(chofer, "chofer"), V.entero(ruta_id, "hoja"), V.entero(envio_id, "envio")
         coordenadas_gps = EvidenciaEntrega.gps(coordenadas_gps)
         firma_receptor = EvidenciaEntrega.firma(firma_receptor) if tipo_intento == "entregado" else None
@@ -189,9 +191,22 @@ class OperacionesLogisticas:
             raise ValidationError("motivo", "Seleccioná un motivo de fallo válido")
         if tipo_intento == "entregado":
             V.documento(dni_receptor)
+        if clave is not None:
+            if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", clave):
+                raise ValidationError("operacion", "Identificador de visita inválido")
+            datos = [ruta_id, envio_id, tipo_intento, dni_receptor, firma_receptor, huella_foto, coordenadas_gps, motivo_fallo]
+            huella = hashlib.sha256(json.dumps(datos).encode()).hexdigest()
         eventos = []
         with self._transaccion() as cur:
             self._actor(cur, chofer, {"chofer"})
+            # El bloqueo del chofer serializa reintentos concurrentes de su cola.
+            if clave is not None:
+                cur.execute("SELECT huella,id_intento FROM operaciones_visita WHERE id_chofer=%s AND clave=%s", (chofer, clave))
+                anterior = cur.fetchone()
+                if anterior:
+                    if anterior["huella"] != huella:
+                        raise ValidationError("operacion", "Este identificador ya corresponde a otra visita o evidencia")
+                    return {"id_intento": anterior["id_intento"], "repetida": True}
             ruta = self._ruta(cur, ruta_id)
             if ruta["id_chofer"] != chofer or ruta["estado"] != "abierta" or ruta["fecha_inicio"] is None:
                 raise ValidationError("hoja", "Iniciá tu ruta antes de registrar el resultado")
@@ -205,6 +220,10 @@ class OperacionesLogisticas:
                 raise ValidationError("intento", "La visita ya se registró o el envío está en custodia")
             cur.execute("""INSERT INTO intentos_entrega (id_envio,id_hoja_ruta,tipo_intento,dni_receptor,firma_receptor,foto_remito,coordenadas_gps,motivo_fallo)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""", (envio_id, ruta_id, tipo_intento, dni_receptor, firma_receptor, foto_remito, coordenadas_gps, motivo_fallo))
+            intento = cur.lastrowid
+            if clave is not None:
+                cur.execute("INSERT INTO operaciones_visita (id_chofer,clave,huella,id_intento) VALUES (%s,%s,%s,%s)",
+                            (chofer, clave, huella, intento))
             cur.execute("UPDATE hojas_ruta_envios SET resolucion=%s,fecha_resolucion=NOW() WHERE id_hoja_ruta=%s AND id_envio=%s", (tipo_intento, ruta_id, envio_id))
             cur.execute("UPDATE envios SET estado_actual=%s,id_hoja_ruta=%s WHERE id_envio=%s", (tipo_intento, None if tipo_intento == "fallido" else ruta_id, envio_id))
             texto = "Entrega confirmada por el chofer" if tipo_intento == "entregado" else f"Visita fallida: {motivo_fallo}. Revisión en depósito."
@@ -212,6 +231,7 @@ class OperacionesLogisticas:
             self._cerrar_si_resuelta(cur, ruta)
             eventos.append((envio_id, tipo_intento, texto))
         self._avisar(eventos)
+        return {"id_intento": intento, "repetida": False}
 
     def actualizar_manual(self, envio_id, nuevo, actor_id, ubicacion, observacion):
         actor_id, envio_id = V.entero(actor_id, "usuario"), V.entero(envio_id, "envio")

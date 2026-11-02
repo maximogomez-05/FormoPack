@@ -211,7 +211,7 @@ Requisitos: RF 4.1–4.4, 5.1, 5.3–5.4 y 6.2; RNF 2.1.
   retiro coherentes con la documentación y sus permisos de descarga.
 - [ ] Aplicar la política de privacidad del tracking y resolver la consulta
   por DNI del RF 5.1 con protección de datos personales.
-- [ ] Identidad de operación offline e idempotencia persistente en servidor.
+- [x] Identidad de operación offline e idempotencia persistente en servidor (migración 010).
 - [ ] Aislar caché y cola por usuario; gestionar logout y cambio de cuenta.
 - [ ] Distinguir validación rechazada, sesión/CSRF vencido, error de servidor
   y falta de red; mostrar al chofer qué quedó guardado y qué fue confirmado.
@@ -292,7 +292,7 @@ ejecutarlas; no debe apuntarse automáticamente a la base de trabajo.
 ## Prioridades de cierre revisadas el 2 de noviembre de 2026
 
 1. Evidencias y errores de entrega. Implementados lectura completa y recodificación de imágenes, control de firma visible, rangos GPS y conservación del formulario ante rechazo. El chofer ve qué confirmó el servidor. Las visitas nuevas de la cola se filtran por chofer. Las antiguas solo se recuperan automáticamente si coincide el token del formulario.
-2. Operación sin señal (RF 4.3). Falta persistir la identidad de la operación en el servidor y devolver el resultado original si se pierde la respuesta tras el commit. Aislar también el HTML y los archivos cacheados, gestionar salida de cuenta y recuperación de pendientes antiguos. Validar desconexión, reconexión y cambio de usuario en teléfono.
+2. Operación sin señal (RF 4.3). El servidor devuelve el intento original si recibe otra vez la misma operación confirmada. La migración 010 guarda clave, chofer, huella y número de intento en la transacción de la visita. Los registros previos a la migración carecen de clave recuperable. Aislar también el HTML y los archivos cacheados, gestionar salida de cuenta y recuperación de pendientes antiguos. Validar desconexión, reconexión y cambio de usuario en teléfono.
 3. Custodia y evidencia. Completar retiro por mostrador tras tres fallos con identidad del receptor, historial y comprobante. Revisar acceso privado a fotos históricas, descarga de remitos y gestión de siniestro/seguro.
 4. Cerrar diferencias académicas. Resolver con el equipo el cobro en destino del RF 5.2, capacidad por volumen, significado de cierre y límites del ruteo. Registrar una prueba de aceptación por RF y RNF. Alinear manual y diagramas con los resultados.
 5. Despliegue. Preparar WSGI, HTTPS, usuario SQL limitado, permisos de evidencias, copias y restauración en Hostinger. Verificar Mercado Pago primero en pruebas con webhook auténtico y credenciales renovadas. Probar la acreditación real y medir tiempos/disponibilidad en el entorno publicado.

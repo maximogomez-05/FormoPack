@@ -1,6 +1,7 @@
 """Rutas operativas del chofer (RF 4.1 y RF 4.2)."""
 
 from app.services.evidencia_entrega import EvidenciaEntrega
+import hashlib
 import logging
 import uuid
 from pathlib import Path
@@ -73,6 +74,7 @@ def actualizar_ubicacion(id_hoja_ruta: int):
 def registrar_entrega(id_hoja_ruta: int, id_envio: int):
     """Registra entrega exitosa o fallida con evidencias."""
     foto_path = None
+    huella_foto = None
     try:
         tipo_intento = request.form.get("tipo_intento", "").strip().lower()
         dni_receptor = request.form.get("dni_receptor", "").strip() or None
@@ -91,15 +93,19 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
             carpeta = Path(current_app.config["POD_UPLOAD_DIR"])
             carpeta.mkdir(parents=True, exist_ok=True)
             contenido = EvidenciaEntrega.foto(foto.stream, extension)
+            huella_foto = hashlib.sha256(contenido).hexdigest()
             (carpeta / nombre).write_bytes(contenido)
             foto_path = f"uploads/pod/{nombre}"
 
-        ChoferController().registrar_entrega(
+        resultado = ChoferController().registrar_entrega(
             session["usuario_id"], id_hoja_ruta, id_envio, tipo_intento,
             dni_receptor, firma_receptor, foto_path, coordenadas_gps, motivo_fallo,
+            request.headers.get("X-Offline-Key"), huella_foto,
         )
+        if resultado["repetida"]:
+            _eliminar_foto(foto_path)
         if request.headers.get("X-Offline-Sync") == "1":
-            return jsonify({"ok": True})
+            return jsonify(ok=True, **resultado)
         flash("Prueba de entrega registrada correctamente.", "success")
     except (ValidationError, DatabaseQueryError) as exc:
         _eliminar_foto(foto_path)

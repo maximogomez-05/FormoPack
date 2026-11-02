@@ -273,3 +273,24 @@ def test_http_no_redirige_a_referer_externo_y_recepcionista_no_despacha(aplicaci
     r = c.post(f"/admin/envios/{ids[0]}/actualizar-estado", data={"csrf_token": token, "nuevo_estado": "entregado"}, headers={"Referer": "https://ejemplo.com"})
     assert r.location.endswith("/admin/dashboard")
     assert c.post("/admin/logistica/hojas/nueva", data={"csrf_token": token}).status_code == 403
+
+def test_reintentos_simultaneos_comparten_confirmacion(db):
+    ids, movil = preparar(db)
+    servicio = OperacionesLogisticas(db)
+    ruta = servicio.crear("DES-OFFLINE", 3, movil, ids, 1).id_hoja_ruta
+    servicio.iniciar(3, ruta)
+    barrera = Barrier(2)
+
+    def resolver(_):
+        barrera.wait(timeout=10)
+        return servicio.entregar(3, ruta, ids[0], "fallido", motivo_fallo="otro", clave="visita-test")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        primero, segundo = pool.map(resolver, range(2))
+    assert primero["id_intento"] == segundo["id_intento"]
+    assert primero["repetida"] != segundo["repetida"]
+    with pytest.raises(ValidationError):
+        servicio.entregar(3, ruta, ids[0], "fallido", motivo_fallo="rechazo", clave="visita-test")
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM intentos_entrega")
+        assert cur.fetchone()["total"] == 1

@@ -132,9 +132,9 @@ class ChoferController:
                 except Exception: pass
 
     def registrar_entrega(self, id_chofer, id_hoja_ruta, id_envio, tipo_intento, dni_receptor=None,
-                          firma_receptor=None, foto_remito=None, coordenadas_gps=None, motivo_fallo=None):
+                          firma_receptor=None, foto_remito=None, coordenadas_gps=None, motivo_fallo=None, clave=None, huella_foto=None):
         return OperacionesLogisticas(self.db).entregar(id_chofer, id_hoja_ruta, id_envio, tipo_intento,
-            dni_receptor, firma_receptor, foto_remito, coordenadas_gps, motivo_fallo)
+            dni_receptor, firma_receptor, foto_remito, coordenadas_gps, motivo_fallo, clave, huella_foto)
 
     def registrar_devolucion(self, id_chofer, id_hoja_ruta, id_envio, motivo):
         raise ValidationError("devolucion", "El resultado de visita queda registrado. Administración gestiona el retorno desde depósito")
