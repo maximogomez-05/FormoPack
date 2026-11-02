@@ -3,7 +3,10 @@
 {% block page_title %}<i class="fa-solid fa-chart-line"></i> Panel de Control{% endblock %}
 
 {% block content %}
-<!-- Tarjetas Métricas Operativas y del Día -->
+{% if metricas is none %}
+<p class="alert alert-warning" role="status">No se pudieron cargar los indicadores. Actualizá la página para volver a consultarlos.</p>
+{% else %}
+<h2 class="card-title">Operación de reparto</h2>
 <div class="metrics-grid">
   <div class="metric-card">
     <i class="fa-solid fa-boxes-stacked metric-icon"></i>
@@ -25,20 +28,23 @@
     <div class="metric-value">{{ metricas.fallidos }}</div>
     <div class="metric-label">Fallidos / Incidencias</div>
   </div>
+</div>
+<h2 class="card-title">Valor de envíos y cobros de hoy</h2>
+<div class="metrics-grid">
   <div class="metric-card">
     <i class="fa-solid fa-file-invoice-dollar metric-icon"></i>
     <div class="metric-value">${{ "%.0f"|format(metricas.facturado_total) }}</div>
-    <div class="metric-label">Total Facturado (Hoy)</div>
+    <div class="metric-label">Valor de envíos registrados hoy</div>
   </div>
   <div class="metric-card yellow">
     <i class="fa-solid fa-money-bill-wave metric-icon"></i>
     <div class="metric-value">${{ "%.0f"|format(metricas.efectivo_hoy) }}</div>
-    <div class="metric-label">Ingresos Efectivo (Hoy)</div>
+    <div class="metric-label">Cobrado en efectivo</div>
   </div>
   <div class="metric-card blue">
     <i class="fa-solid fa-mobile-screen-button metric-icon"></i>
     <div class="metric-value">${{ "%.0f"|format(metricas.digital_hoy) }}</div>
-    <div class="metric-label">Ingresos Digitales (Hoy)</div>
+    <div class="metric-label">Cobrado por medios digitales</div>
   </div>
   <div class="metric-card">
     <i class="fa-solid fa-receipt metric-icon"></i>
@@ -67,6 +73,8 @@
     </span>
   </div>
 </div>
+
+{% endif %}
 
 <!-- Alertas Operativas -->
 <div class="card" style="margin-bottom:20px;">

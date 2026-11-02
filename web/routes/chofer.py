@@ -1,12 +1,13 @@
 """Rutas operativas del chofer (RF 4.1 y RF 4.2)."""
 
 from app.services.evidencia_entrega import EvidenciaEntrega
+import secrets
 import hashlib
 import logging
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, jsonify, make_response, redirect, render_template, request, session, url_for
 from werkzeug.utils import secure_filename
 
 from app.controllers.chofer_controller import ChoferController
@@ -25,7 +26,14 @@ def panel():
     """Panel responsive con las hojas y entregas propias del chofer."""
     try:
         data = ChoferController().obtener_panel(session["usuario_id"])
-        return render_template("chofer/panel.html", **data)
+        if "cache_chofer" not in session:
+            session["cache_chofer"] = secrets.token_hex(16)
+        contexto = session["cache_chofer"]
+        respuesta = make_response(render_template("chofer/panel.html", **data))
+        respuesta.headers["X-Formopack-Panel"] = contexto
+        respuesta.set_cookie("fp_panel", contexto, secure=current_app.config["SESSION_COOKIE_SECURE"],
+                             samesite="Strict", path="/")
+        return respuesta
     except Exception as exc:
         logger.exception("Error al cargar panel del chofer")
         raise DatabaseQueryError("No se pudo cargar tu operación. Intentá nuevamente.") from exc

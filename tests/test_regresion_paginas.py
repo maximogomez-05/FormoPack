@@ -57,3 +57,21 @@ def test_paginas_y_permisos(aplicacion, usuario, ruta, estado, caplog):
 def test_compilan_todas_las_plantillas(aplicacion):
     for nombre in aplicacion.jinja_env.list_templates():
         aplicacion.jinja_env.get_template(nombre)
+
+def test_dashboard_distingue_fallo_de_indicadores_de_dia_sin_movimiento(aplicacion, monkeypatch):
+    from web.routes import admin
+    leer = admin._obtener_metricas
+
+    def fallo_de_lectura():
+        with patch.object(admin.DatabaseManager, "get_instance", side_effect=RuntimeError("lectura interrumpida")):
+            return leer()
+
+    monkeypatch.setattr(admin, "_obtener_metricas", fallo_de_lectura)
+    cliente = aplicacion.test_client()
+    with cliente.session_transaction() as sesion:
+        sesion.update(usuario_id=1, version_sesion=0)
+    respuesta = cliente.get("/admin/dashboard")
+    assert respuesta.status_code == 200
+    html = respuesta.get_data(as_text=True)
+    assert "No se pudieron cargar los indicadores" in html
+    assert "Valor de envíos registrados hoy" not in html

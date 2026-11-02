@@ -720,7 +720,7 @@ def exportar_comprobantes_csv():
 # ──────────────────────────────────────────
 # Helpers internos
 # ──────────────────────────────────────────
-def _obtener_metricas() -> dict:
+def _obtener_metricas() -> dict | None:
     """Obtiene métricas operativas y del día desde la BD."""
     conn = None
     try:
@@ -798,12 +798,7 @@ def _obtener_metricas() -> dict:
         }
     except Exception as e:
         logger.error("Error al obtener métricas: %s", e)
-        return {
-            "total_envios": 0, "facturado_total": 0,
-            "recibidos": 0, "en_planta": 0, "entregados": 0, "fallidos": 0, "en_ruta": 0,
-            "total_acumulado": 0,
-            "efectivo_hoy": 0, "digital_hoy": 0, "pagos_hoy": 0,
-        }
+        return None
     finally:
         if conn:
             conn.close()

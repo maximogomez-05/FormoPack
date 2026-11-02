@@ -95,7 +95,18 @@
 {% block scripts %}{% endblock %}
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js', {scope: '/'}));
+  window.addEventListener('load', async () => {
+    try {
+      const primeraCarga = !navigator.serviceWorker.controller;
+      await navigator.serviceWorker.register('/service-worker.js', {scope: '/'});
+      if (primeraCarga) {
+        const registro = await navigator.serviceWorker.ready;
+        registro.active?.postMessage({tipo: 'guardar-panel-inicial'});
+      }
+    } catch {
+      // El panel conectado sigue disponible si el navegador deshabilita el worker.
+    }
+  });
 }
 
 // Protección CSRF automática para formularios de chofer

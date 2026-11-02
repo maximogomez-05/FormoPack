@@ -215,7 +215,22 @@ function actualizarPendiente(item) {
   }));
 }
 
+function sesionDelPanelVigente() {
+  return document.cookie.split('; ').includes('fp_panel=' + {{ session.cache_chofer|tojson }});
+}
+
+function verificarPanelVisible() {
+  if (!document.hidden && !sesionDelPanelVigente()) {
+    document.body.hidden = true;
+    location.replace('/chofer');
+  }
+}
+window.addEventListener('pageshow', verificarPanelVisible);
+window.addEventListener('focus', verificarPanelVisible);
+document.addEventListener('visibilitychange', verificarPanelVisible);
+
 async function sincronizarPendientes() {
+  if (!sesionDelPanelVigente()) return;
   if (!navigator.onLine) return;
   const items = await leerPendientes();
   for (const item of items) {
@@ -242,6 +257,10 @@ async function sincronizarPendientes() {
 }
 
 async function enviarEntrega(form) {
+  if (!sesionDelPanelVigente()) {
+    verificarPanelVisible();
+    return;
+  }
   const data = new FormData(form);
   const fields = {};
   for (const [key, value] of data.entries()) {

@@ -108,6 +108,10 @@ def create_app() -> Flask:
     def add_security_headers(response):
         # Evitar caché en rutas dinámicas (soluciona el bug de la flecha 'Atrás' post-logout)
         if request.endpoint != 'static':
+            from flask import session
+            if request.cookies.get("fp_panel") and (session.get("rol") != "chofer" or
+                    not session.get("cache_chofer") or session.get("debe_cambiar_password")):
+                response.delete_cookie("fp_panel", path="/")
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
