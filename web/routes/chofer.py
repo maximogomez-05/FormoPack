@@ -1,7 +1,6 @@
 """Rutas operativas del chofer (RF 4.1 y RF 4.2)."""
 
-import base64
-import binascii
+from app.services.evidencia_entrega import EvidenciaEntrega
 import logging
 import uuid
 from pathlib import Path
@@ -91,10 +90,10 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
             nombre = f"pod_{id_envio}_{uuid.uuid4().hex}{extension}"
             carpeta = Path(current_app.config["POD_UPLOAD_DIR"])
             carpeta.mkdir(parents=True, exist_ok=True)
-            foto.save(carpeta / nombre)
+            contenido = EvidenciaEntrega.foto(foto.stream, extension)
+            (carpeta / nombre).write_bytes(contenido)
             foto_path = f"uploads/pod/{nombre}"
 
-        firma_receptor = _normalizar_firma(firma_receptor)
         ChoferController().registrar_entrega(
             session["usuario_id"], id_hoja_ruta, id_envio, tipo_intento,
             dni_receptor, firma_receptor, foto_path, coordenadas_gps, motivo_fallo,
@@ -141,19 +140,6 @@ def registrar_devolucion(id_hoja_ruta: int, id_envio: int):
             return jsonify({"ok": False, "error": "Error inesperado al sincronizar devolución"}), 500
         flash("No se pudo registrar la devolución. Actualizá antes de reintentar.", "danger")
     return redirect(url_for("chofer.panel"))
-
-
-def _normalizar_firma(firma: str | None) -> str | None:
-    """Acepta la firma del canvas como data URL y valida que tenga contenido."""
-    if not firma:
-        return None
-    if not firma.startswith("data:image/") or "," not in firma:
-        raise ValidationError(field="firma_receptor", reason="La firma no tiene un formato válido")
-    try:
-        base64.b64decode(firma.split(",", 1)[1], validate=True)
-    except (ValueError, binascii.Error) as exc:
-        raise ValidationError(field="firma_receptor", reason="La firma está dañada") from exc
-    return firma
 
 
 def _eliminar_foto(foto_path: str | None) -> None:

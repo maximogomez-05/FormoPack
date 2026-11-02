@@ -142,6 +142,7 @@ const modal = document.getElementById('entrega-modal');
 const canvas = document.getElementById('firma-canvas');
 const ctx = canvas.getContext('2d');
 let dibujando = false;
+const choferActual = {{ session.usuario_id|tojson }};
 const DB_NAME = 'formopack-offline';
 const STORE_NAME = 'entregas-pendientes';
 let dbPromise;
@@ -169,7 +170,11 @@ function guardarPendiente(item) {
 function leerPendientes() {
   return abrirBase().then(db => new Promise((resolve, reject) => {
     const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const token = document.querySelector('meta[name="csrf-token"]').content;
+      resolve(request.result.filter(item => item.chofer === choferActual ||
+        (item.chofer == null && item.fields?.csrf_token === token)));
+    };
     request.onerror = () => reject(request.error);
   }));
 }
@@ -216,6 +221,7 @@ async function sincronizarPendientes() {
   for (const item of items) {
     const form = new FormData();
     Object.entries(item.fields).forEach(([key, value]) => form.append(key, value || ''));
+    form.set('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
     if (item.photo) form.append('foto_remito', item.photo, item.photoName || 'remito.jpg');
     try {
       const response = await fetch(item.action, { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-Offline-Sync': '1', 'X-Offline-Key': item.key } });
@@ -242,50 +248,49 @@ async function enviarEntrega(form) {
     if (key !== 'foto_remito') fields[key] = value;
   }
   const photo = data.get('foto_remito');
-  const item = { action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
+  const item = { chofer: choferActual, action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
+  const mensaje = document.getElementById('modal-error');
+  let respuesta;
   try {
-    if (!navigator.onLine) throw new Error('offline');
-    const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin' });
-    if (!response.ok) throw new Error('server');
-    window.location.reload();
+    if (navigator.onLine) {
+      respuesta = await fetch(form.action, {method: 'POST', body: data, credentials: 'same-origin',
+        headers: {'X-Offline-Sync': '1', 'X-Offline-Key': item.key}});
+    }
   } catch (error) {
-    await guardarPendiente(item);
-    cerrarEntrega();
-    actualizarContador();
-    alert('Sin conexión: la entrega quedó guardada y se enviará automáticamente al volver Internet.');
+    // Sin respuesta confirmada, conservar los datos en el dispositivo.
   }
+  if (respuesta) {
+    const resultado = await respuesta.json().catch(() => null);
+    if (respuesta.ok && resultado?.ok === true) {
+      window.location.reload();
+      return;
+    }
+    mensaje.textContent = resultado?.error || 'El servidor no confirmó la entrega. Revisá el estado antes de reintentar.';
+    mensaje.hidden = false;
+    return;
+  }
+  try {
+    await guardarPendiente(item);
+  } catch (error) {
+    mensaje.textContent = 'El dispositivo no pudo guardar la visita. Conservá esta pantalla y volvé a intentarlo.';
+    mensaje.hidden = false;
+    return;
+  }
+  cerrarEntrega();
+  actualizarContador();
+  alert('La visita quedó guardada en este dispositivo, pendiente de confirmación.');
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => registration.sync && registration.sync.register('formopack-deliveries')).catch(() => {});
   }
 }
 
-async function enviarDevolucion(form) {
-  const data = new FormData(form);
-  const fields = {};
-  for (const [key, value] of data.entries()) {
-    fields[key] = value;
-  }
-  const item = { action: form.action, fields, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
-  try {
-    if (!navigator.onLine) throw new Error('offline');
-    const response = await fetch(form.action, {
-      method: 'POST',
-      body: data,
-      credentials: 'same-origin'
-    });
-    if (!response.ok) throw new Error('server');
-    window.location.reload();
-  } catch (error) {
-    await guardarPendiente(item);
-    actualizarContador();
-    alert('Sin conexión: la devolución quedó guardada y se sincronizará cuando vuelva Internet.');
-  }
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => registration.sync && registration.sync.register('formopack-deliveries')).catch(() => {});
-  }
-}
-
-function abrirEntrega(hoja, envio, guia) { 
+let visitaAbierta = 0;
+function abrirEntrega(hoja, envio, guia) {
+  visitaAbierta++;
+  document.getElementById("entrega-form").reset();
+  document.getElementById("coordenadas-gps").value = "";
+  limpiarFirma();
+  alternarCampos();
   document.getElementById('entrega-title').textContent = `Resultado · ${guia}`; 
   document.getElementById('entrega-form').action = `/chofer/hojas/${hoja}/envios/${envio}/entrega`; 
   modal.hidden = false; 
@@ -364,10 +369,11 @@ function alternarCampos() {
   document.getElementById('fallo-fields').hidden = ok; 
 }
 
-function obtenerUbicacion() { 
+function obtenerUbicacion() {
+  const visita = visitaAbierta;
   if (!navigator.geolocation) return; 
   navigator.geolocation.getCurrentPosition(
-    p => { document.getElementById('coordenadas-gps').value = `${p.coords.latitude},${p.coords.longitude}`; }, 
+    p => { if (visita !== visitaAbierta) return; document.getElementById('coordenadas-gps').value = `${p.coords.latitude},${p.coords.longitude}`; },
     () => {}
   ); 
 }

@@ -288,3 +288,11 @@ El webhook de Checkout Pro usa firma externa y una exención CSRF específica
 desde el incremento 2B. La compra sandbox externa sigue pendiente de configuración.
 La suite completa conserva pruebas antiguas que necesitan aislarse antes de
 ejecutarlas; no debe apuntarse automáticamente a la base de trabajo.
+
+## Prioridades de cierre revisadas el 2 de noviembre de 2026
+
+1. Evidencias y errores de entrega. Implementados lectura completa y recodificación de imágenes, control de firma visible, rangos GPS y conservación del formulario ante rechazo. El chofer ve qué confirmó el servidor. Las visitas nuevas de la cola se filtran por chofer. Las antiguas solo se recuperan automáticamente si coincide el token del formulario.
+2. Operación sin señal (RF 4.3). Falta persistir la identidad de la operación en el servidor y devolver el resultado original si se pierde la respuesta tras el commit. Aislar también el HTML y los archivos cacheados, gestionar salida de cuenta y recuperación de pendientes antiguos. Validar desconexión, reconexión y cambio de usuario en teléfono.
+3. Custodia y evidencia. Completar retiro por mostrador tras tres fallos con identidad del receptor, historial y comprobante. Revisar acceso privado a fotos históricas, descarga de remitos y gestión de siniestro/seguro.
+4. Cerrar diferencias académicas. Resolver con el equipo el cobro en destino del RF 5.2, capacidad por volumen, significado de cierre y límites del ruteo. Registrar una prueba de aceptación por RF y RNF. Alinear manual y diagramas con los resultados.
+5. Despliegue. Preparar WSGI, HTTPS, usuario SQL limitado, permisos de evidencias, copias y restauración en Hostinger. Verificar Mercado Pago primero en pruebas con webhook auténtico y credenciales renovadas. Probar la acreditación real y medir tiempos/disponibilidad en el entorno publicado.

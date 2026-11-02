@@ -14,6 +14,7 @@ from app.models.estado_envio import EstadoEnvio
 from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.utils.exceptions import ValidationError, DatabaseQueryError
 from tests.test_regresion_paginas import aplicacion, db
+from tests.test_evidencia_entrega import firma_prueba
 from tests.test_recepcion_bd import envio, cliente
 
 
@@ -47,7 +48,7 @@ def otro_chofer(db):
 def visita(servicio, ruta, envio_id, tipo="fallido"):
     return servicio.entregar(3, ruta, envio_id, tipo,
         dni_receptor="12345678" if tipo == "entregado" else None,
-        firma_receptor="firma-de-prueba" if tipo == "entregado" else None,
+        firma_receptor=firma_prueba() if tipo == "entregado" else None,
         motivo_fallo="destinatario_ausente" if tipo == "fallido" else None)
 
 

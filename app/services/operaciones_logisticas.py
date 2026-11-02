@@ -5,6 +5,7 @@ import re
 from contextlib import contextmanager
 
 from app.core.database import DatabaseManager
+from app.services.evidencia_entrega import EvidenciaEntrega
 from app.models.estado_envio import EstadoEnvio
 from app.models.hoja_ruta import HojaRuta
 from app.models.prueba_entrega import PruebaDeEntrega, EntregaFallida
@@ -178,6 +179,8 @@ class OperacionesLogisticas:
 
     def entregar(self, chofer, ruta_id, envio_id, tipo_intento, dni_receptor=None, firma_receptor=None, foto_remito=None, coordenadas_gps=None, motivo_fallo=None):
         chofer, ruta_id, envio_id = V.entero(chofer, "chofer"), V.entero(ruta_id, "hoja"), V.entero(envio_id, "envio")
+        coordenadas_gps = EvidenciaEntrega.gps(coordenadas_gps)
+        firma_receptor = EvidenciaEntrega.firma(firma_receptor) if tipo_intento == "entregado" else None
         prueba_cls = EntregaFallida if tipo_intento == "fallido" else PruebaDeEntrega
         prueba = prueba_cls(id_intento=None, id_envio=envio_id, id_hoja_ruta=ruta_id, tipo_intento=tipo_intento,
             dni_receptor=dni_receptor, firma_receptor=firma_receptor, foto_remito=foto_remito, coordenadas_gps=coordenadas_gps, motivo_fallo=motivo_fallo)

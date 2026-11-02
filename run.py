@@ -15,6 +15,7 @@ session_dir = os.path.join(ROOT, ".flask_session")
 os.makedirs(session_dir, exist_ok=True)
 
 from web.app import create_app
+from config.settings import AppConfig
 
 if __name__ == "__main__":
     app = create_app()
@@ -26,4 +27,4 @@ if __name__ == "__main__":
     print("  Recepcion:  recepcion@formopack.com / recep456")
     print("  Chofer:     chofer@formopack.com / chofer789")
     print("=" * 50 + "\n")
-    app.run(debug=True, host="0.0.0.0", port=5050, use_reloader=True)
+    app.run(debug=AppConfig.DEBUG, host="127.0.0.1", port=5050)

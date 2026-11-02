@@ -51,7 +51,25 @@ const path = require('node:path');
         await driver.mouse.move(box.x+110,box.y+80,{steps:10});
         await driver.mouse.up();
       }
-      await driver.getByRole('button',{name:'Guardar entrega',exact:true}).click();
+      if (intento===2) {
+        const endpoint = await driver.locator('#entrega-form').getAttribute('action');
+        await driver.route('**'+endpoint, r => r.fulfill({status:400, contentType:'application/json',
+          body:JSON.stringify({ok:false,error:'Evidencia rechazada'})}), {times:1});
+        await driver.getByRole('button',{name:'Guardar entrega',exact:true}).click();
+        await driver.getByText('Evidencia rechazada',{exact:true}).waitFor();
+        assert.equal(await driver.locator('[name=dni_receptor]').inputValue(),'12345678');
+        assert.equal(await driver.locator('#queue-banner').isVisible(),false);
+        await driver.route('**'+endpoint, r => r.abort('internetdisconnected'), {times:1});
+        await driver.getByRole('button',{name:'Guardar entrega',exact:true}).click();
+        await driver.locator('#queue-banner').waitFor();
+        const confirmacion = driver.waitForResponse(r => r.url().endsWith(endpoint) && r.request().method()==='POST');
+        await driver.getByRole('button',{name:'Sincronizar',exact:true}).click();
+        assert.equal((await (await confirmacion).json()).ok,true);
+        await driver.locator('#queue-banner').waitFor({state:'hidden'});
+        await driver.reload();
+      } else {
+        await driver.getByRole('button',{name:'Guardar entrega',exact:true}).click();
+      }
       await driver.getByRole('heading',{name:'No tenés rutas asignadas'}).waitFor();
     }
     await driver.setViewportSize({width:390,height:844});
