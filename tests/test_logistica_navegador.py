@@ -55,3 +55,23 @@ def test_dos_choferes_en_un_dispositivo(aplicacion, db):
     finally:
         servidor.shutdown()
         hilo.join(timeout=5)
+
+@pytest.mark.skipif(not os.getenv('FORMOPACK_TEST_NODE'), reason='Requiere Chrome/Playwright explícitos')
+def test_recepcion_fisica_y_retiro_en_mostrador(aplicacion,db):
+    from app.services.operaciones_logisticas import OperacionesLogisticas
+    ids, _ = preparar(db)
+    OperacionesLogisticas(db).actualizar_manual(ids[0],"devolucion",1,"Central","Solicitud del cliente","Cancelación solicitada")
+    with db.cursor() as cur:
+        cur.execute("SELECT c.dni FROM clientes c JOIN envios e ON c.id_cliente=e.id_remitente WHERE e.id_envio=%s",(ids[0],))
+        dni = cur.fetchone()["dni"]
+    servidor = make_server('127.0.0.1',0,aplicacion,threaded=True)
+    hilo = Thread(target=servidor.serve_forever,daemon=True)
+    hilo.start()
+    try:
+        proceso = subprocess.run([os.environ["FORMOPACK_TEST_NODE"],str(Path(__file__).parent/"browser/retorno.cjs")],
+            env={**os.environ,"FORMOPACK_TEST_URL":f"http://127.0.0.1:{servidor.server_port}","FORMOPACK_DNI_TEST":dni},
+            capture_output=True,text=True,timeout=70)
+        assert proceso.returncode == 0, proceso.stderr
+    finally:
+        servidor.shutdown()
+        hilo.join(timeout=5)

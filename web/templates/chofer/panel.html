@@ -61,7 +61,7 @@
           {% if envio.estado_actual == 'en_ruta' and not envio.resolucion %}
           <button type="button" class="btn btn-secondary" onclick="abrirEntrega('{{ hoja.id_hoja_ruta }}', '{{ envio.id_envio }}', '{{ envio.nro_guia }}')">Registrar resultado</button>
           {% elif envio.estado_actual == 'fallido' %}
-          <span class="delivery-result">Visita registrada · {{ 'En custodia' if envio.cantidad_intentos >= 3 else 'Revisión en depósito' }}</span>
+          <span class="delivery-result">Visita registrada · {{ 'Retornar a central' if envio.cantidad_intentos >= 3 else 'Revisión en depósito' }}</span>
           {% elif envio.estado_actual in ['en_planta', 'recibido'] %}
           <span class="delivery-pending" title="Primero iniciá la ruta para registrar la entrega"><i class="fa-solid fa-hourglass-start"></i> Requiere iniciar ruta</span>
           {% else %}

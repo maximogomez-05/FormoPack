@@ -4,7 +4,7 @@ from app.utils.exceptions import ValidationError
 
 
 class EstadoEnvio:
-    TERMINALES = {"entregado", "devolucion", "siniestro"}
+    TERMINALES = {"entregado", "devolucion", "devuelto_remitente", "siniestro"}
     MAX_FALLOS = 3
 
     @classmethod
@@ -15,8 +15,8 @@ class EstadoEnvio:
     def validar_manual(cls, anterior, nuevo, rol, ruta_actual, fallos):
         if anterior in cls.TERMINALES:
             raise ValidationError("estado", "El envío está finalizado y no puede reabrirse desde este formulario")
-        permitidos = {"recibido": {"en_planta", "siniestro"}, "en_planta": {"siniestro"},
-                      "en_ruta": {"siniestro"}, "fallido": {"en_planta", "devolucion", "siniestro"}}
+        permitidos = {"recibido": {"en_planta", "devolucion", "siniestro"}, "en_planta": {"siniestro", "devolucion"},
+                      "en_ruta": {"siniestro", "devolucion"}, "fallido": {"en_planta", "devolucion", "siniestro"}}
         if nuevo not in permitidos.get(anterior, set()):
             raise ValidationError("estado", "El cambio no corresponde al estado actual. La ruta se inicia desde el chofer y las entregas exigen su evidencia")
         if nuevo in {"siniestro", "devolucion"} and rol != "administrador":

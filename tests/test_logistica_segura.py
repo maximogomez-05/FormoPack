@@ -294,3 +294,68 @@ def test_reintentos_simultaneos_comparten_confirmacion(db):
     with db.cursor() as cur:
         cur.execute("SELECT COUNT(*) AS total FROM intentos_entrega")
         assert cur.fetchone()["total"] == 1
+
+def test_retorno_real_ingreso_y_retiro_unico(aplicacion, db):
+    ids, movil = preparar(db)
+    envio_id = ids[0]
+    s = OperacionesLogisticas(db)
+    for n in range(3):
+        hoja = s.crear(f"RET-{n}", 3, movil, ids, 1)
+        s.iniciar(3, hoja.id_hoja_ruta)
+        visita(s, hoja.id_hoja_ruta, envio_id)
+    with db.cursor() as cur:
+        cur.execute("SELECT e.nro_guia,e.estado_actual,c.dni FROM envios e JOIN clientes c ON c.id_cliente=e.id_remitente WHERE id_envio=%s",(envio_id,))
+        datos = cur.fetchone()
+    assert datos["estado_actual"] == "devolucion"
+    public = aplicacion.test_client()
+    cred = "/admin/tracking/descargar-comprobante?tipo=custodia&guia="+datos["nro_guia"]
+    assert public.get(cred).status_code == 403
+    with pytest.raises(ValidationError):
+        s.confirmar_retorno(envio_id,2,"retiro",datos["dni"],firma_prueba())
+    c, token = cliente(aplicacion)
+    ruta = f"/admin/retornos/{envio_id}"
+    assert c.post(ruta,data={"accion":"ingreso","csrf_token":token}).status_code == 302
+    assert public.get(cred).data.startswith(b"%PDF")
+    with pytest.raises(ValidationError): s.confirmar_retorno(envio_id,2,"ingreso")
+    with pytest.raises(ValidationError): s.confirmar_retorno(envio_id,3,"retiro",datos["dni"],firma_prueba())
+    with pytest.raises(ValidationError): s.confirmar_retorno(envio_id,2,"retiro","88888888",firma_prueba())
+    with pytest.raises(ValidationError): s.confirmar_retorno(envio_id,2,"retiro",datos["dni"],None)
+    with db.cursor() as cur:
+        cur.execute("UPDATE retiros_central SET vence=CURDATE()-INTERVAL 1 DAY WHERE id_envio=%s",(envio_id,))
+    assert "Plazo vencido" in c.get("/admin/retornos").get_data(as_text=True)
+    barrera = Barrier(2)
+    def retirar(actor):
+        barrera.wait(timeout=10)
+        try:
+            s.confirmar_retorno(envio_id,actor,"retiro",datos["dni"],firma_prueba())
+            return True
+        except ValidationError:
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(retirar,(1,2))) == [False,True]
+    assert c.get(ruta+"/constancia").data.startswith(b"%PDF")
+    assert public.get(cred).status_code == 403
+    with db.cursor() as cur:
+        cur.execute("SELECT estado_actual FROM envios WHERE id_envio=%s",(envio_id,))
+        assert cur.fetchone()["estado_actual"] == "devuelto_remitente"
+        cur.execute("SELECT COUNT(*) AS n FROM intentos_entrega WHERE id_envio=%s",(envio_id,))
+        assert cur.fetchone()["n"] == 3
+
+def test_retorno_anticipado_solo_autorizado_y_auditado(db):
+    ids, _ = preparar(db)
+    s = OperacionesLogisticas(db)
+    with pytest.raises(ValidationError):
+        s.actualizar_manual(ids[0],"devolucion",2,"Central","Pedido registrado","Cancelación solicitada")
+    with pytest.raises(ValidationError):
+        s.actualizar_manual(ids[0],"devolucion",1,"Central","Pedido registrado","otro")
+    s.actualizar_manual(ids[0],"devolucion",1,"Central","Pedido registrado","Cancelación solicitada")
+    with db.cursor() as cur:
+        cur.execute("SELECT observacion,id_usuario_actor FROM historial_estados WHERE id_envio=%s AND estado='devolucion'",(ids[0],))
+        movimiento = cur.fetchone()
+        assert movimiento["id_usuario_actor"] == 1 and "Cancelación solicitada" in movimiento["observacion"]
+
+
+def test_plazo_excluye_fin_de_semana_y_feriado(monkeypatch):
+    from datetime import date
+    monkeypatch.setenv("FORMOPACK_FERIADOS","2026-11-09")
+    assert OperacionesLogisticas.vencimiento_retiro(date(2026,11,2)) == date(2026,11,24)

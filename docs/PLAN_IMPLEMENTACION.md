@@ -188,7 +188,7 @@ Retiro físico, seguro y endurecimiento de evidencias todavía están pendientes
 - [x] Unificar disponibilidad en depósito y criterios de selección de despacho.
 - [x] Impedir asignar el mismo envío o recurso a despachos incompatibles,
   incluso ante solicitudes simultáneas.
-- [ ] Definir reintento, custodia al tercer fallo, retiro en sucursal y devolución;
+- [x] Registrar retorno tras el tercer fallo, ingreso físico y retiro por remitente;
   impedir nuevos intentos domiciliarios al alcanzar el límite.
 - [ ] Cierre automático coherente desde todos los recorridos de actualización,
   con liberación de vehículo y disponibilidad del chofer.
@@ -293,6 +293,6 @@ ejecutarlas; no debe apuntarse automáticamente a la base de trabajo.
 
 1. Evidencias y errores de entrega. Implementados lectura completa y recodificación de imágenes, control de firma visible, rangos GPS y conservación del formulario ante rechazo. El chofer ve qué confirmó el servidor. Las visitas nuevas de la cola se filtran por chofer. Las antiguas solo se recuperan automáticamente si coincide el token del formulario.
 2. Operación sin señal (RF 4.3). El servidor devuelve el intento original si recibe otra vez la misma operación confirmada. La migración 010 guarda clave, chofer, huella y número de intento en la transacción de la visita. Los registros previos a la migración carecen de clave recuperable. El panel offline se vincula a la sesión mediante un marcador independiente de la credencial de acceso. El worker elimina la copia al cerrar sesión y limita la caché estática al CSS y al manifiesto. Sin lectura de cookies desde el worker, reabrir el panel requiere conexión. Pendientes antiguos sin titular y sin token coincidente requieren revisión. Queda validar en teléfono físico, incluida suspensión y reapertura de la PWA.
-3. Custodia y evidencia. Completar retiro por mostrador tras tres fallos con identidad del receptor, historial y comprobante. Revisar acceso privado a fotos históricas, descarga de remitos y gestión de siniestro/seguro.
+3. Custodia y evidencia. Retiro por el remitente implementado en central, con DNI, firma, historial y constancia. Revisar acceso privado a fotos históricas, descarga de remitos y gestión de siniestro/seguro.
 4. Cerrar diferencias académicas. Resolver con el equipo el cobro en destino del RF 5.2, capacidad por volumen, significado de cierre y límites del ruteo. Registrar una prueba de aceptación por RF y RNF. Alinear manual y diagramas con los resultados.
 5. Despliegue. Preparar WSGI, HTTPS, usuario SQL limitado, permisos de evidencias, copias y restauración en Hostinger. Verificar Mercado Pago primero en pruebas con webhook auténtico y credenciales renovadas. Probar la acreditación real y medir tiempos/disponibilidad en el entorno publicado.

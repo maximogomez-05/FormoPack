@@ -344,7 +344,8 @@
         <select name="nuevo_estado" id="modalNuevoEstado" class="form-control" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; font-size:14px;">
           <option value="en_planta">En Planta (Centro de distribución / Clasificación)</option>
           {% if session.rol == 'administrador' %}
-          <option value="devolucion">Devolución (En retorno al remitente)</option>
+          <option value="retorno_rechazo">Autorizar retorno por rechazo definitivo</option>
+          <option value="retorno_cancelacion">Autorizar retorno por cancelación solicitada</option>
           <option value="siniestro">Siniestro (Incidencia / Daño o extravío)</option>{% endif %}
         </select>
       </div>

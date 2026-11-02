@@ -225,18 +225,27 @@ class OperacionesLogisticas:
                 cur.execute("INSERT INTO operaciones_visita (id_chofer,clave,huella,id_intento) VALUES (%s,%s,%s,%s)",
                             (chofer, clave, huella, intento))
             cur.execute("UPDATE hojas_ruta_envios SET resolucion=%s,fecha_resolucion=NOW() WHERE id_hoja_ruta=%s AND id_envio=%s", (tipo_intento, ruta_id, envio_id))
-            cur.execute("UPDATE envios SET estado_actual=%s,id_hoja_ruta=%s WHERE id_envio=%s", (tipo_intento, None if tipo_intento == "fallido" else ruta_id, envio_id))
+            retorno = tipo_intento == "fallido" and self._fallos(cur, envio_id) >= EstadoEnvio.MAX_FALLOS
+            estado = "devolucion" if retorno else tipo_intento
+            cur.execute("UPDATE envios SET estado_actual=%s,es_devolucion=%s,id_hoja_ruta=%s WHERE id_envio=%s", (estado, int(retorno), None if tipo_intento == "fallido" else ruta_id, envio_id))
             texto = "Entrega confirmada por el chofer" if tipo_intento == "entregado" else f"Visita fallida: {motivo_fallo}. Revisión en depósito."
             self._historial(cur, envio_id, tipo_intento, chofer, coordenadas_gps or "Sin ubicación", texto)
+            if retorno:
+                texto = "Tercer intento fallido. Pendiente de retorno a la central de Formosa Capital."
+                self._historial(cur, envio_id, estado, chofer, "En reparto", texto)
             self._cerrar_si_resuelta(cur, ruta)
-            eventos.append((envio_id, tipo_intento, texto))
+            eventos.append((envio_id, estado, texto))
         self._avisar(eventos)
         return {"id_intento": intento, "repetida": False}
 
-    def actualizar_manual(self, envio_id, nuevo, actor_id, ubicacion, observacion):
+    def actualizar_manual(self, envio_id, nuevo, actor_id, ubicacion, observacion, causa_retorno=None):
         actor_id, envio_id = V.entero(actor_id, "usuario"), V.entero(envio_id, "envio")
         ubicacion = V.texto(ubicacion, "ubicacion", 1, 100)
         observacion = V.texto(observacion, "observacion", 3, 1000)
+        if nuevo == "devolucion":
+            if causa_retorno not in {"Rechazo definitivo", "Cancelación solicitada"}:
+                raise ValidationError("causa", "Seleccioná el motivo del retorno anticipado")
+            observacion = f"{causa_retorno}. {observacion}"
         with self._transaccion() as cur:
             actor = self._actor(cur, actor_id, {"administrador", "recepcionista"})
             cur.execute("SELECT id_hoja_ruta FROM envios WHERE id_envio=%s", (envio_id,))
@@ -255,3 +264,54 @@ class OperacionesLogisticas:
                 cur.execute("UPDATE hojas_ruta_envios SET resolucion=%s,fecha_resolucion=NOW() WHERE id_hoja_ruta=%s AND id_envio=%s AND resolucion IS NULL", (nuevo, ruta["id_hoja_ruta"], envio_id))
                 self._cerrar_si_resuelta(cur, ruta)
         self._avisar([(envio_id, nuevo, observacion)])
+
+    def listar_retornos(self):
+        with self.db.cursor() as cur:
+            cur.execute("""SELECT e.id_envio,e.nro_guia,e.estado_actual,c.nombre_completo,r.ingreso,r.vence,r.retiro,
+                (r.vence<CURDATE() AND r.retiro IS NULL) AS vencido
+                FROM envios e JOIN clientes c ON c.id_cliente=e.id_remitente
+                LEFT JOIN retiros_central r ON r.id_envio=e.id_envio
+                WHERE e.estado_actual IN ('devolucion','retiro_remitente','devuelto_remitente')
+                ORDER BY vencido DESC,r.retiro IS NULL DESC,e.id_envio DESC""")
+            return cur.fetchall()
+
+    @staticmethod
+    def vencimiento_retiro(fecha):
+        from datetime import timedelta
+        import os
+        feriados = set(os.getenv("FORMOPACK_FERIADOS", "").split(","))
+        restantes = 15
+        while restantes:
+            fecha += timedelta(days=1)
+            if fecha.weekday() < 5 and fecha.isoformat() not in feriados:
+                restantes -= 1
+        return fecha
+
+    def confirmar_retorno(self, envio_id, actor_id, accion, dni=None, firma=None):
+        with self._transaccion() as cur:
+            self._actor(cur, actor_id, {"administrador", "recepcionista"})
+            cur.execute("""SELECT e.estado_actual,c.dni,CURDATE() AS hoy FROM envios e
+                JOIN clientes c ON c.id_cliente=e.id_remitente WHERE e.id_envio=%s FOR UPDATE""", (envio_id,))
+            envio = cur.fetchone()
+            if not envio:
+                raise ValidationError("envio", "No se encontró la guía")
+            if accion == "ingreso" and envio["estado_actual"] == "devolucion":
+                nuevo = "retiro_remitente"
+                texto = "Recibido en central. Disponible para retiro por el remitente registrado con su DNI."
+                cur.execute("""INSERT INTO retiros_central (id_envio,ingreso,recibe,vence)
+                    VALUES (%s,NOW(),%s,%s)""", (envio_id, actor_id, self.vencimiento_retiro(envio["hoy"])))
+            elif accion == "retiro" and envio["estado_actual"] == "retiro_remitente":
+                if V.documento(dni) != envio["dni"]:
+                    raise ValidationError("dni", "El documento no coincide con el del remitente registrado")
+                firma = EvidenciaEntrega.firma(firma)
+                nuevo = "devuelto_remitente"
+                texto = "Devolución completada. El remitente retiró la encomienda en la central."
+                cur.execute("""UPDATE retiros_central SET retiro=NOW(),entrega=%s,dni=%s,firma=%s
+                    WHERE id_envio=%s AND retiro IS NULL""", (actor_id,dni,firma,envio_id))
+                if cur.rowcount != 1:
+                    raise ValidationError("retiro", "Revisá el ingreso del paquete antes de confirmar el retiro")
+            else:
+                raise ValidationError("estado", "La operación no corresponde al estado actual. Actualizá la lista")
+            cur.execute("UPDATE envios SET estado_actual=%s WHERE id_envio=%s", (nuevo,envio_id))
+            self._historial(cur,envio_id,nuevo,actor_id,"Central, Formosa Capital",texto)
+        self._avisar([(envio_id,nuevo,texto)])

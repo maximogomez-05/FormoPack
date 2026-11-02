@@ -80,8 +80,10 @@ class EstadosEnvio:
     ENTREGADO: str = "entregado"
     FALLIDO: str = "fallido"
     DEVOLUCION: str = "devolucion"
+    RETIRO_REMITENTE = "retiro_remitente"
+    DEVUELTO_REMITENTE = "devuelto_remitente"
     SINIESTRO: str = "siniestro"
-    TODOS: list[str] = [RECIBIDO, EN_PLANTA, EN_RUTA, ENTREGADO, FALLIDO, DEVOLUCION, SINIESTRO]
+    TODOS: list[str] = [RECIBIDO, EN_PLANTA, EN_RUTA, ENTREGADO, FALLIDO, DEVOLUCION, RETIRO_REMITENTE, DEVUELTO_REMITENTE, SINIESTRO]
 
 
 class ModalidadPago:

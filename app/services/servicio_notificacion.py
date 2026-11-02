@@ -81,6 +81,8 @@ class ServicioNotificacion:
             "en_ruta": "El envío que generaste ya está en ruta hacia su destino.",
             "entregado": "El envío que generaste fue entregado correctamente al destinatario.",
             "fallido": "El intento de entrega de tu envío falló. Se gestionará un reintento.",
+            "retiro_remitente": "Tu encomienda llegó a la central de Formosa Capital. Ya podés retirarla con tu DNI. La credencial está en el seguimiento.",
+            "devuelto_remitente": "Quedó registrado tu retiro de la encomienda en la central.",
             "devolucion": "Tu envío está siendo devuelto por no poder completar la entrega.",
         }
 

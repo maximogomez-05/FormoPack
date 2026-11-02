@@ -340,7 +340,7 @@
 
   {% if envio %}
   {% set estado = resumen_tracking.estado %}
-  {% set estado_nombres = {'recibido': 'Envío registrado', 'en_planta': 'En centro de distribución', 'en_ruta': 'En ruta de entrega', 'entregado': 'Entregado', 'fallido': 'Intento de entrega fallido', 'devolucion': 'En devolución', 'siniestro': 'Incidencia reportada'} %}
+  {% set estado_nombres = {'recibido': 'Envío registrado', 'en_planta': 'En centro de distribución', 'en_ruta': 'En ruta de entrega', 'entregado': 'Entregado', 'fallido': 'Intento de entrega fallido', 'devolucion': 'Retorno pendiente a central', 'retiro_remitente': 'Disponible para el remitente', 'devuelto_remitente': 'Devuelto al remitente', 'siniestro': 'Incidencia reportada'} %}
   {% set paso_actual = 0 if estado == 'recibido' else (1 if estado == 'en_planta' else (2 if estado == 'en_ruta' else (3 if estado == 'entregado' else -1))) %}
   <section class="tracking-result" aria-label="Resultado del seguimiento">
     <article class="tracking-card">
@@ -360,7 +360,7 @@
         </div>
         <span class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}tracking-status--issue{% endif %}">
           <i class="fa-solid {% if estado == 'entregado' %}fa-circle-check{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}fa-triangle-exclamation{% else %}fa-truck-fast{% endif %}" aria-hidden="true"></i>
-          {% if resumen_tracking.en_custodia %}En custodia — Retiro en almacén{% else %}{{ estado_nombres.get(estado, estado|replace('_', ' ')|title) }}{% endif %}
+          {% if resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% else %}{{ estado_nombres.get(estado, estado|replace('_', ' ')|title) }}{% endif %}
         </span>
       </header>
 
@@ -368,16 +368,7 @@
       {% if resumen_tracking.en_custodia %}
       <div class="tracking-custodia-banner" role="alert">
         <h3><i class="fa-solid fa-warehouse"></i> Tu paquete quedó en custodia</h3>
-        <p>Después de <strong>{{ resumen_tracking.cantidad_intentos }} intentos de entrega</strong> sin éxito, tu paquete se encuentra resguardado en nuestro almacén. Podés retirarlo presentándote con tu DNI.</p>
-        <div class="custodia-address">
-          <i class="fa-solid fa-location-dot"></i>
-          <div>
-            <strong>Almacén FormoPack Express</strong><br>
-            Av. Principal 1250, Formosa Capital
-            <div class="custodia-hours"><i class="fa-regular fa-clock"></i> Lunes a Viernes de 8:00 a 17:00 hs</div>
-          </div>
-        </div>
-        <p style="font-size:12px; margin-top:6px;">⏰ El paquete se mantendrá en custodia por <strong>15 días hábiles</strong> desde el último intento.</p>
+        <p>La central de Formosa Capital confirmó el ingreso. El remitente registrado puede retirar la encomienda presentando su DNI.</p>
         <a class="btn-custodia" href="{{ url_for('admin.descargar_comprobante_tracking', guia=envio.nro_guia, tipo='custodia') }}">
           <i class="fa-solid fa-download"></i> Descargar Credencial de Retiro
         </a>
@@ -418,7 +409,7 @@
           <h2 id="tracking-status-title" class="tracking-section-title"><i class="fa-solid fa-route" aria-hidden="true"></i> Estado y llegada</h2>
           <div class="tracking-eta">
             <div class="tracking-eta-label"><i class="fa-regular fa-clock" aria-hidden="true"></i> Tiempo estimado</div>
-            <strong>{% if estado == 'entregado' %}Envío entregado{% elif resumen_tracking.en_custodia %}En custodia — Retiro en almacén{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}Requiere revisión operativa{% elif estado == 'en_ruta' %}En reparto{% else %}Pendiente de despacho{% endif %}</strong>
+            <strong>{% if estado == 'entregado' %}Envío entregado{% elif resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% elif estado == 'devuelto_remitente' %}Retirado por el remitente{% elif estado == 'devolucion' %}Pendiente de llegada a central{% elif estado in ['fallido', 'siniestro'] %}Requiere revisión operativa{% elif estado == 'en_ruta' %}En reparto{% else %}Pendiente de despacho{% endif %}</strong>
             <p>No hay ETA horario disponible: el sistema todavía no recibe ubicación GPS ni duración estimada del recorrido.</p>
           </div>
 

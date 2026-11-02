@@ -109,8 +109,8 @@ def test_alerta_fallida_incluye_intentos_y_motivo():
     assert "Destinatario ausente" in alertas[0]["mensaje"]
 
 
-def test_resumen_tracking_detecta_custodia():
-    """Cuando un envío fallido tiene ≥3 intentos, se marca como en custodia."""
+def test_tres_fallos_no_confirman_ingreso_fisico():
+    """El contador de visitas no acredita la recepción física en central."""
     envio = {
         "nro_guia": "FPX-2026-CUST",
         "estado_actual": "fallido",
@@ -124,7 +124,7 @@ def test_resumen_tracking_detecta_custodia():
 
     resumen = construir_resumen_tracking(envio, historial)
 
-    assert resumen["en_custodia"] is True
+    assert resumen["en_custodia"] is False
     assert resumen["cantidad_intentos"] == 3
     assert resumen["progreso"] == "fallido"
 

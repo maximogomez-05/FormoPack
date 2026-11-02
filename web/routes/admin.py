@@ -78,7 +78,9 @@ def dashboard():
         {"codigo": "en_ruta", "nombre": "En Ruta"},
         {"codigo": "entregado", "nombre": "Entregado"},
         {"codigo": "fallido", "nombre": "Fallido"},
-        {"codigo": "devolucion", "nombre": "Devolución"},
+        {"codigo": "devolucion", "nombre": "Retorno pendiente a central"},
+        {"codigo": "retiro_remitente", "nombre": "Disponible para el remitente"},
+        {"codigo": "devuelto_remitente", "nombre": "Devuelto al remitente"},
         {"codigo": "siniestro", "nombre": "Siniestro"},
     ]
 
@@ -99,10 +101,13 @@ def dashboard():
 def actualizar_estado_envio(id_envio: int):
     """Permite al personal administrativo actualizar el estado de cualquier envío (antiguo o reciente)."""
     nuevo_estado = request.form.get("nuevo_estado", "").strip().lower()
+    causa = {"retorno_rechazo": "Rechazo definitivo", "retorno_cancelacion": "Cancelación solicitada"}.get(nuevo_estado)
+    if causa:
+        nuevo_estado = "devolucion"
     try:
         OperacionesLogisticas().actualizar_manual(id_envio, nuevo_estado, session["usuario_id"],
             request.form.get("ubicacion", "").strip() or "Planta Central FormoPack",
-            request.form.get("observacion", "").strip() or "Cambio operativo registrado por el personal")
+            request.form.get("observacion", "").strip() or ("" if nuevo_estado == "devolucion" else "Cambio operativo registrado por el personal"), causa_retorno=causa)
         flash("Estado del envío actualizado y registrado en el historial.", "success")
     except ValidationError as error:
         flash(_mensaje_usuario_error(error), "warning")
@@ -359,35 +364,24 @@ def descargar_comprobante_tracking():
         if not envio:
             return "Envío no encontrado", 404
 
-        # Solo permitir descarga si está entregado o en custodia (fallido con >=3 intentos)
-        cantidad_intentos = 0
-        if envio["estado_actual"] == "fallido":
-            cursor.execute(
-                "SELECT COUNT(*) AS total FROM intentos_entrega WHERE id_envio = %s",
-                (envio["id_envio"],)
-            )
-            row = cursor.fetchone()
-            cantidad_intentos = int(row["total"]) if row else 0
-
-        puede_descargar = (
-            envio["estado_actual"] == "entregado"
-            or (envio["estado_actual"] == "fallido" and cantidad_intentos >= 3 and tipo == "custodia")
-        )
-        if not puede_descargar:
+        if tipo == "custodia" and envio["estado_actual"] == "retiro_remitente":
+            from reportlab.pdfgen.canvas import Canvas
+            from reportlab.graphics.barcode.code128 import Code128
+            archivo = io.BytesIO()
+            pdf = Canvas(archivo)
+            pdf.drawString(50,770,"FormoPack Express | Credencial de retiro por remitente")
+            pdf.drawString(50,730,f"Guía: {nro_guia}")
+            pdf.drawString(50,700,"Central de Formosa Capital. Presentar el DNI del remitente registrado.")
+            Code128(nro_guia,barHeight=48).drawOn(pdf,50,610)
+            pdf.save()
+            return Response(archivo.getvalue(), mimetype="application/pdf",
+                headers={"Content-Disposition":f'attachment; filename="retiro-{nro_guia}.pdf"'})
+        if tipo != "entrega" or envio["estado_actual"] != "entregado":
             return "El comprobante no está disponible para este estado", 403
-
         cursor.close()
-
-        # Generar un comprobante de texto plano con formato profesional
-        from datetime import datetime as _dt
-        ahora = _dt.now().strftime("%d/%m/%Y %H:%M")
-
-        if tipo == "custodia":
-            contenido = _generar_credencial_custodia(envio, cantidad_intentos, ahora)
-            nombre_archivo = f"credencial_retiro_{nro_guia}.txt"
-        else:
-            contenido = _generar_comprobante_entrega(envio, ahora)
-            nombre_archivo = f"comprobante_entrega_{nro_guia}.txt"
+        ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+        contenido = _generar_comprobante_entrega(envio, ahora)
+        nombre_archivo = f"comprobante_entrega_{nro_guia}.txt"
 
         return Response(
             contenido,
@@ -434,41 +428,6 @@ def _generar_comprobante_entrega(envio: dict, fecha_emision: str) -> str:
     ]
     return "\n".join(lineas)
 
-
-def _generar_credencial_custodia(envio: dict, intentos: int, fecha_emision: str) -> str:
-    """Genera la credencial de retiro en almacén para paquetes en custodia."""
-    lineas = [
-        "═" * 56,
-        "      CREDENCIAL DE RETIRO EN ALMACÉN — FormoPack",
-        "═" * 56,
-        "",
-        f"  Guía:              {envio['nro_guia']}",
-        f"  Fecha emisión:     {fecha_emision}",
-        f"  Estado:            EN CUSTODIA (tras {intentos} intentos fallidos)",
-        "",
-        "─" * 56,
-        "  DATOS DEL PAQUETE",
-        "─" * 56,
-        f"  Remitente:         {envio['remitente']}",
-        f"  Destinatario:      {envio['destinatario']}",
-        f"  Localidad destino: {envio['localidad_destino']}",
-        "",
-        "─" * 56,
-        "  INSTRUCCIONES DE RETIRO",
-        "─" * 56,
-        "  ● Presentarse en el almacén de FormoPack Express",
-        "    con DNI del destinatario y esta credencial.",
-        "  ● Dirección: Av. Principal 1250, Formosa Capital",
-        "  ● Horario: Lunes a Viernes 8:00 a 17:00 hs",
-        "  ● El paquete se mantendrá en custodia por",
-        "    15 días hábiles desde el último intento.",
-        "",
-        "─" * 56,
-        "  Documento interno de control (no fiscal).",
-        "  Soporte: soporte@formopack.com | Tel: 0370-4XXXXXX",
-        "═" * 56,
-    ]
-    return "\n".join(lineas)
 
 @admin_bp.route('/usuarios')
 @login_required  
@@ -617,7 +576,9 @@ def comprobantes():
         {"codigo": "en_ruta", "nombre": "En Ruta"},
         {"codigo": "entregado", "nombre": "Entregado"},
         {"codigo": "fallido", "nombre": "Fallido"},
-        {"codigo": "devolucion", "nombre": "Devolución"},
+        {"codigo": "devolucion", "nombre": "Retorno pendiente a central"},
+        {"codigo": "retiro_remitente", "nombre": "Disponible para el remitente"},
+        {"codigo": "devuelto_remitente", "nombre": "Devuelto al remitente"},
         {"codigo": "siniestro", "nombre": "Siniestro"},
     ]
 
@@ -893,7 +854,8 @@ def _obtener_envios_para_alertas() -> list:
                  WHERE i.id_envio = e.id_envio AND i.tipo_intento = 'fallido'
                  ORDER BY i.fecha_hora DESC, i.id_intento DESC LIMIT 1) AS motivo_fallo
             FROM envios e
-            WHERE e.estado_actual IN ('recibido', 'en_ruta', 'fallido')
+            LEFT JOIN retiros_central r ON r.id_envio=e.id_envio
+            WHERE e.estado_actual IN ('recibido', 'en_ruta', 'fallido') OR (e.estado_actual='retiro_remitente' AND r.vence<CURDATE() AND r.retiro IS NULL)
             ORDER BY fecha_estado ASC
         """)
         return cursor.fetchall()
@@ -966,7 +928,9 @@ def construir_alertas_operativas(envios: list[dict], ahora=None) -> list[dict]:
             except ValueError:
                 fecha = None
 
-        if estado == "fallido":
+        if estado == "retiro_remitente":
+            alertas.append({"tipo":"warning","guia":guia,"mensaje":"Venció el plazo de retiro por remitente. Revisar en Devoluciones en central."})
+        elif estado == "fallido":
             cantidad_intentos = int(envio.get("cantidad_intentos") or 0)
             motivo = str(envio.get("motivo_fallo") or "").replace("_", " ").strip().capitalize()
             detalle = f" Motivo: {motivo}." if motivo else ""
@@ -1190,6 +1154,8 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
 
     if estado_actual == "entregado":
         progreso = "entregado"
+    elif estado_actual in {"devolucion", "retiro_remitente", "devuelto_remitente"}:
+        progreso = estado_actual
     elif estado_actual == "fallido":
         progreso = "fallido"
     elif estado_actual in {"en_ruta", "en_planta"}:
@@ -1199,7 +1165,7 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
 
     # Contar intentos fallidos para determinar custodia
     cantidad_intentos = int(envio.get("cantidad_intentos", 0))
-    en_custodia = estado_actual == "fallido" and cantidad_intentos >= 3
+    en_custodia = estado_actual == "retiro_remitente"
 
     return {
         "estado": estado_actual,
@@ -1450,3 +1416,50 @@ def _obtener_comprobantes_admin(filtros: dict, limite: int | None = None, offset
     finally:
         if conn:
             conn.close()
+
+@admin_bp.get("/retornos")
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def retornos():
+    return render_template("admin/retornos.html", envios=OperacionesLogisticas().listar_retornos())
+
+
+@admin_bp.post("/retornos/<int:id_envio>")
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def confirmar_retorno(id_envio):
+    try:
+        OperacionesLogisticas().confirmar_retorno(id_envio, session["usuario_id"], request.form.get("accion"),
+            request.form.get("dni"), request.form.get("firma"))
+        flash("Movimiento registrado en central.", "success")
+    except ValidationError as exc:
+        flash(exc.message, "warning")
+    return redirect(url_for("admin.retornos"))
+
+
+@admin_bp.get("/retornos/<int:id_envio>/constancia")
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def constancia_retorno(id_envio):
+    import base64
+    from reportlab.pdfgen.canvas import Canvas
+    from reportlab.lib.utils import ImageReader
+    with DatabaseManager.get_instance().cursor() as cur:
+        cur.execute("""SELECT e.nro_guia,c.nombre_completo,r.dni,r.retiro,r.firma,u.nombre AS operador
+            FROM retiros_central r JOIN envios e USING(id_envio) JOIN clientes c ON c.id_cliente=e.id_remitente
+            JOIN usuarios u ON u.id_usuario=r.entrega WHERE r.id_envio=%s AND r.retiro IS NOT NULL""",(id_envio,))
+        retiro = cur.fetchone()
+    if not retiro:
+        return "Retiro pendiente de confirmación", 404
+    salida = io.BytesIO()
+    pdf = Canvas(salida)
+    pdf.drawString(50,780,"FormoPack Express | Constancia interna de devolución")
+    for n, (campo, etiqueta) in enumerate([("nro_guia","Guía"),("nombre_completo","Remitente"),("dni","DNI"),
+                                            ("retiro","Retirado en central"),("operador","Entregó")]):
+        pdf.drawString(50,730-n*28,f"{etiqueta}: {retiro[campo]}")
+    pdf.drawString(50,565,"Firma del remitente")
+    imagen = ImageReader(io.BytesIO(base64.b64decode(retiro["firma"].split(",",1)[1])))
+    pdf.drawImage(imagen,50,440,320,110,preserveAspectRatio=True)
+    pdf.save()
+    return Response(salida.getvalue(),mimetype="application/pdf",
+        headers={"Content-Disposition":f'attachment; filename="devolucion-{id_envio}.pdf"'})

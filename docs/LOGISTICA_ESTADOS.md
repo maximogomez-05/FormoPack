@@ -96,3 +96,16 @@ cardinalidades, `fecha_inicio`, actor e índices; incluir las clases de estados 
 operaciones; representar reserva → inicio → visita → cierre, reprogramación y
 custodia; retirar cambios manuales que eluden evidencia y cobros del chofer no
 implementados. Los originales gráficos no se modificaron.
+
+## Política vigente de retorno al remitente
+
+Para actualizar el documento de Seminario se conserva RF 4.5 y se amplía con los siguientes criterios.
+
+1. El chofer registra motivo, fecha y hoja de cada visita fallida. Tras el primer o segundo fallo administración puede reprogramar. El tercero bloquea el reparto domiciliario e inicia el retorno a la central en Formosa Capital. Administración puede anticiparlo por rechazo definitivo o cancelación solicitada con motivo registrado.
+2. Administración o recepción confirma el ingreso físico. Desde ese momento el envío está disponible exclusivamente para el remitente registrado y se habilita la credencial. El seguimiento distingue retorno pendiente, disponible y devuelto (RF 5.1).
+3. El remitente presenta su DNI y firma en mostrador. Se registran fecha, operador y evidencia. El cierre emite una constancia interna y conserva intentos e historial, sin generar cargos ni reembolsos.
+4. Al cumplirse el plazo de quince días hábiles desde el ingreso, el tablero alerta a partir del día siguiente al vencimiento. El paquete permanece en resguardo. El cálculo excluye sábados y domingos y los feriados configurados en FORMOPACK_FERIADOS (fechas ISO separadas por coma).
+5. Los avisos de RF 5.4 y RF 6.2 distinguen a quién corresponde actuar. El remitente recibe instrucciones de retiro al confirmarse el ingreso y el destinatario recibe el estado de seguimiento.
+6. En RF 6.1 el cierre de la hoja depende de resolver todas sus visitas. El retorno físico y el retiro pueden completarse después del cierre.
+
+La migración 011 conserva las visitas antiguas y pone en retorno pendiente los envíos fallidos con tres o más visitas fallidas. Para los datos históricos no se infieren ingresos físicos, firmas ni retiros. El DER deberá incorporar retiros_central, asociado al envío y a los usuarios que reciben y entregan en mostrador.

@@ -52,6 +52,7 @@
       </a>
       {% endif %}
 
+      {% if session.rol in ["recepcionista", "administrador"] %}<a class="nav-link" href="{{ url_for('admin.retornos') }}">Devoluciones en central</a>{% endif %}
       <!-- Administración -->
       {% if session.rol == 'administrador' %}
       <div class="nav-section" style="margin-top:12px;">Administración</div>

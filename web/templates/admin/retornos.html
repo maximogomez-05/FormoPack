@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block page_title %}Devoluciones en central{% endblock %}
+{% block content %}
+<h1>Devoluciones en central</h1>
+{% for e in envios %}
+<article class="card">
+<h2>{{ e.nro_guia }} · {{ e.nombre_completo }}</h2>
+{% if e.estado_actual == 'devolucion' %}
+<p>Pendiente de llegada a Formosa Capital. Confirmá únicamente al recibir el paquete.</p>
+<form method="post" action="{{ url_for('admin.confirmar_retorno',id_envio=e.id_envio) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary" name="accion" value="ingreso">Confirmar ingreso físico</button></form>
+{% elif e.estado_actual == 'retiro_remitente' %}
+<p>Disponible desde {{ e.ingreso }} · Plazo hasta {{ e.vence }}.</p>
+{% if e.vencido %}<p role="alert"><strong>Plazo vencido. Revisar con administración. El paquete continúa en resguardo.</strong></p>{% endif %}
+<details><summary>Registrar retiro del remitente</summary>
+<form method="post" action="{{ url_for('admin.confirmar_retorno',id_envio=e.id_envio) }}" class="firma-retiro">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>DNI presentado por el remitente <input class="form-control" required name="dni" inputmode="numeric" pattern="[0-9]{7,15}" maxlength="15"></label>
+<p>Firma del remitente</p><canvas width="560" height="170" aria-label="Firma del remitente" style="width:100%;max-width:560px;touch-action:none;border:1px solid #718096;background:white"></canvas>
+<input type="hidden" name="firma"><button type="button" class="btn btn-secondary">Borrar firma</button>
+<button class="btn btn-primary" name="accion" value="retiro">Confirmar devolución</button></form></details>
+{% else %}<p>Devuelto al remitente · {{ e.retiro }}</p><a href="{{ url_for('admin.constancia_retorno',id_envio=e.id_envio) }}">Descargar constancia firmada (PDF)</a>{% endif %}
+</article>{% else %}<p>No hay devoluciones registradas.</p>{% endfor %}
+<script>
+for (const form of document.querySelectorAll('.firma-retiro')) {
+ const canvas=form.querySelector('canvas'), ctx=canvas.getContext('2d');
+ function punto(e){const r=canvas.getBoundingClientRect();return [(e.clientX-r.left)*canvas.width/r.width,(e.clientY-r.top)*canvas.height/r.height];}
+ canvas.onpointerdown=e=>{canvas.setPointerCapture(e.pointerId);ctx.beginPath();ctx.moveTo(...punto(e));};
+ canvas.onpointermove=e=>{if(canvas.hasPointerCapture(e.pointerId)){ctx.lineTo(...punto(e));ctx.stroke();}};
+ form.querySelector('[type=button]').onclick=()=>ctx.clearRect(0,0,canvas.width,canvas.height);
+ form.onsubmit=()=>{form.elements.firma.value=canvas.toDataURL('image/png');};
+}
+</script>{% endblock %}
