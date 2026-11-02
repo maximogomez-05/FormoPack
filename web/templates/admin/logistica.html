@@ -401,20 +401,34 @@
     line-height: 1.45;
   }
 
+  .leaflet-marker-icon.custom-live-marker {
+    background: transparent !important;
+    border: none !important;
+  }
+
   .map-marker-live {
-    width: 18px;
-    height: 18px;
-    border: 3px solid #fff;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    box-sizing: border-box;
+    border: 2px solid #ffffff;
     border-radius: 50%;
-     background: var(--marker-color, #d94841);
-    box-shadow: 0 1px 8px rgba(15, 23, 42, .45);
+    background: var(--marker-color, #d94841);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .45);
+    color: #ffffff;
+    font-size: 11px;
+    line-height: 1;
   }
 
   .map-marker-live.is-selected {
-    width: 24px;
-    height: 24px;
-    border-color: #fef3c7;
-    background: #b91c1c;
+    width: 32px;
+    height: 32px;
+    border-color: #fef08a;
+    border-width: 3px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .6);
+    font-size: 14px;
   }
 
   @media (max-width: 980px) {
@@ -637,12 +651,13 @@
       const esGps = envio.gps_latitud !== null && envio.gps_latitud !== undefined;
       const estado = String(envio.estado_actual || '').toLowerCase();
       const color = esGps ? '#d94841' : (estadoColor[estado] || estadoColor.default);
+      const iconoClase = estado === 'fallido' ? 'fa-triangle-exclamation' : (estado === 'entregado' ? 'fa-check' : 'fa-truck-fast');
       const marcador = esGps
         ? L.marker(posicion, { icon: L.divIcon({
-            className: '',
-            html: `<span class="map-marker-live ${seleccionado ? 'is-selected' : ''}" style="--marker-color:${color};"></span>`,
-            iconSize: [seleccionado ? 24 : 18, seleccionado ? 24 : 18],
-            iconAnchor: [seleccionado ? 12 : 9, seleccionado ? 12 : 9]
+            className: 'custom-live-marker',
+            html: `<div class="map-marker-live ${seleccionado ? 'is-selected' : ''}" style="--marker-color:${color};" title="${escaparHtml(envio.nro_guia)}"><i class="fa-solid ${iconoClase}"></i></div>`,
+            iconSize: [seleccionado ? 32 : 24, seleccionado ? 32 : 24],
+            iconAnchor: [seleccionado ? 16 : 12, seleccionado ? 16 : 12]
           }), zIndexOffset: seleccionado ? 1000 : 100 })
         : L.circleMarker(posicion, {
             radius: seleccionado ? 10 : 7,

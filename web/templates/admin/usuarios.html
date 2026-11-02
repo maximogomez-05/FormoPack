@@ -1,125 +1,287 @@
 {% extends "base.html" %}
-{% block title %}Gestión de Usuarios — FormoPack{% endblock %}
-{% block page_title %}<i class="fa-solid fa-users"></i> Gestión de Usuarios{% endblock %}
+{% block title %}Gestión de Usuarios — FormoPack Express{% endblock %}
+{% block page_title %}Gestión de Personal y Cuentas{% endblock %}
 
 {% block content %}
-<div class="card" style="margin-bottom: 20px;">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">Listado de Usuarios</span>
-        <button class="btn btn-primary" onclick="document.getElementById('modalNuevoUsuario').style.display='block'">
-            <i class="fa-solid fa-user-plus"></i> Nuevo Usuario
-        </button>
-    </div>
+<div class="usuarios-hero">
+  <div class="usuarios-hero-title">
+    <div class="section-eyebrow"><i class="fa-solid fa-user-shield"></i> Control de Accesos y Seguridad</div>
+    <h1><i class="fa-solid fa-users-gear" style="color:var(--fp-blue-primary);"></i> Gestión de Personal y Usuarios</h1>
+    <p>Administración de cuentas operativas, asignación de roles y control de acceso del equipo de FormoPack Express.</p>
+  </div>
+  <div class="usuarios-hero-actions">
+    <button type="button" class="btn btn-primary" onclick="document.getElementById('modalNuevoUsuario').style.display='flex'">
+      <i class="fa-solid fa-user-plus"></i> Nuevo Usuario
+    </button>
+  </div>
 </div>
 
-<div id="modalNuevoUsuario" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-    <div class="modal-content card" style="background-color: #fff; margin: 40px auto; padding: 20px; width: 92%; max-width: 500px; border-radius: 8px;">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="card-title">Crear Nuevo Usuario</span>
-            <span style="cursor: pointer; font-size: 1.5rem;" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">&times;</span>
-        </div>
-        <form method="POST" action="{{ url_for('admin.crear_usuario') }}" style="margin-top: 15px;">
-            <div class="form-group">
-                <label>Nombre Completo</label>
-                <input type="text" name="nombre" class="form-control" required maxlength="100" minlength="3" pattern="[\p{L} .’\x27\-]+" title="Solo letras, espacios y guiones">
-            </div>
-            <div class="form-group" style="margin-top: 10px;">
-                <label>Email</label>
-                <input type="email" name="email" class="form-control" required maxlength="100">
-            </div>
-            <div class="form-group" style="margin-top: 10px;">
-                <label>Rol / Tipo de Usuario</label>
-                <select name="tipo_usuario" class="form-control" required>
-                    <option value="administrador">Administrador</option>
-                    <option value="recepcionista">Recepcionista</option>
-                    <option value="chofer">Chofer</option>
-                </select>
-            </div>
-            <div class="form-group" style="margin-top: 10px;">
-                <label>Contraseña provisoria</label>
-                <input type="password" name="password" class="form-control" minlength="8" maxlength="72" placeholder="Mín. 8 caracteres, letra y número" autocomplete="new-password" required>
-                <small class="text-muted">La persona deberá elegir su contraseña personal al ingresar por primera vez.</small>
-            </div>
-            <div style="margin-top: 20px; text-align: right;">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">Cancelar</button>
-                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Guardar</button>
-            </div>
-        </form>
-    </div>
+{% set total_usuarios = usuarios|length %}
+{% set cant_admin = usuarios|selectattr('tipo_usuario', 'equalto', 'administrador')|list|length %}
+{% set cant_recep = usuarios|selectattr('tipo_usuario', 'equalto', 'recepcionista')|list|length %}
+{% set cant_chofer = usuarios|selectattr('tipo_usuario', 'equalto', 'chofer')|list|length %}
+{% set cant_activos = usuarios|selectattr('activo')|list|length %}
+
+<!-- Resumen Operativo de Cuentas -->
+<div class="usuarios-kpi-grid">
+  <div class="usuario-kpi-card">
+    <div class="usuario-kpi-kicker"><i class="fa-solid fa-users text-muted"></i> Total de Cuentas</div>
+    <div class="usuario-kpi-val">{{ total_usuarios }}</div>
+    <div class="usuario-kpi-sub">Personal registrado</div>
+  </div>
+  <div class="usuario-kpi-card">
+    <div class="usuario-kpi-kicker"><i class="fa-solid fa-shield-halved text-muted"></i> Administradores</div>
+    <div class="usuario-kpi-val">{{ cant_admin }}</div>
+    <div class="usuario-kpi-sub">Acceso gerencial total</div>
+  </div>
+  <div class="usuario-kpi-card">
+    <div class="usuario-kpi-kicker"><i class="fa-solid fa-headset text-muted"></i> Recepción y Caja</div>
+    <div class="usuario-kpi-val">{{ cant_recep }}</div>
+    <div class="usuario-kpi-sub">Atención al cliente</div>
+  </div>
+  <div class="usuario-kpi-card">
+    <div class="usuario-kpi-kicker"><i class="fa-solid fa-truck text-muted"></i> Choferes de Reparto</div>
+    <div class="usuario-kpi-val">{{ cant_chofer }}</div>
+    <div class="usuario-kpi-sub">Flota provincial activa</div>
+  </div>
 </div>
 
-<div class="usuarios-grid">
-    {% for u in usuarios %}
-    <div class="card" style="display: flex; flex-direction: column; align-items: center; padding: 20px; text-align: center;">
-        <div class="avatar-circle" style="width: 60px; height: 60px; border-radius: 50%; background-color: var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">
-            {{ u.nombre[0]|upper }}
+<!-- Toolbar: Filtros de Rol y Buscador -->
+<div class="usuarios-toolbar">
+  <div class="usuarios-tabs" role="tablist">
+    <button type="button" class="tab-btn active" data-filter="todos">
+      Todos <span class="tab-badge">{{ total_usuarios }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="administrador">
+      <i class="fa-solid fa-shield-halved"></i> Administración <span class="tab-badge">{{ cant_admin }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="recepcionista">
+      <i class="fa-solid fa-headset"></i> Recepción <span class="tab-badge">{{ cant_recep }}</span>
+    </button>
+    <button type="button" class="tab-btn" data-filter="chofer">
+      <i class="fa-solid fa-truck"></i> Choferes <span class="tab-badge">{{ cant_chofer }}</span>
+    </button>
+  </div>
+  <div class="usuarios-search-box">
+    <i class="fa-solid fa-magnifying-glass usuarios-search-icon"></i>
+    <input type="text" id="busquedaUsuarios" placeholder="Buscar por nombre o correo..." aria-label="Buscar por nombre o correo">
+  </div>
+</div>
+
+<!-- Cuadrícula de Tarjetas de Usuario -->
+<div class="usuarios-grid" id="usuariosGrid">
+  {% for u in usuarios %}
+  <article class="user-card {% if not u.activo %}user-inactive{% endif %}"
+           data-role="{{ u.tipo_usuario }}"
+           data-search="{{ u.nombre|lower }} {{ u.email|lower }}">
+    
+    <!-- Encabezado de la Tarjeta -->
+    <div class="user-card-header">
+      <div>
+        {% if u.tipo_usuario == 'administrador' %}
+          <span class="user-role-badge role-admin">
+            <i class="fa-solid fa-user-shield"></i> Administrador
+          </span>
+        {% elif u.tipo_usuario == 'recepcionista' %}
+          <span class="user-role-badge role-recep">
+            <i class="fa-solid fa-headset"></i> Recepcionista
+          </span>
+        {% elif u.tipo_usuario == 'chofer' %}
+          <span class="user-role-badge role-chofer">
+            <i class="fa-solid fa-truck"></i> Chofer
+          </span>
+        {% else %}
+          <span class="user-role-badge">{{ u.tipo_usuario|title }}</span>
+        {% endif %}
+      </div>
+
+      <div>
+        {% if u.activo %}
+          <span class="user-status-chip status-active">
+            <span class="status-dot-active"></span> Activo
+          </span>
+        {% else %}
+          <span class="user-status-chip status-inactive">
+            <span class="status-dot-inactive"></span> Suspendido
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Cuerpo del Usuario -->
+    <div class="user-card-body">
+      <div class="user-avatar-wrap">
+        <div class="user-avatar-initials">
+          {{ u.nombre[0]|upper }}
         </div>
-        <h3 style="margin: 0; font-size: 1.2rem;">{{ u.nombre }}</h3>
-        <p style="color: var(--text-muted); margin: 5px 0 15px 0;">{{ u.email }}</p>
-        
-        <div style="margin-bottom: 10px;">
-            {% if u.tipo_usuario == 'administrador' %}
-            <span class="badge" style="background-color: #dc3545; color: white;">Administrador</span>
-            {% elif u.tipo_usuario == 'recepcionista' %}
-            <span class="badge" style="background-color: #0d6efd; color: white;">Recepcionista</span>
-            {% elif u.tipo_usuario == 'chofer' %}
-            <span class="badge" style="background-color: #198754; color: white;">Chofer</span>
-            {% else %}
-            <span class="badge" style="background-color: #6c757d; color: white;">{{ u.tipo_usuario }}</span>
-            {% endif %}
+        <div class="user-id-tag mono-data">#{{ "%03d"|format(u.id_usuario) }}</div>
+      </div>
+
+      <h3 class="user-card-name">{{ u.nombre }}</h3>
+      <div class="user-card-email">
+        <i class="fa-regular fa-envelope"></i>
+        <span>{{ u.email }}</span>
+      </div>
+
+      <div class="user-role-desc">
+        {% if u.tipo_usuario == 'administrador' %}
+          Auditoría de flota, gestión tarifaria, liquidaciones y control de usuarios.
+        {% elif u.tipo_usuario == 'recepcionista' %}
+          Cotización de envíos, emisión de guías, arqueo de caja y custodia en central.
+        {% elif u.tipo_usuario == 'chofer' %}
+          Hoja de ruta móvil, entregas con firma digital, incidencias y telemetría GPS.
+        {% else %}
+          Acceso operativo al sistema logístico.
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Acciones de Cuenta -->
+    <div class="user-card-footer">
+      {% if u.id_usuario == session.usuario_id %}
+        <div class="current-user-notice">
+          <i class="fa-solid fa-circle-check"></i> Tu sesión activa (No modificable)
         </div>
-        
-        <div style="margin-bottom: 20px;">
-            {% if u.activo %}
-            <span class="badge" style="background-color: #198754; color: white;">Activo</span>
-            {% else %}
-            <span class="badge" style="background-color: #dc3545; color: white;">Inactivo</span>
-            {% endif %}
-        </div>
-        
-        <form method="POST" action="{{ url_for('admin.toggle_usuario', id_usuario=u.id_usuario) }}" style="margin-top: auto; width: 100%;">
-            {% if u.id_usuario == session.usuario_id %}
-            <button type="submit" class="btn btn-secondary" style="width: 100%;" disabled>
-                {{ 'Desactivar' if u.activo else 'Activar' }}
+      {% else %}
+        <form method="POST" action="{{ url_for('admin.toggle_usuario', id_usuario=u.id_usuario) }}" class="user-toggle-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          {% if u.activo %}
+            <button type="submit" class="btn-user-toggle btn-suspend"
+                    onclick="return confirm('¿Confirmás la suspensión temporal del acceso para {{ u.nombre }}?');">
+              <i class="fa-solid fa-ban"></i> Suspender acceso
             </button>
-            {% else %}
-            <button type="submit" class="btn {{ 'btn-danger' if u.activo else 'btn-success' }}" style="width: 100%;">
-                {{ 'Desactivar' if u.activo else 'Activar' }}
+          {% else %}
+            <button type="submit" class="btn-user-toggle btn-activate"
+                    onclick="return confirm('¿Confirmás reactivar el acceso para {{ u.nombre }}?');">
+              <i class="fa-solid fa-check"></i> Habilitar acceso
             </button>
-            {% endif %}
+          {% endif %}
         </form>
-    </div>
-    {% endfor %}
-</div>
-
-<!-- Cerrar modal al hacer click fuera -->
-<script>
-// Cerrar modal al hacer click en el fondo
-window.onclick = function(event) {
-  var modal = document.getElementById('modalNuevoUsuario');
-  if (event.target == modal) modal.style.display = 'none';
-}
-
-// Si la página se cargó con errores (flash danger), reabrir el modal automáticamente
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for cat, msg in messages %}
-      {% if cat == 'danger' %}
-        document.addEventListener('DOMContentLoaded', function() {
-          document.getElementById('modalNuevoUsuario').style.display = 'block';
-        });
       {% endif %}
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+    </div>
 
-// Confirmación antes de desactivar un usuario activo
-document.querySelectorAll('.btn-danger[type=submit]').forEach(function(btn) {
-  btn.addEventListener('click', function(e) {
-    if (!confirm('¿Seguro que querés desactivar este usuario? No podrá iniciar sesión hasta que lo actives nuevamente.')) {
-      e.preventDefault();
+  </article>
+  {% endfor %}
+
+  <!-- Mensaje de Búsqueda sin Resultados -->
+  <div id="usuariosEmptySearch" class="activity-empty" style="display:none;grid-column:1/-1;background:#ffffff;border:1px solid var(--fp-surface-border);border-radius:8px;padding:36px 20px;">
+    <i class="fa-solid fa-magnifying-glass fa-2x text-muted" style="margin-bottom:12px;display:block;"></i>
+    <h3 style="font-size:16px;color:var(--fp-text-ink);margin:0 0 6px;">No se encontraron usuarios</h3>
+    <p style="font-size:13px;color:var(--fp-text-muted);margin:0;">No hay cuentas que coincidan con la búsqueda o el rol seleccionado.</p>
+  </div>
+</div>
+
+<!-- Modal: Crear Nuevo Usuario -->
+<div id="modalNuevoUsuario" class="modal-backdrop-custom" style="display:none;">
+  <div class="modal-dialog-custom">
+    <div class="modal-header-custom">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-user-plus text-primary"></i>
+        <h3 class="modal-title-custom">Registrar Nuevo Usuario</h3>
+      </div>
+      <button type="button" class="modal-close-custom" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <form method="POST" action="{{ url_for('admin.crear_usuario') }}" class="modal-form-custom">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+      <div class="form-group mb-3">
+        <label class="form-label font-bold">Nombre Completo *</label>
+        <input type="text" name="nombre" class="form-control" required maxlength="100" minlength="3"
+               pattern="[\p{L} .’\x27\-]+" title="Solo letras, espacios y guiones"
+               placeholder="Ej: Marcos Benítez">
+      </div>
+
+      <div class="form-group mb-3">
+        <label class="form-label font-bold">Correo Electrónico *</label>
+        <input type="email" name="email" class="form-control" required maxlength="100"
+               placeholder="usuario@formopack.com">
+      </div>
+
+      <div class="form-group mb-3">
+        <label class="form-label font-bold">Rol Operativo *</label>
+        <select name="tipo_usuario" class="form-control" required>
+          <option value="chofer" selected>Chofer (Reparto en ruta y móvil)</option>
+          <option value="recepcionista">Recepcionista (Atención, cotizaciones y caja)</option>
+          <option value="administrador">Administrador (Control total del sistema)</option>
+        </select>
+      </div>
+
+      <div class="form-group mb-4">
+        <label class="form-label font-bold">Contraseña Provisoria *</label>
+        <input type="password" name="password" class="form-control mono-data" minlength="8" maxlength="72"
+               placeholder="Mínimo 8 caracteres (letras y números)" autocomplete="new-password" required>
+        <small class="text-muted" style="display:block;margin-top:4px;font-size:12px;">
+          <i class="fa-solid fa-circle-info"></i> El usuario deberá establecer su contraseña definitiva al ingresar por primera vez.
+        </small>
+      </div>
+
+      <div class="modal-footer-custom">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNuevoUsuario').style.display='none'">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Registrar Usuario</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Modal click outside to close
+  const modal = document.getElementById('modalNuevoUsuario');
+  window.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.style.display = 'none';
     }
   });
+
+  // Filtrado y Búsqueda de Usuarios
+  const tabs = document.querySelectorAll('.usuarios-tabs .tab-btn');
+  const searchInput = document.getElementById('busquedaUsuarios');
+  const cards = document.querySelectorAll('.user-card');
+  const emptySearch = document.getElementById('usuariosEmptySearch');
+
+  let activeFilter = 'todos';
+  let searchTerm = '';
+
+  function aplicarFiltrosUsuarios() {
+    let visibles = 0;
+    cards.forEach(card => {
+      const role = card.dataset.role;
+      const searchData = card.dataset.search || '';
+
+      let matchFilter = (activeFilter === 'todos') || (activeFilter === role);
+      let matchSearch = (searchTerm.trim() === '') || searchData.includes(searchTerm.toLowerCase());
+
+      if (matchFilter && matchSearch) {
+        card.style.display = '';
+        visibles++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    if (emptySearch) {
+      emptySearch.style.display = (visibles === 0) ? 'block' : 'none';
+    }
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = tab.dataset.filter;
+      aplicarFiltrosUsuarios();
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchTerm = e.target.value;
+      aplicarFiltrosUsuarios();
+    });
+  }
 });
 </script>
 {% endblock %}

@@ -9,6 +9,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=6) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=2) }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     :root {
@@ -22,8 +26,200 @@
     body {
       min-height: 100vh;
       padding: 32px 20px 48px;
-      background: var(--track-paper);
-      color: var(--track-ink);
+      background: #f8fafc;
+      color: #1e293b;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+    
+    input, button, select, textarea {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    .mono-data, .tracking-guide, input#tracking-guide-input {
+      font-family: 'JetBrains Mono', monospace !important;
+    }
+
+    .leaflet-container img {
+      max-width: none !important;
+    }
+
+    .tracking-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--track-blue);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tracking-input-wrapper {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .tracking-input-icon {
+      position: absolute;
+      left: 14px;
+      color: #94a3b8;
+      font-size: 16px;
+      pointer-events: none;
+    }
+
+    .tracking-search .form-control {
+      padding-left: 42px;
+      font-size: 15px;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+    }
+
+    .tracking-search .form-control:focus {
+      border-color: #004481;
+      box-shadow: 0 0 0 3px rgba(0, 68, 129, 0.12);
+      outline: none;
+    }
+
+    .tracking-demo-pills {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    .tracking-demo-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .demo-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #334155;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+      transition: all 140ms ease;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .demo-pill:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+
+    .demo-pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    .pill-route .demo-pill-dot { background: #0284c7; }
+    .pill-custody .demo-pill-dot { background: #d97706; }
+    .pill-delivered .demo-pill-dot { background: #10b981; }
+
+    /* Features Grid for Empty State */
+    .tracking-features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .tracking-feature-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 22px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .tracking-feature-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    }
+
+    .feature-icon-circle {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: #eff6ff;
+      color: #004481;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+
+    .tracking-feature-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 6px;
+    }
+
+    .tracking-feature-card p {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .tracking-support-banner {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+
+    .support-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .support-banner-icon {
+      font-size: 26px;
+      color: #004481;
+    }
+
+    .support-banner-content h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 3px;
+    }
+
+    .support-banner-content p {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0;
     }
 
     .tracking-container { width: min(1120px, 100%); margin: 0 auto; }
@@ -65,7 +261,7 @@
     .tracking-destination strong { display:block; font-size:13px; }
     .tracking-destination span { display:block; margin-top:3px; color:var(--text-muted); font-size:12px; overflow-wrap:anywhere; }
 
-    .tracking-eta { margin-bottom:16px; padding:16px; border-left:4px solid #e3a72f; border-radius:6px; background:#fff8e8; }
+    .tracking-eta { margin-bottom:16px; padding:16px; border:1px solid #fed7aa; border-radius:6px; background:#fff8e8; }
     .tracking-eta-label { color:#785611; font-size:11px; font-weight:800; text-transform:uppercase; }
     .tracking-eta strong { display:block; margin-top:5px; font-size:16px; }
     .tracking-eta p { margin:7px 0 0; color:#685e4a; font-size:12px; line-height:1.5; }
@@ -87,7 +283,7 @@
     .tracking-event-date { color:var(--text-muted); font-size:11px; }
     .tracking-event-title { margin-top:3px; font-size:13px; font-weight:800; text-transform:capitalize; }
     .tracking-event-location,.tracking-event-note { margin-top:3px; color:var(--text-muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
-    .tracking-event-friendly { margin-top:5px; padding:8px 12px; border-radius:6px; background:#f0f6f9; color:#3a5568; font-size:12px; line-height:1.55; border-left:3px solid var(--track-blue); }
+    .tracking-event-friendly { margin-top:5px; padding:8px 12px; border-radius:6px; background:#f0f6f9; color:#3a5568; font-size:12px; line-height:1.55; border:1px solid #cbd5e1; }
 
     .tracking-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; padding-top:16px; border-top:1px solid var(--track-line); }
     .tracking-actions .btn { min-height:40px; font-size:12px; }
@@ -320,18 +516,35 @@
   </nav>
 
   <header class="tracking-intro">
+    <div class="tracking-eyebrow"><i class="fa-solid fa-satellite-dish"></i> Red Provincial de Encomiendas · Formosa</div>
     <h1>¿Dónde está tu envío?</h1>
-    <p>Ingresá el número de guía para consultar su último estado registrado.</p>
+    <p>Ingresá el número de guía para consultar la ubicación en ruta y el historial de entrega hacia el interior de Formosa.</p>
   </header>
 
   <section class="tracking-search" aria-label="Buscar envío">
     <form method="GET" action="{{ url_for('admin.tracking_publico') }}">
       <label for="tracking-guide-input">Número de guía</label>
-      <input id="tracking-guide-input" type="text" name="guia" class="form-control"
-             placeholder="Ej.: FPX-2026-0001" value="{{ nro_guia or '' }}"
-             required maxlength="25" pattern="[A-Za-z0-9\-]+" autocomplete="off" spellcheck="false">
+      <div class="tracking-input-wrapper">
+        <i class="fa-solid fa-barcode tracking-input-icon"></i>
+        <input id="tracking-guide-input" type="text" name="guia" class="form-control mono-data"
+               placeholder="Ej: FP-84920185" value="{{ nro_guia or '' }}"
+               required maxlength="25" pattern="[A-Za-z0-9\-]+" autocomplete="off" spellcheck="false">
+      </div>
       <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Consultar envío</button>
     </form>
+    
+    <div class="tracking-demo-pills">
+      <span class="tracking-demo-label"><i class="fa-solid fa-bolt"></i> Guías de ejemplo:</span>
+      <a href="{{ url_for('admin.tracking_publico', guia='FP-84920185') }}" class="demo-pill pill-route" title="Ver envío en ruta hacia Clorinda">
+        <span class="demo-pill-dot"></span> FP-84920185 (En ruta a Clorinda)
+      </a>
+      <a href="{{ url_for('admin.tracking_publico', guia='FP-84920188') }}" class="demo-pill pill-custody" title="Ver envío en custodia de depósito central">
+        <span class="demo-pill-dot"></span> FP-84920188 (Custodia Central)
+      </a>
+      <a href="{{ url_for('admin.tracking_publico', guia='FP-84920182') }}" class="demo-pill pill-delivered" title="Ver envío entregado con constancia">
+        <span class="demo-pill-dot"></span> FP-84920182 (Entregado Pirané)
+      </a>
+    </div>
   </section>
 
   {% if error %}
@@ -588,17 +801,36 @@
   {% endif %}
 
   {% if not envio and not error %}
-  <section class="tracking-empty" aria-label="Instrucciones de seguimiento">
-    <i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i>
-    <h2>Consultá el recorrido de tu paquete</h2>
-    <p>Ingresá el número de guía que recibiste al registrar el envío.</p>
+  <section class="tracking-features-grid" aria-label="Servicios de trazabilidad">
+    <div class="tracking-feature-card">
+      <div class="feature-icon-circle"><i class="fa-solid fa-truck-fast"></i></div>
+      <h3>Rastreo Satelital en Tiempo Real</h3>
+      <p>Supervisá la trayectoria de las unidades de transporte a lo largo de las rutas provinciales hacia las localidades del interior.</p>
+    </div>
+    <div class="tracking-feature-card">
+      <div class="feature-icon-circle"><i class="fa-solid fa-warehouse"></i></div>
+      <h3>Custodia en Planta Central</h3>
+      <p>Paquetes resguardados con protocolo estricto de 15 días corridos y retiro presencial mediante firma digital y acreditación de DNI.</p>
+    </div>
+    <div class="tracking-feature-card">
+      <div class="feature-icon-circle"><i class="fa-solid fa-file-shield"></i></div>
+      <h3>Constancias y Comprobantes</h3>
+      <p>Descargá actas digitales de entrega firmadas por el destinatario con validez interna inmediata para remitentes.</p>
+    </div>
   </section>
-  {% endif %}
 
-  {% if not envio %}
-  <p style="text-align:center; margin:1.5rem 0;">
-    <button id="contact-support" class="btn btn-support" type="button">Contactar Soporte</button>
-  </p>
+  <div class="tracking-support-banner">
+    <div class="support-banner-content">
+      <i class="fa-solid fa-headset support-banner-icon"></i>
+      <div>
+        <h4>¿Tenés alguna consulta o no encontrás tu guía?</h4>
+        <p>Nuestro equipo de atención en Formosa Capital está en línea para ayudarte a rastrear tu bulto.</p>
+      </div>
+    </div>
+    <button id="contact-support" class="btn btn-support" type="button">
+      <i class="fa-solid fa-comments"></i> Iniciar Chat de Soporte
+    </button>
+  </div>
   {% endif %}
 
   <!-- ============================================== -->
