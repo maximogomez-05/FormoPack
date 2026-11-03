@@ -74,6 +74,32 @@ class TestRecuperacionHTTP:
 
 
 class TestErroresSeguridadHTTP:
+    def test_login_csrf_viejo_reabre_formulario_sin_autenticar(self, app):
+        import re
+        cliente = app.test_client()
+        anterior = cliente.get("/").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', anterior).group(1)
+        with cliente.session_transaction() as sesion:
+            sesion.pop("csrf_token", None)
+        with patch("web.routes.auth.AuthController") as auth:
+            respuesta = cliente.post("/login", data={
+                "email": "operador@example.com", "password": "ClavePrivada123", "csrf_token": token})
+            assert respuesta.status_code == 303
+            assert respuesta.headers["Location"] == "/"
+            auth.assert_not_called()
+        pagina = cliente.get("/").get_data(as_text=True)
+        nuevo = re.search(r'name="csrf_token" value="([^"]+)"', pagina).group(1)
+        assert nuevo != token
+        assert "El formulario de ingreso venció" in pagina
+        assert "ClavePrivada123" not in pagina
+        with cliente.session_transaction() as sesion:
+            assert "usuario_id" not in sesion
+
+    def test_login_csrf_json_conserva_rechazo_explicito(self, app):
+        respuesta = app.test_client().post("/login", json={"email": "operador@example.com"})
+        assert respuesta.status_code == 400
+        assert respuesta.json["code"] == "CSRF_ERROR"
+
     def test_csrf_html_devuelve_400_sin_error_interno_ni_redireccion(self, app):
         with patch("web.routes.auth.AuthController") as auth:
             response = app.test_client().post(

@@ -2,7 +2,7 @@
 
 import logging
 
-from flask import jsonify, render_template, request
+from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFError
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, CotizacionError
 
@@ -45,6 +45,11 @@ class ManejadorErroresSeguridad:
 
     def error_csrf(self, error):
         self._logger.warning("Solicitud rechazada por CSRF: %s", request.path)
+        if request.endpoint == "auth.login" and not self.espera_json():
+            # Reabrir mediante GET sin reutilizar credenciales de un POST rechazado.
+            session.pop("csrf_token", None)
+            flash("El formulario de ingreso venció. Ingresá nuevamente tus datos.", "warning")
+            return redirect(url_for("auth.landing"), code=303)
         return self._respuesta(
             "El formulario venció o no es válido. Volvé a abrirlo antes de reintentar.",
             "CSRF_ERROR", 400,

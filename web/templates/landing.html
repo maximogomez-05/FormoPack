@@ -596,6 +596,10 @@
         // Modal functions
         const modal = document.getElementById('loginModal');
 
+        window.addEventListener('pageshow', event => {
+            if (event.persisted) window.location.reload();
+        });
+
         function openModal() {
             modal.style.display = 'flex';
             // Pequeño delay para que aplique la transición de opacidad
