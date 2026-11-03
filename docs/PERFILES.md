@@ -16,9 +16,9 @@ Ejecutar dentro de la sesión SSH del usuario formopack.
 cd ~/formopack-app &&
 sudo /usr/local/sbin/formopack-backup &&
 git pull --ff-only &&
-.venv/bin/python -c "from app.core.migrations import MigrationManager; print(MigrationManager().aplicar_migraciones(desde='013'))" &&
+sudo mariadb formopack_db < scripts/migrations/013_perfiles.sql &&
 sudo systemctl restart formopack &&
 systemctl is-active formopack
 ```
 
-La migración 013 es aditiva y repetible. Aplicarla antes de reiniciar. Abrir Mi perfil, guardar datos y verificar la foto en el encabezado.
+La migración 013 es aditiva y repetible. Se aplica con la cuenta administrativa local de MariaDB porque la cuenta de ejecución de la aplicación tiene permisos limitados. Este comando aplica únicamente el archivo 013. Si posteriormente se usa MigrationManager, podrá repetir su CREATE TABLE IF NOT EXISTS sin cambiar las fotos existentes. Aplicarla antes de reiniciar. Abrir Mi perfil, guardar datos y verificar la foto en el encabezado.
