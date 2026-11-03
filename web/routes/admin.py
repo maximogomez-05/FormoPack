@@ -27,6 +27,20 @@ admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
 
+class ExportadorCSV:
+    def __init__(self, salida):
+        self.escritor = csv.writer(salida)
+
+    def writerow(self, valores):
+        self.escritor.writerow(self._celda(valor) for valor in valores)
+
+    @staticmethod
+    def _celda(valor):
+        if isinstance(valor, str) and valor.lstrip().startswith(("=", "+", "-", "@")):
+            return "'" + valor
+        return valor
+
+
 def formato_pesos_ars(monto: float | int | None) -> str:
     """Formatea un importe en pesos argentinos con dos decimales y separadores de miles estándar."""
     if monto is None:
@@ -213,7 +227,7 @@ def descargar_reporte_envios():
 
     filas = _obtener_reporte_envios(desde, hasta, estado=estado or None)
     salida = io.StringIO(newline="")
-    escritor = csv.writer(salida)
+    escritor = ExportadorCSV(salida)
     escritor.writerow(["Guia", "Estado", "Remitente", "Destinatario", "Destino", "Costo", "Modalidad de pago", "Fecha de creacion"])
     for fila in filas:
         escritor.writerow([
@@ -375,7 +389,7 @@ def _obtener_choferes_disponibles() -> list:
         return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener choferes: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo obtener choferes.") from e
     finally:
         if conn:
             conn.close()
@@ -390,6 +404,7 @@ def tracking_publico():
     error = None
     resumen_tracking = None
 
+    estado_http = 200
     if nro_guia:
         try:
             envio, timeline = _obtener_timeline(nro_guia)
@@ -398,8 +413,9 @@ def tracking_publico():
             resumen_tracking = construir_resumen_tracking(envio, timeline)
             if not envio:
                 error = f"No se encontró ningún envío con la guía '{nro_guia}'."
-        except DatabaseConnectionError:
-            error = "No se puede conectar a la base de datos."
+        except (DatabaseConnectionError, DatabaseQueryError):
+            estado_http = 503
+            error = "No pudimos consultar el seguimiento. Intentá nuevamente en unos instantes."
         except Exception as e:
             logger.error("Error en tracking: %s", e)
             error = "Ocurrió un error al consultar el envío."
@@ -414,7 +430,7 @@ def tracking_publico():
         timeline=timeline,
         resumen_tracking=resumen_tracking,
         error=error,
-    )
+    ), estado_http
 
 
 @admin_bp.route("/tracking/descargar-comprobante")
@@ -605,6 +621,8 @@ def liquidaciones():
                     flash('No se encontraron registros en el período seleccionado.', 'info')
         except ValidationError as e:
             flash(str(e), 'warning')
+        except DatabaseQueryError:
+            raise
         except Exception as e:
             logger.error("Error al generar liquidación: %s", e)
             flash('Ocurrió un error al generar la liquidación.', 'danger')
@@ -690,7 +708,7 @@ def exportar_comprobantes_csv():
 
     filas = _obtener_comprobantes_admin(filtros)
     salida = io.StringIO(newline="")
-    escritor = csv.writer(salida)
+    escritor = ExportadorCSV(salida)
     escritor.writerow([
         "Nro Comprobante",
         "Nro Guia",
@@ -1048,7 +1066,7 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
         return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener envíos: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo obtener envíos.") from e
     finally:
         if conn:
             conn.close()
@@ -1084,7 +1102,7 @@ def _obtener_envios_para_alertas() -> list:
         return cursor.fetchall()
     except Exception as e:
         logger.error("Error al obtener envíos para alertas operativas: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo obtener envíos para alertas operativas.") from e
     finally:
         if conn:
             conn.close()
@@ -1131,7 +1149,7 @@ def _obtener_reporte_envios(desde, hasta, estado: str | None = None) -> list:
         return cursor.fetchall()
     except Exception as e:
         logger.error("Error al generar reporte de envíos: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo generar reporte de envíos.") from e
     finally:
         if conn:
             conn.close()
@@ -1454,28 +1472,6 @@ def _obtener_timeline(nro_guia: str):
                         raise
                     logger.warning("Falta aplicar scripts/migracion_ubicaciones_gps.sql para mostrar GPS en vivo")
 
-            if not ubicacion_gps and envio.get("estado_actual") in {"entregado", "fallido"}:
-                cursor.execute("""
-                    SELECT coordenadas_gps, fecha_hora AS fecha_actualizacion
-                    FROM intentos_entrega
-                    WHERE id_envio = %s AND coordenadas_gps IS NOT NULL
-                    ORDER BY fecha_hora DESC, id_intento DESC
-                    LIMIT 1
-                """, (envio["id_envio"],))
-                intento_gps = cursor.fetchone()
-                if intento_gps:
-                    try:
-                        latitud, longitud = (float(valor.strip()) for valor in intento_gps["coordenadas_gps"].split(",", 1))
-                        if -90 <= latitud <= 90 and -180 <= longitud <= 180:
-                            ubicacion_gps = {
-                                "latitud": latitud,
-                                "longitud": longitud,
-                                "precision_m": None,
-                                "fecha_actualizacion": intento_gps["fecha_actualizacion"],
-                            }
-                    except (AttributeError, TypeError, ValueError):
-                        logger.warning("Coordenadas GPS inválidas para el envío %s", envio["nro_guia"])
-
             if ubicacion_gps:
                 envio["ubicacion_gps"] = {
                     "latitud": float(ubicacion_gps["latitud"]),
@@ -1490,7 +1486,7 @@ def _obtener_timeline(nro_guia: str):
         return envio, historial
     except Exception as e:
         logger.error("Error al obtener timeline: %s", e)
-        return None, []
+        raise DatabaseQueryError("No se pudo consultar el seguimiento.") from e
     finally:
         if conn:
             conn.close()
@@ -1635,7 +1631,7 @@ def _obtener_comprobantes_admin(filtros: dict, limite: int | None = None, offset
         return filas
     except Exception as e:
         logger.error("Error al obtener comprobantes de administración: %s", e)
-        return []
+        raise DatabaseQueryError("No se pudo obtener comprobantes de administración.") from e
     finally:
         if conn:
             conn.close()

@@ -138,3 +138,16 @@ class TestErroresSeguridadHTTP:
             })
         assert response.status_code == 302
         auth.return_value.solicitar_recuperacion.assert_called_once_with("operador@example.com")
+
+
+def test_login_separa_clientes_detras_de_nginx(app, monkeypatch):
+    monkeypatch.setenv("FORMOPACK_PROXY_LOCAL", "1")
+    app.config["WTF_CSRF_ENABLED"] = False
+    client = app.test_client()
+    def intento(ip):
+        return client.post("/login", data={}, environ_base={"REMOTE_ADDR": "127.0.0.1"},
+                           headers={"X-Real-IP": ip, "X-Forwarded-For": "198.51.100.99"})
+    for _ in range(10):
+        assert intento("203.0.113.4").status_code == 302
+    assert intento("203.0.113.4").status_code == 429
+    assert intento("203.0.113.5").status_code == 302

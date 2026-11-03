@@ -139,7 +139,12 @@ class TestLiquidacionModel:
 
 
 class TestLiquidacionController:
-    """Tests del controlador (requieren BD activa)."""
+    """Validación previa a consultas, sin conexión a bases de trabajo."""
+    @pytest.fixture(autouse=True)
+    def base_aislada(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from app.core.database import DatabaseManager
+        monkeypatch.setattr(DatabaseManager, "get_instance", MagicMock())
 
     def test_import_controller(self):
         """Verificar que se puede importar el controlador."""

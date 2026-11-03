@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import contextmanager
+from threading import Lock
 from typing import Generator, Any, Optional
 from mysql.connector import pooling, Error as MySQLError
 from mysql.connector.connection import MySQLConnection
@@ -19,11 +20,15 @@ class DatabaseManager:
     _instance: Optional["DatabaseManager"] = None
     _pool: Optional[MySQLConnectionPool] = None
 
+    _lock = Lock()
+
     def __new__(cls) -> "DatabaseManager":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialize_pool()
-        return cls._instance
+        with cls._lock:
+            if cls._instance is None:
+                instancia = super().__new__(cls)
+                instancia._initialize_pool()
+                cls._instance = instancia
+            return cls._instance
 
     @classmethod
     def set_instance(cls, instance: Optional["DatabaseManager"]) -> None:
@@ -85,8 +90,8 @@ class DatabaseManager:
             yield conn
             try:
                 conn.commit()
-            except Exception:
-                pass
+            except MySQLError as exc:
+                raise DatabaseConnectionError("No se pudo confirmar la operación en la base de datos.") from exc
         except Exception:
             try:
                 conn.rollback()

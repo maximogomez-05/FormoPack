@@ -5,13 +5,12 @@ import hmac
 import secrets
 
 from flask import Blueprint, current_app, render_template, request, jsonify, redirect, url_for, session, flash
-from flask_limiter.util import get_remote_address
 
 from app.controllers.soporte_controller import SoporteController
 from app.models.chat_soporte import ChatSoporte
 from app.utils.exceptions import SoporteError, DatabaseQueryError, DatabaseConnectionError
 from web.routes.auth import login_required, rol_requerido
-from web.extensions import limiter
+from web.extensions import direccion_cliente, limiter
 from web.security.error_handlers import ManejadorErroresSeguridad
 
 soporte_bp = Blueprint("soporte", __name__)
@@ -38,7 +37,7 @@ class IdentidadClienteSoporte:
 
     @classmethod
     def clave_limite(cls):
-        return cls.token() or get_remote_address()
+        return cls.token() or direccion_cliente()
 
 
 class PresentacionSoporte:

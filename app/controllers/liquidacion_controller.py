@@ -37,7 +37,7 @@ class LiquidacionController:
             return cursor.fetchall()
         except Exception as e:
             logger.error("Error al obtener choferes con actividad: %s", e)
-            return []
+            raise DatabaseQueryError("No se pudo obtener choferes con actividad.") from e
         finally:
             if conn:
                 conn.close()
@@ -87,7 +87,7 @@ class LiquidacionController:
                     COUNT(e.id_envio) AS cant_envios,
                     COALESCE(SUM(CASE WHEN a.resolucion = 'entregado' THEN 1 ELSE 0 END), 0) AS entregados,
                     COALESCE(SUM(CASE WHEN a.resolucion = 'fallido' THEN 1 ELSE 0 END), 0) AS fallidos,
-                    COALESCE(SUM(CASE WHEN a.resolucion IS NULL THEN 1 ELSE 0 END), 0) AS pendientes,
+                    COALESCE(SUM(CASE WHEN a.id_envio IS NOT NULL AND a.resolucion IS NULL THEN 1 ELSE 0 END), 0) AS pendientes,
                     COALESCE(SUM(e.costo_total), 0) AS monto,
                     COALESCE(MAX(l.distancia_km), 0) AS max_distancia
                 FROM hojas_de_ruta hr
@@ -146,7 +146,7 @@ class LiquidacionController:
             raise
         except Exception as e:
             logger.error("Error al generar liquidación: %s", e)
-            raise DatabaseQueryError(f"Error al generar liquidación: {e}")
+            raise DatabaseQueryError("No se pudo generar la liquidación.") from e
         finally:
             if conn:
                 conn.close()
@@ -157,6 +157,8 @@ class LiquidacionController:
         fecha_hasta: date,
     ) -> List[dict]:
         """Genera un resumen rápido de todos los choferes en el período."""
+        if fecha_desde > fecha_hasta:
+            raise ValidationError("fechas", "La fecha inicial no puede ser posterior a la fecha final")
         conn = None
         try:
             conn = self._db.get_connection()
@@ -182,7 +184,7 @@ class LiquidacionController:
             return cursor.fetchall()
         except Exception as e:
             logger.error("Error al generar resumen de liquidaciones: %s", e)
-            return []
+            raise DatabaseQueryError("No se pudo generar resumen de liquidaciones.") from e
         finally:
             if conn:
                 conn.close()
