@@ -727,9 +727,11 @@
     const gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
     const map = L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Identificar el sitio ante OSM sin revelar la guía consultada.
+      referrerPolicy: 'strict-origin-when-cross-origin',
       maxZoom: 18,
-      attribution: '&copy; OpenStreetMap'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     L.marker(plant).addTo(map).bindPopup('<strong>Planta FormoPack</strong><br>Formosa Capital');
