@@ -95,6 +95,102 @@ def test_conciliacion_idempotente_y_caja(db):
     assert resumen["ingresos_digitales"] == pago["transaction_amount"]
 
 
+def contexto_sin_metadata(db):
+    servicio, api, pago, registro, turno = contexto(db)
+    pago["metadata"] = {"hide_payer_information": True}
+    pago["order"] = {"id": "45775228463", "type": "mercadopago"}
+    comercial = {"id": 45775228463, "external_reference": registro["nro_guia"],
+                 "preference_id": "preferencia-test",
+                 "payments": [{"id": 98765, "status": "approved"}]}
+    api.obtener_orden_comercial.return_value = comercial
+    return servicio, api, pago, registro, turno, comercial
+
+
+def test_pago_real_sin_metadata_se_concilia_por_preferencia_una_sola_vez(db):
+    servicio, api, pago, registro, turno, _ = contexto_sin_metadata(db)
+    barrera = Barrier(3)
+    def confirmar(_):
+        barrera.wait(timeout=10)
+        return servicio.confirmar("98765")["aprobado"]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert all(pool.map(confirmar, range(3)))
+    assert servicio.verificar(registro["nro_guia"])["aprobado"]
+    api.obtener_orden_comercial.assert_called_with("45775228463")
+    resumen = CajaController(db).cerrar_turno(turno.id_turno, 2)
+    assert resumen["cantidad_operaciones"] == 1
+    assert resumen["ingresos_digitales"] == pago["transaction_amount"]
+
+
+@pytest.mark.parametrize("campo,valor", [
+    ("id", 1), ("external_reference", "GUIA-AJENA"),
+    ("preference_id", "preferencia-ajena"), ("preference_id", None),
+    ("payments", []), ("payments", None),
+    ("payments", [{"id": 123, "status": "approved"}]),
+    ("payments", [{"id": 98765, "status": "pending"}]),
+])
+def test_orden_comercial_ajena_o_incompleta_no_acredita(db, campo, valor):
+    servicio, _, _, _, _, comercial = contexto_sin_metadata(db)
+    comercial[campo] = valor
+    with pytest.raises(PagoExternoError):
+        servicio.confirmar("98765")
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM pagos")
+        assert cur.fetchone()["total"] == 0
+
+
+@pytest.mark.parametrize("campo,valor", [
+    ("transaction_amount", 1), ("currency_id", "USD"), ("collector_id", 999),
+    ("live_mode", True), ("transaction_amount_refunded", 1),
+    ("external_reference", "OTRA-GUIA"),
+    ("metadata", {"formopack_orden": "invalida"}),
+    ("metadata", {"formopack_orden": "f" * 32}),
+    ("order", {"id": "../otra", "type": "mercadopago"}),
+])
+def test_sin_metadata_conserva_validaciones_del_pago(db, campo, valor):
+    servicio, _, pago, _, _, _ = contexto_sin_metadata(db)
+    pago[campo] = valor
+    with pytest.raises(PagoExternoError):
+        servicio.confirmar("98765")
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM pagos")
+        assert cur.fetchone()["total"] == 0
+
+
+def test_orden_comercial_temporalmente_no_disponible_permite_reintento(db):
+    servicio, api, _, _, _, comercial = contexto_sin_metadata(db)
+    api.obtener_orden_comercial.side_effect = PagoExternoError("Temporal", 503)
+    with pytest.raises(PagoExternoError) as error:
+        servicio.confirmar("98765")
+    assert error.value.status == 503
+    api.obtener_orden_comercial.side_effect = None
+    api.obtener_orden_comercial.return_value = comercial
+    assert servicio.confirmar("98765")["aprobado"]
+
+
+def test_adaptador_consulta_orden_comercial_por_id():
+    servicio = object.__new__(MercadoPagoService)
+    servicio._sdk = MagicMock()
+    servicio._sdk.merchant_order().get.return_value = {"status": 200, "response": {"id": 123}}
+    assert servicio.obtener_orden_comercial("123") == {"id": 123}
+    servicio._sdk.merchant_order().get.assert_called_once_with("123")
+
+
+def test_polling_recupera_pago_productivo_sin_metadata(aplicacion, db, monkeypatch):
+    servicio, _, pago, registro, _, _ = contexto_sin_metadata(db)
+    monkeypatch.setattr(C, "TEST_MODE", False)
+    pago["live_mode"] = True
+    client, token = cliente(aplicacion)
+    with patch("web.routes.recepcion.ConciliacionMP", return_value=servicio):
+        for _ in range(2):
+            respuesta = client.post("/recepcion/mp/verificar/" + registro["nro_guia"],
+                                   headers={"X-CSRFToken": token})
+            assert respuesta.status_code == 200
+            assert respuesta.json["aprobado"]
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM pagos")
+        assert cur.fetchone()["total"] == 1
+
+
 @pytest.mark.parametrize("campo,valor", [
     ("external_reference", "GUIA-AJENA"), ("transaction_amount", 1), ("transaction_amount", "NaN"),
     ("currency_id", "USD"), ("collector_id", 999), ("live_mode", True),

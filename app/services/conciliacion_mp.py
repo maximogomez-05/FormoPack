@@ -28,16 +28,38 @@ class PagoVerificadoMP:
         self.guia = datos.get("external_reference")
         metadata = datos.get("metadata")
         self.orden = metadata.get("formopack_orden") if isinstance(metadata, dict) else None
+        self.preferencia_verificada = None
+
+    def verificar_orden_comercial(self, proveedor):
+        """La API puede omitir metadata: comprobar pago → orden → preferencia."""
+        referencia = self.datos.get("order")
+        if (not isinstance(referencia, dict) or referencia.get("type") != "mercadopago"
+            or not re.fullmatch(r"[0-9]{1,30}", str(referencia.get("id")))):
+            raise PagoExternoError("El pago no incluye una orden comercial verificable.")
+        orden = proveedor.obtener_orden_comercial(str(referencia["id"]))
+        if (not isinstance(orden, dict) or str(orden.get("id")) != str(referencia["id"])
+            or orden.get("external_reference") != self.guia
+            or not isinstance(orden.get("preference_id"), str)
+            or not 1 <= len(orden["preference_id"]) <= 100
+            or not isinstance(orden.get("payments"), list)
+            or not any(isinstance(p, dict) and str(p.get("id")) == self.id
+                       and p.get("status") == "approved" for p in orden["payments"])):
+            raise PagoExternoError("La orden comercial no coincide con el pago. Requiere revisión.")
+        self.preferencia_verificada = orden["preference_id"]
 
     def validar(self, orden, guia):
         d = self.datos
+        vinculo_valido = (self.orden == orden["id_orden"] if self.orden is not None
+                          else self.preferencia_verificada is not None
+                          and self.preferencia_verificada == orden["preference_id"])
         try:
             monto = V.decimal(d.get("transaction_amount"), "importe externo", 0.01)
             devuelto = V.decimal(d.get("transaction_amount_refunded", 0), "reembolso")
         except ValidationError as exc:
             raise PagoExternoError("El importe del pago no es válido.") from exc
         if (not self.aprobado or devuelto != 0 or self.guia != guia
-            or self.orden != orden["id_orden"] or d.get("currency_id") != "ARS"
+            or not vinculo_valido
+            or d.get("currency_id") != "ARS"
             or str(d.get("collector_id")) != orden["collector_id"]
             or orden["collector_id"] != str(MercadoPagoConfig.COLLECTOR_ID)
             or type(d.get("live_mode")) is not bool
@@ -150,13 +172,20 @@ class ConciliacionMP:
         pago = PagoVerificadoMP(self.proveedor.obtener_pago(payment_id), payment_id)
         if not pago.aprobado:
             return {"aprobado": False, "estado": "pendiente"}
-        if not isinstance(pago.orden, str) or not re.fullmatch(r"[0-9a-f]{32}", pago.orden):
+        if pago.orden is None:
+            # Consultar al proveedor antes de tomar bloqueos SQL.
+            pago.verificar_orden_comercial(self.proveedor)
+        elif not isinstance(pago.orden, str) or not re.fullmatch(r"[0-9a-f]{32}", pago.orden):
             raise PagoExternoError("El pago no corresponde a una orden de esta versión del sistema.")
         with self._transaccion() as cur:
-            cur.execute("SELECT * FROM ordenes_pago_mp WHERE id_orden=%s", (pago.orden,))
-            orden = cur.fetchone()
-            if not orden:
+            if pago.orden is not None:
+                cur.execute("SELECT * FROM ordenes_pago_mp WHERE id_orden=%s", (pago.orden,))
+            else:
+                cur.execute("SELECT * FROM ordenes_pago_mp WHERE preference_id=%s", (pago.preferencia_verificada,))
+            ordenes = cur.fetchall()
+            if len(ordenes) != 1:
                 raise PagoExternoError("No se encontró la orden local del pago.")
+            orden = ordenes[0]
             cur.execute("SELECT nro_guia,costo_total FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
             envio = cur.fetchone()
             if not envio or (guia_esperada is not None and envio["nro_guia"] != guia_esperada):

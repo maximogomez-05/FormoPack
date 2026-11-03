@@ -32,6 +32,10 @@
           Esperando confirmación de pago...
         </div>
 
+        <button type="button" id="reintentar-verificacion" class="btn btn-secondary" hidden>
+          Volver a consultar el pago
+        </button>
+
         <div class="form-actions-bar" style="margin-top: 20px;">
           <a href="{{ url_for('recepcion.cobrar_envio', nro_guia=envio.nro_guia) }}" class="btn btn-secondary" style="flex: 1 1 auto; text-align: center; justify-content: center;">
             <i class="fa-solid fa-arrow-left"></i> Volver
@@ -57,6 +61,7 @@
 </div>
 
 <style>
+#reintentar-verificacion[hidden] { display: none; }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .4; transform: scale(1.3); }
@@ -75,6 +80,15 @@
   let pollingActivo = true;
   let intentos = 0;
   const MAX_INTENTOS = 90; // Timeout: 6 minutos (90 * 4s)
+  const botonReintento = document.getElementById('reintentar-verificacion');
+  botonReintento.addEventListener('click', () => {
+    if (pollingActivo) return;
+    intentos = 0;
+    pollingActivo = true;
+    botonReintento.hidden = true;
+    document.getElementById('polling-status').textContent = 'Consultando el pago existente…';
+    verificarPago();
+  });
 
   async function verificarPago() {
     if (!pollingActivo) return;
@@ -82,8 +96,9 @@
 
     if (intentos > MAX_INTENTOS) {
       pollingActivo = false;
-      document.getElementById('polling-status').innerHTML = '⏰ Tiempo de espera agotado. Verificá manualmente si el cliente pagó.';
+      document.getElementById('polling-status').textContent = 'Se agotó la espera. Si el cliente ya pagó, volvé a consultar; no solicites otro pago.';
       document.getElementById('polling-status').style.color = '#f59e0b';
+      botonReintento.hidden = false;
       return;
     }
 
@@ -95,7 +110,10 @@
 
       if (!resp.ok) {
         document.getElementById('polling-status').textContent = data.error || 'No se pudo verificar el pago. Reintentando…';
-        if ([401, 403, 409].includes(resp.status)) pollingActivo = false;
+        if ([401, 403, 409].includes(resp.status)) {
+          pollingActivo = false;
+          if (resp.status === 409) botonReintento.hidden = false;
+        }
       } else if (data.aprobado) {
         // ¡PAGO DETECTADO! Mostrar pantalla de éxito
         pollingActivo = false;

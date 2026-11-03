@@ -296,3 +296,22 @@ ejecutarlas; no debe apuntarse automáticamente a la base de trabajo.
 3. Custodia y evidencia. Retiro por el remitente implementado en central, con DNI, firma, historial y constancia. Revisar acceso privado a fotos históricas, descarga de remitos y gestión de siniestro/seguro.
 4. Cerrar diferencias académicas. Resolver con el equipo el cobro en destino del RF 5.2, capacidad por volumen, significado de cierre y límites del ruteo. Registrar una prueba de aceptación por RF y RNF. Alinear manual y diagramas con los resultados.
 5. Despliegue. Preparar WSGI, HTTPS, usuario SQL limitado, permisos de evidencias, copias y restauración en Hostinger. Verificar Mercado Pago primero en pruebas con webhook auténtico y credenciales renovadas. Probar la acreditación real y medir tiempos/disponibilidad en el entorno publicado.
+
+## Conciliación de Mercado Pago: 3 de noviembre de 2026
+
+En el primer cobro real se observó un pago aprobado con referencia de guía,
+pero sin `metadata.formopack_orden`. Se agregó una alternativa de conciliación:
+consultar la orden comercial indicada por el pago, validar que contiene ese
+pago aprobado y vincular su `preference_id` con la preferencia local guardada.
+Se mantienen los controles de cuenta receptora, moneda, modo productivo/prueba,
+importe, reembolso y unicidad. Una metadata presente pero incorrecta se rechaza.
+La pantalla permite repetir únicamente la consulta después de un conflicto o
+tiempo agotado. No genera una nueva preferencia ni solicita otro cobro.
+
+Referencia: [Obtener orden comercial](https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/merchant-orders/get-merchant-order/get).
+
+Validación local: 86 pruebas aprobadas sobre conciliación, concurrencia SQL,
+rutas, plantillas y permisos, usando bases desechables y API simulada.
+Pendiente: desplegar esta corrección, conciliar el cobro existente en el VPS
+y comprobar su reflejo único en caja. La firma del webhook externo todavía
+requiere validación independiente; esta corrección no desactiva su verificación.

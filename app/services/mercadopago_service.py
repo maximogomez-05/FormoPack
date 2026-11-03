@@ -48,6 +48,9 @@ class MercadoPagoService:
     def obtener_pago(self, payment_id):
         return self._respuesta(lambda: self._sdk.payment().get(payment_id), pago_consultado=True)
 
+    def obtener_orden_comercial(self, order_id):
+        return self._respuesta(lambda: self._sdk.merchant_order().get(order_id))
+
     def buscar_pagos(self, nro_guia):
         respuesta = self._respuesta(lambda: self._sdk.payment().search({
             "external_reference": nro_guia, "sort": "date_created", "criteria": "desc", "limit": 30}))
