@@ -59,7 +59,7 @@ class PagoVerificadoMP:
                           else self.preferencia_verificada is not None
                           and self.preferencia_verificada == orden["preference_id"])
         if revision_legacy:
-            # Solo lo habilita la operación administrativa auditada, nunca el webhook.
+            # Revisión explícita o reconocimiento del mismo pago ya auditado.
             vinculo_valido = self.orden is None and self.guia == guia
         try:
             monto = V.decimal(d.get("transaction_amount"), "importe externo", 0.01)
@@ -194,12 +194,14 @@ class ConciliacionMP:
                 cur.execute("SELECT * FROM ordenes_pago_mp WHERE preference_id=%s", (pago.preferencia_verificada,))
             ordenes = cur.fetchall()
             if len(ordenes) != 1:
+                if not ordenes and pago.orden is None:
+                    return self._reconocer_revision(cur, pago, guia_esperada)
                 raise PagoExternoError("No se encontró la orden local del pago.")
             orden = ordenes[0]
             return self._registrar(cur, pago, orden, guia_esperada)
 
     @staticmethod
-    def _registrar(cur, pago, orden, guia_esperada=None, revision_legacy=False):
+    def _registrar(cur, pago, orden, guia_esperada=None, revision_legacy=False, solo_existente=False):
         cur.execute("SELECT nro_guia,costo_total FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
         envio = cur.fetchone()
         if not envio or (guia_esperada is not None and envio["nro_guia"] != guia_esperada):
@@ -207,12 +209,15 @@ class ConciliacionMP:
         monto = pago.validar(orden, envio["nro_guia"], revision_legacy)
         if monto != float(envio["costo_total"]):
             raise PagoExternoError("El total del envío cambió. El cobro requiere revisión.")
-        cur.execute("SELECT id_pago,id_transaccion_ext FROM pagos WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
+        cur.execute("SELECT id_pago,id_transaccion_ext,monto FROM pagos WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
         existentes = cur.fetchall()
         if existentes:
-            if len(existentes) == 1 and existentes[0]["id_transaccion_ext"] == pago.id:
+            if (len(existentes) == 1 and existentes[0]["id_transaccion_ext"] == pago.id
+                and float(existentes[0]["monto"]) == monto):
                 return {"aprobado": True, "estado": "confirmado", "payment_id": pago.id}
             raise PagoExternoError("El envío ya tiene otro cobro. Requiere revisión de administración.")
+        if solo_existente:
+            raise PagoExternoError("No se encontró el cobro previamente conciliado.")
         cur.execute("SELECT estado_caja FROM turnos_caja WHERE id_turno=%s FOR UPDATE", (orden["id_turno"],))
         turno = cur.fetchone()
         # Si la caja original ya cerró, no alterar su arqueo histórico.
@@ -221,6 +226,24 @@ class ConciliacionMP:
             VALUES (%s,%s,%s,'digital',%s,'MercadoPago')""", (orden["id_envio"], id_turno, monto, pago.id))
         cur.execute("UPDATE envios SET modalidad_pago='digital' WHERE id_envio=%s", (orden["id_envio"],))
         return {"aprobado": True, "estado": "confirmado", "payment_id": pago.id}
+
+    def _reconocer_revision(self, cur, pago, guia_esperada):
+        """Reconoce exclusivamente el pago existente vinculado a una revisión previa."""
+        cur.execute("""SELECT o.*, r.preferencia_original AS revisada_original,
+                r.preferencia_cobro AS revisada_cobro
+            FROM revisiones_pago_mp r
+            JOIN pagos p ON p.id_pago=r.id_pago
+            JOIN ordenes_pago_mp o ON o.id_orden=r.id_orden AND o.id_envio=p.id_envio
+            WHERE p.id_transaccion_ext=%s AND p.tipo_pago='digital'
+                AND p.billetera_virtual='MercadoPago'""", (pago.id,))
+        revisiones = cur.fetchall()
+        if (len(revisiones) != 1
+            or revisiones[0]["revisada_original"] != revisiones[0]["preference_id"]
+            or revisiones[0]["revisada_cobro"] != pago.preferencia_verificada):
+            raise PagoExternoError("No se encontró una revisión previa coincidente para este pago.")
+        # No puede crear cobros, auditorías ni adoptar otros IDs con la misma guía.
+        return self._registrar(cur, pago, revisiones[0], guia_esperada,
+                               revision_legacy=True, solo_existente=True)
 
     def verificar(self, guia):
         with self._transaccion() as cur:

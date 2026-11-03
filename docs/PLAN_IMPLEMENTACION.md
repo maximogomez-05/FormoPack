@@ -323,3 +323,11 @@ enlaces nuevos y la herramienta administrativa `scripts/revisar_pago_mp.py`
 para cobros antiguos. La migración 012 añade auditoría transaccional, sin
 reasignar preferencias ni modificar cobros históricos automáticamente. Los
 detalles y pasos de despliegue están en [pagos](PAGOS_MERCADOPAGO.md#actualización-del-3-de-noviembre-de-2026-escaneo-desde-mercado-pago).
+
+La conciliación administrativa del cobro antiguo se completó en el VPS: el
+usuario verificó ARS 500 digitales, una operación y comprobante pagado. El
+simulador externo recibió HTTP 200 con firma válida al seleccionar la URL de
+producción correcta. Se ajustó el reconocimiento de reenvíos del mismo pago
+auditado para evitar una nueva advertencia de conflicto, conservando validación
+externa actual y sin escrituras. Queda desplegar y comprobar ese reconocimiento,
+y probar la confirmación automática de un nuevo enlace con otro pago real.

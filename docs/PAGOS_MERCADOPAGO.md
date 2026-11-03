@@ -213,6 +213,22 @@ mantiene su arqueo, y el ingreso queda sin turno para revisión administrativa.
 No se modifica ni se cobra ni se reembolsa dinero mediante esta herramienta.
 No existe una ruta HTTP que permita omitir automáticamente estos controles.
 
+Los reenvíos posteriores del mismo pago ya revisado se reconocen mediante
+su ID externo y la auditoría existente. Se exige coincidencia de orden local,
+envío, preferencia original y preferencia del cobro revisada. Se consulta de
+nuevo el pago y la orden comercial en Mercado Pago y se mantienen los controles
+de importe, receptor, moneda, entorno y reembolso. Este reconocimiento solo
+puede devolver un cobro ya existente: no crea ni actualiza pagos o auditorías,
+no acepta otro ID con la misma guía y no modifica el arqueo de una caja cerrada.
+Una discrepancia actual sigue devolviendo revisión aunque el pago tenga una
+auditoría previa. Un pago que ya no está aprobado no se anuncia como confirmado.
+Se verificaron 129 casos de conciliación, reenvíos, herramienta administrativa,
+páginas y permisos en bases desechables. Incluyen reenvíos concurrentes, caja
+cerrada y rechazo de discrepancias. El caso HTTP de reenvío firmado prohíbe
+INSERT/UPDATE mediante triggers de prueba sobre pagos y auditorías para
+comprobar que reconocer el cobro no vuelve a escribirlo. No requiere una
+migración adicional a la 012.
+
 Con respaldo previo, en el VPS ya inicializado:
 
 ```bash
@@ -222,9 +238,12 @@ sudo systemctl restart formopack
 ```
 
 Se preservan la firma HMAC del webhook y el POST autenticado con CSRF para la
-consulta periódica. El webhook externo y la referencia nueva requieren
-comprobación en el proveedor real después del despliegue; las pruebas locales
-usan respuestas simuladas y bases desechables.
+consulta periódica. La prueba externa del simulador con URL de producción
+correcta recibió HTTP 200 y pasó la firma. Su reenvío del cobro antiguo mostró
+`PAYMENT_CONFLICT` antes del ajuste de reconocimiento de revisión previa.
+Debe repetirse después de desplegar ese ajuste y comprobar `aprobado=true`.
+El pago real de un enlace con referencia nueva todavía requiere comprobación;
+las pruebas locales usan respuestas simuladas y bases desechables.
 
 Referencia oficial: [referencia externa de Checkout Pro](https://www.mercadopago.com.ar/developers/en/docs/checkout-pro-preferences/configure-back-urls).
 

@@ -318,6 +318,99 @@ def test_fallo_auditoria_revierte_cobro_y_permite_reintento(db):
     db.ejecutar_archivo(Path(__file__).resolve().parents[1] / 'scripts/migrations/012_revision_pagos_mp.sql')
 
 
+def revision_confirmada(db):
+    servicio, api, pago, registro, turno = contexto_revision(db)
+    servicio.conciliar_revision_legacy('98765', registro['nro_guia'], 1,
+                                     'Cobro recibido y revisado con el pagador')
+    return servicio, api, pago, registro, turno
+
+
+def test_webhook_reenviado_reconoce_revision_sin_escrituras(aplicacion, db, caplog):
+    servicio, _, pago, _, turno = revision_confirmada(db)
+    with db.cursor() as cur:
+        cur.execute('SELECT * FROM turnos_caja WHERE id_turno=%s', (turno.id_turno,))
+        caja_antes = cur.fetchone()
+    # Prohibir escrituras demuestra que reconocer un reenvío solo lee el cobro.
+    with db.cursor(False) as cur:
+        for tabla in ('pagos', 'revisiones_pago_mp'):
+            for operacion in ('INSERT', 'UPDATE'):
+                cur.execute(f"CREATE TRIGGER no_{tabla}_{operacion} BEFORE {operacion} ON {tabla} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='sin escrituras'")
+    with patch('web.routes.recepcion.ConciliacionMP', return_value=servicio):
+        for _ in range(2):
+            respuesta = aplicacion.test_client().post('/recepcion/mp/webhook?data.id=98765',
+                json={'type': 'payment', 'data': {'id': '98765'}}, headers=firma())
+            assert respuesta.status_code == 200
+            assert respuesta.json['aprobado']
+            assert respuesta.json['estado'] == 'confirmado'
+            assert not respuesta.json.get('revision')
+    assert 'Pago externo requiere revisión' not in caplog.text
+    with db.cursor() as cur:
+        for tabla in ('pagos', 'revisiones_pago_mp'):
+            cur.execute(f'SELECT COUNT(*) AS total FROM {tabla}')
+            assert cur.fetchone()['total'] == 1
+        cur.execute('SELECT * FROM turnos_caja WHERE id_turno=%s', (turno.id_turno,))
+        assert cur.fetchone() == caja_antes
+        cur.execute('SELECT SUM(monto) AS total FROM pagos WHERE id_turno=%s', (turno.id_turno,))
+        assert float(cur.fetchone()['total']) == pago['transaction_amount']
+
+
+def test_reenvios_concurrentes_conservan_revision_y_arqueo_cerrado(db):
+    servicio, _, _, _, turno = revision_confirmada(db)
+    resumen = CajaController(db).cerrar_turno(turno.id_turno, 2)
+    barrera = Barrier(3)
+    def confirmar(_):
+        barrera.wait(timeout=10)
+        return servicio.confirmar('98765')['aprobado']
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert all(pool.map(confirmar, range(3)))
+    with db.cursor() as cur:
+        cur.execute('SELECT ingresos_digitales,estado_caja FROM turnos_caja WHERE id_turno=%s', (turno.id_turno,))
+        fila = cur.fetchone()
+        assert fila['estado_caja'] == 'cerrado'
+        assert fila['ingresos_digitales'] == resumen['ingresos_digitales']
+        for tabla in ('pagos', 'revisiones_pago_mp'):
+            cur.execute(f'SELECT COUNT(*) AS total FROM {tabla}')
+            assert cur.fetchone()['total'] == 1
+
+
+@pytest.mark.parametrize('defecto', ['importe', 'receptor', 'moneda', 'modo', 'reembolso', 'referencia',
+                                    'otro-id', 'preferencia-cobro', 'preferencia-original', 'sin-auditoria',
+                                    'importe-local', 'guia-esperada'])
+def test_revision_previa_no_oculta_discrepancias_actuales(db, defecto):
+    servicio, api, pago, registro, _ = revision_confirmada(db)
+    payment_id, guia = '98765', registro['nro_guia']
+    if defecto == 'importe': pago['transaction_amount'] = 1
+    if defecto == 'receptor': pago['collector_id'] = 999
+    if defecto == 'moneda': pago['currency_id'] = 'USD'
+    if defecto == 'modo': pago['live_mode'] = True
+    if defecto == 'reembolso': pago['transaction_amount_refunded'] = 1
+    if defecto == 'referencia':
+        pago['external_reference'] = 'GUIA-AJENA'
+        api.obtener_orden_comercial.return_value['external_reference'] = 'GUIA-AJENA'
+    if defecto == 'otro-id':
+        payment_id = '99999'
+        pago['id'] = 99999
+        api.obtener_orden_comercial.return_value['payments'] = [{'id': 99999, 'status': 'approved'}]
+    if defecto == 'preferencia-cobro': api.obtener_orden_comercial.return_value['preference_id'] = 'otra-preferencia'
+    with db.cursor() as cur:
+        if defecto == 'preferencia-original':
+            cur.execute("UPDATE revisiones_pago_mp SET preferencia_original='otra-preferencia'")
+        if defecto == 'sin-auditoria': cur.execute('DELETE FROM revisiones_pago_mp')
+        if defecto == 'importe-local': cur.execute('UPDATE pagos SET monto=1')
+    if defecto == 'guia-esperada': guia = 'GUIA-AJENA'
+    with pytest.raises(PagoExternoError):
+        servicio.confirmar(payment_id, guia)
+    with db.cursor() as cur:
+        cur.execute('SELECT COUNT(*) AS total FROM pagos')
+        assert cur.fetchone()['total'] == 1
+
+
+def test_revision_previa_no_anuncia_pago_que_dejo_de_estar_aprobado(db):
+    servicio, _, pago, _, _ = revision_confirmada(db)
+    pago['status'] = 'refunded'
+    assert not servicio.confirmar('98765')['aprobado']
+
+
 @pytest.mark.parametrize("campo,valor", [
     ("external_reference", "GUIA-AJENA"), ("transaction_amount", 1), ("transaction_amount", "NaN"),
     ("currency_id", "USD"), ("collector_id", 999), ("live_mode", True),
