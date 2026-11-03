@@ -1,0 +1,18 @@
+.perfil { max-width: 820px; margin: auto; color: #142e48; }
+.perfil h1 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -.04em; margin: 4px 0; }
+.perfil h2 { font-size: 18px; margin: 0 0 8px; }
+.perfil p { color: #495e6e; margin-bottom: 14px; }
+.perfil-rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.perfil-seccion { display: flex; gap: 24px; background: white; padding: 24px; border: 1px solid #d5dfe5; border-radius: 6px; margin: 20px 0; }
+.perfil-seccion > div { flex: 1; min-width: 0; }
+.perfil-foto { border-radius: 50%; object-fit: cover; }
+.perfil form { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.perfil label { flex-basis: 100%; font-weight: 600; }
+.perfil .form-control { flex-basis: 100%; width: 100%; min-height: 44px; }
+.perfil input[type=file] { width: 100%; min-height: 44px; }
+.perfil input::file-selector-button { min-height: 44px; padding: 8px 12px; margin-right: 10px; border: 1px solid #d5dfe5; border-radius: 6px; background: #f5f8fa; color: #142e48; font: inherit; cursor: pointer; }
+.perfil .btn { min-height: 44px; }
+.perfil :focus-visible { outline: 3px solid #3076aa; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .perfil-seccion { flex-direction: column; padding: 18px; gap: 16px; }
+}

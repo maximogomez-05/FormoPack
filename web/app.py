@@ -70,6 +70,8 @@ def create_app() -> Flask:
     app.register_blueprint(chofer_bp)
     app.register_blueprint(soporte_bp, url_prefix="/soporte")
     app.register_blueprint(documentos_bp, url_prefix="/documentos")
+    from web.routes.perfil import perfil_bp
+    app.register_blueprint(perfil_bp, url_prefix="/perfil")
 
     # Ruta raíz → redirige según contexto
     @app.route("/")

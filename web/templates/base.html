@@ -97,12 +97,13 @@
         <i class="fa-solid fa-truck-fast nav-icon"></i> Mi operación
       </a>
       {% endif %}
+      <a href="{{ url_for('perfil.editar') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('perfil.') %}active{% endif %}">Mi perfil</a>
     </nav>
 
     <div class="sidebar-footer">
-      <div class="avatar-circle role-{{ session.rol }}">
-        {{ session.nombre[0]|upper if session.nombre else 'U' }}
-      </div>
+      <a href="{{ url_for('perfil.editar') }}" class="avatar-circle role-{{ session.rol }}" aria-label="Abrir mi perfil">
+        <img src="{{ url_for('perfil.foto') }}" alt="" width="40" height="40" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+      </a>
       <div class="user-info">
         <div class="user-name">{{ session.nombre }}</div>
         <div class="user-role">{{ session.rol | capitalize }}</div>
@@ -125,9 +126,9 @@
         <a class="home-link" href="{{ url_for('auth.dashboard') }}" aria-label="Ir al inicio"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/></svg><span>Inicio</span></a>
         <div class="topbar-user">
           <span>{{ session.nombre }} ({{ session.rol | capitalize }})</span>
-          <div class="avatar-circle role-{{ session.rol }}">
-            {{ session.nombre[0]|upper if session.nombre else 'U' }}
-          </div>
+          <a href="{{ url_for('perfil.editar') }}" class="avatar-circle role-{{ session.rol }}" aria-label="Abrir mi perfil">
+            <img src="{{ url_for('perfil.foto') }}" alt="" width="40" height="40" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+          </a>
         </div>
       </div>
     </div>

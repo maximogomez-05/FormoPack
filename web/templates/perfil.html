@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar cuenta' if administrando else 'Mi perfil' }} — FormoPack{% endblock %}
+{% block page_title %}{{ 'Editar cuenta' if administrando else 'Mi perfil' }}{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{{ url_for('static', filename='css/perfil.css') }}">{% endblock %}
+{% block content %}
+<main class="perfil">
+  <header>
+    <p class="perfil-rotulo">{{ perfil.tipo_usuario|capitalize }}</p>
+    <h1>{{ 'Editar cuenta' if administrando else 'Mi perfil' }}</h1>
+    <p>{{ perfil.email }}</p>
+  </header>
+  {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+  {% if not administrando %}
+  <section class="perfil-seccion">
+    <img class="perfil-foto" src="{{ url_for('perfil.foto') }}" alt="Tu foto de perfil" width="96" height="96">
+    <div>
+      <h2>Foto de perfil</h2>
+      <p>JPG, PNG o WebP. Hasta 2 MB y 4096 × 4096 píxeles.</p>
+      <form action="{{ url_for('perfil.foto') }}" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="foto">Elegí una foto</label>
+        <input id="foto" type="file" name="foto" accept="image/jpeg,image/png,image/webp" required>
+        <button class="btn btn-secondary" type="submit">Guardar foto</button>
+      </form>
+      {% if perfil.tiene_foto %}
+      <form action="{{ url_for('perfil.foto') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="quitar" value="1">
+        <button class="btn btn-secondary" type="submit">Quitar foto</button>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+  <section class="perfil-seccion">
+    <div>
+      <h2>Datos personales</h2>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="nombre">Nombre completo</label>
+        <input class="form-control" id="nombre" name="nombre" value="{{ request.form.get('nombre', perfil.nombre) }}" minlength="3" maxlength="100" autocomplete="name" required>
+        {% if administrando %}
+        <label for="email">Correo de acceso</label>
+        <input class="form-control" id="email" type="email" name="email" value="{{ request.form.get('email', perfil.email) }}" maxlength="100" required>
+        {% else %}
+        <p>Para corregir tu correo de acceso, contactá al administrador.</p>
+        {% endif %}
+        {% if perfil.tipo_usuario == 'chofer' %}
+        <label for="licencia">Número de licencia</label>
+        <input class="form-control" id="licencia" name="nro_licencia" value="{{ request.form.get('nro_licencia', perfil.nro_licencia or '') }}" maxlength="50" pattern="[A-Za-z0-9 -]{3,50}">
+        {% endif %}
+        <button class="btn btn-primary" type="submit">Guardar datos</button>
+        {% if administrando %}<a class="btn btn-secondary" href="{{ url_for('admin.usuarios') }}">Volver a usuarios</a>{% endif %}
+      </form>
+    </div>
+  </section>
+  {% if not administrando %}
+  <section class="perfil-seccion">
+    <div>
+      <h2>Cambiar contraseña</h2>
+      <p>Usá al menos 8 caracteres, con letras y números. Al guardar tendrás que ingresar nuevamente.</p>
+      <form action="{{ url_for('perfil.password') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="actual">Contraseña actual</label>
+        <input class="form-control" id="actual" name="password_actual" type="password" autocomplete="current-password" required>
+        <label for="nueva">Contraseña nueva</label>
+        <input class="form-control" id="nueva" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <label for="confirmacion">Repetir contraseña nueva</label>
+        <input class="form-control" id="confirmacion" name="confirmacion" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <button class="btn btn-primary" type="submit">Actualizar contraseña</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
