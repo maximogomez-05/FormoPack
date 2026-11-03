@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+destino=/var/backups/formopack
+app=/home/formopack/formopack-app
+mkdir -p "$destino"
+chmod 700 "$destino"
+
+exec 9>/run/lock/formopack-backup.lock
+flock -n 9 || exit 0
+temporal=$(mktemp -d "$destino/.trabajo-XXXXXX")
+trap 'rm -rf -- "$temporal"' EXIT
+
+mariadb-dump --single-transaction --routines --triggers --events \
+    formopack_db > "$temporal/base.sql"
+
+archivos=(.env)
+for carpeta in web/static/uploads instance/private; do
+    if [ -d "$app/$carpeta" ]; then
+        archivos+=("$carpeta")
+    fi
+done
+tar -czf "$temporal/archivos.tar.gz" -C "$app" "${archivos[@]}"
+git -C "$app" rev-parse HEAD > "$temporal/version.txt"
+
+nombre="formopack-$(date +%Y%m%d-%H%M%S).tar.gz"
+tar -czf "$destino/$nombre.part" -C "$temporal" .
+gzip -t "$destino/$nombre.part"
+mv "$destino/$nombre.part" "$destino/$nombre"
+echo "$(date -Is) Respaldo completado: $nombre"
+find "$destino" -maxdepth 1 -type f -name 'formopack-*.tar.gz' -mtime +14 -delete

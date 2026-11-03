@@ -1,14 +1,13 @@
 """Rutas operativas del chofer (RF 4.1 y RF 4.2)."""
 
 from app.services.evidencia_entrega import EvidenciaEntrega
+from app.services.almacen_evidencias import AlmacenEvidencias
 import secrets
 import hashlib
 import logging
-import uuid
 from pathlib import Path
 
 from flask import Blueprint, current_app, flash, jsonify, make_response, redirect, render_template, request, session, url_for
-from werkzeug.utils import secure_filename
 
 from app.controllers.chofer_controller import ChoferController
 from app.utils.exceptions import DatabaseQueryError, ValidationError
@@ -97,13 +96,9 @@ def registrar_entrega(id_hoja_ruta: int, id_envio: int):
                 raise ValidationError(field="foto_remito", reason="Solo se aceptan JPG, PNG o WEBP")
             if not _validar_cabecera_imagen(foto.stream):
                 raise ValidationError(field="foto_remito", reason="El archivo no es una imagen válida")
-            nombre = f"pod_{id_envio}_{uuid.uuid4().hex}{extension}"
-            carpeta = Path(current_app.config["POD_UPLOAD_DIR"])
-            carpeta.mkdir(parents=True, exist_ok=True)
             contenido = EvidenciaEntrega.foto(foto.stream, extension)
             huella_foto = hashlib.sha256(contenido).hexdigest()
-            (carpeta / nombre).write_bytes(contenido)
-            foto_path = f"uploads/pod/{nombre}"
+            foto_path = AlmacenEvidencias(current_app.config["POD_UPLOAD_DIR"]).guardar(id_envio, extension, contenido)
 
         resultado = ChoferController().registrar_entrega(
             session["usuario_id"], id_hoja_ruta, id_envio, tipo_intento,
@@ -160,7 +155,7 @@ def _eliminar_foto(foto_path: str | None) -> None:
     if not foto_path:
         return
     try:
-        (Path(current_app.config["POD_UPLOAD_DIR"]).parent.parent / foto_path).unlink(missing_ok=True)
+        AlmacenEvidencias(current_app.config["POD_UPLOAD_DIR"]).eliminar_temporal(foto_path)
     except OSError:
         logger.warning("No se pudo eliminar evidencia temporal: %s", foto_path)
 

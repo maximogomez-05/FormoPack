@@ -33,6 +33,10 @@ Thumbs.db
 # Flask session
 .flask_session/
 
+# Evidencias personales y fotografías de remitos
+/instance/private/
+/web/static/uploads/
+
 # Archivos temporales de pruebas y perfil
 .chrome_profile/
 session_cookies*.txt

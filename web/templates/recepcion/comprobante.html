@@ -124,6 +124,19 @@
   </div>
 
   <!-- Acciones -->
+  {% if detalle.evidencias %}
+  <section class="card" style="margin-top:20px;">
+    <div class="card-header"><h3>Evidencias de entrega</h3></div>
+    <div class="card-body">
+    {% for evidencia in detalle.evidencias %}
+      <p>{{ evidencia.fecha_hora }} · {{ evidencia.tipo_intento }}
+        {% if evidencia.tiene_foto %}<a class="btn btn-secondary" href="{{ url_for('documentos.evidencia', id_intento=evidencia.id_intento, tipo='foto') }}">Descargar foto</a>{% endif %}
+        {% if evidencia.tiene_firma %}<a class="btn btn-secondary" href="{{ url_for('documentos.evidencia', id_intento=evidencia.id_intento, tipo='firma') }}">Descargar firma</a>{% endif %}
+      </p>
+    {% endfor %}
+    </div>
+  </section>
+  {% endif %}
   <div class="comprobante-actions">
     <a href="{{ url_for('recepcion.descargar_pdf', nro_guia=nro_guia) }}" class="btn btn-primary btn-lg comprobante-btn-main">
       <i class="fa-solid fa-file-arrow-down"></i> Exportar Documento PDF

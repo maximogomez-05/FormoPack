@@ -348,6 +348,7 @@ def cobrar_envio(nro_guia: str):
 # ──────────────────────────────────────────
 @recepcion_bp.route("/comprobante/<nro_guia>")
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def comprobante(nro_guia: str):
     """Vista del comprobante interno."""
     try:
@@ -366,6 +367,7 @@ def comprobante(nro_guia: str):
 
 @recepcion_bp.route("/comprobante/<nro_guia>/pdf")
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def descargar_pdf(nro_guia: str):
     """Genera y descarga el comprobante en PDF (ReportLab)."""
     from web.utils.pdf_generator import generar_comprobante_pdf
@@ -385,6 +387,7 @@ def descargar_pdf(nro_guia: str):
 
 @recepcion_bp.route("/comprobante/<nro_guia>/documentos")
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def descargar_documentos_despacho(nro_guia: str):
     """Descarga tres copias del remito y la etiqueta con código Code128."""
     from web.utils.pdf_generator import generar_documentos_despacho_pdf
@@ -407,6 +410,7 @@ def descargar_documentos_despacho(nro_guia: str):
 
 @recepcion_bp.route("/comprobante/<nro_guia>/etiqueta")
 @login_required
+@rol_requerido("administrador", "recepcionista")
 def descargar_etiqueta(nro_guia: str):
     """Descarga una etiqueta térmica con código de barras Code128."""
     from web.utils.pdf_generator import generar_etiqueta_pdf
@@ -593,6 +597,11 @@ def _obtener_detalle_envio(nro_guia: str):
                 (envio["id_envio"],)
             )
             detalle["pago"] = cursor.fetchone()
+            cursor.execute("""SELECT id_intento,fecha_hora,tipo_intento,
+                (foto_remito IS NOT NULL AND foto_remito<>'') AS tiene_foto,
+                (firma_receptor IS NOT NULL AND firma_receptor<>'') AS tiene_firma
+                FROM intentos_entrega WHERE id_envio=%s ORDER BY fecha_hora,id_intento""", (envio["id_envio"],))
+            detalle["evidencias"] = cursor.fetchall()
 
             cursor.execute(
                 "SELECT * FROM comprobantes_internos WHERE id_envio = %s ORDER BY fecha_emision DESC LIMIT 1",

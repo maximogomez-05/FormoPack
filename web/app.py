@@ -42,7 +42,8 @@ def create_app() -> Flask:
     if not AppConfig.DEBUG:
         app.config["SESSION_COOKIE_SECURE"] = True
 
-    app.config["POD_UPLOAD_DIR"] = os.path.join(ROOT, "web", "static", "uploads", "pod")
+    app.config["POD_UPLOAD_DIR"] = os.path.join(ROOT, "instance", "private", "pod")
+    app.config["POD_LEGACY_DIR"] = os.path.join(ROOT, "web", "static", "uploads", "pod")
     app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
     
     # CSRF Protection (RF Seguridad)
@@ -61,12 +62,14 @@ def create_app() -> Flask:
     from web.routes.admin import admin_bp
     from web.routes.chofer import chofer_bp
     from web.routes.soporte import soporte_bp
+    from web.routes.documentos import documentos_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(recepcion_bp, url_prefix="/recepcion")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(chofer_bp)
     app.register_blueprint(soporte_bp, url_prefix="/soporte")
+    app.register_blueprint(documentos_bp, url_prefix="/documentos")
 
     # Ruta raíz → redirige según contexto
     @app.route("/")
@@ -86,6 +89,12 @@ def create_app() -> Flask:
         from flask import session, abort
         from web.security.sesiones import ControlSesion
         from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError
+
+        # Bloquear también evidencias antiguas aunque su archivo siga en static.
+        if request.endpoint == "static" and any(
+            parte.lower() == "uploads" for parte in (request.view_args or {}).get("filename", "").replace("\\", "/").split("/")
+        ):
+            abort(404)
 
         if "usuario_id" not in session or request.endpoint in {"static", "service_worker", "recepcion.mp_webhook"}:
             return None
@@ -107,7 +116,7 @@ def create_app() -> Flask:
     @app.after_request
     def add_security_headers(response):
         # Evitar caché en rutas dinámicas (soluciona el bug de la flecha 'Atrás' post-logout)
-        if request.endpoint != 'static':
+        if request.endpoint != 'static' or response.status_code >= 400:
             from flask import session
             if request.cookies.get("fp_panel") and (session.get("rol") != "chofer" or
                     not session.get("cache_chofer") or session.get("debe_cambiar_password")):
@@ -120,6 +129,7 @@ def create_app() -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "same-origin"
         return response
 
     # ──────────────────────────────────────────

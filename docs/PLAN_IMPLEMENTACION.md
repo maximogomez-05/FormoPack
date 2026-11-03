@@ -331,3 +331,13 @@ producción correcta. Se ajustó el reconocimiento de reenvíos del mismo pago
 auditado para evitar una nueva advertencia de conflicto, conservando validación
 externa actual y sin escrituras. Queda desplegar y comprobar ese reconocimiento,
 y probar la confirmación automática de un nuevo enlace con otro pago real.
+
+## Privacidad de evidencias y comprobantes: 3 de noviembre de 2026
+
+Se separa el almacenamiento de fotos de la carpeta pública, se bloquea la
+descarga estática de evidencias anteriores y se habilita su consulta autenticada
+desde el comprobante interno para administración/recepción. Los documentos
+financieros y de despacho exigen esos roles. Se minimizan datos del seguimiento
+público y se conservan estado, localidad, fechas y GPS de reparto activo.
+El respaldo diario debe actualizarse para incluir `instance/private` al
+desplegar. Ver [privacidad y pasos de despliegue](PRIVACIDAD_DOCUMENTOS.md).

@@ -20,6 +20,7 @@ from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, Va
 from app.controllers.usuario_controller import UsuarioController
 from app.services.actividad_operativa import ActividadOperativa
 from app.services.operaciones_logisticas import OperacionesLogisticas
+from app.services.tracking_publico import TrackingPublico
 from app.controllers.liquidacion_controller import LiquidacionController
 from config.settings import EmailConfig
 admin_bp = Blueprint("admin", __name__)
@@ -392,6 +393,7 @@ def tracking_publico():
     if nro_guia:
         try:
             envio, timeline = _obtener_timeline(nro_guia)
+            envio, timeline = TrackingPublico.preparar(envio, timeline)
             timeline = construir_timeline(envio, timeline)
             resumen_tracking = construir_resumen_tracking(envio, timeline)
             if not envio:
@@ -489,15 +491,11 @@ def _generar_comprobante_entrega(envio: dict, fecha_emision: str) -> str:
         "─" * 52,
         "  DATOS DEL ENVÍO",
         "─" * 52,
-        f"  Remitente:       {envio['remitente']}",
-        f"  Destinatario:    {envio['destinatario']}",
-        f"  Destino:         {envio.get('direccion_destino', 'N/A')}",
         f"  Localidad:       {envio['localidad_destino']}",
-        f"  Costo total:     ${float(envio.get('costo_total', 0)):,.2f}",
         "",
         "─" * 52,
-        "  Este comprobante es un documento interno de",
-        "  control (no fiscal). Conserve para sus registros.",
+        "  Constancia pública de estado, sin firma ni datos",
+        "  personales. Documento no fiscal.",
         "─" * 52,
         "",
         "  FormoPack Express — Formosa, Argentina",

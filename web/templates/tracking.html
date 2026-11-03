@@ -614,7 +614,7 @@
           </div>
           <div class="tracking-destination">
             <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-            <div><strong>{{ envio.destinatario }}</strong><span>{{ envio.direccion_destino or 'Dirección no informada' }}, {{ envio.localidad_destino }}</span></div>
+            <div><strong>{{ envio.destinatario }}</strong><span>{{ envio.localidad_destino }}</span></div>
           </div>
         </section>
 
@@ -698,7 +698,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const destinationName = {{ envio.localidad_destino|tojson }};
-    const destinationAddress = {{ envio.direccion_destino|tojson }};
+    const destinationAddress = destinationName;
     const guideNumber = {{ envio.nro_guia|tojson }};
     const currentStatus = {{ estado|tojson }};
     const gpsPosition = {{ (envio.ubicacion_gps or none)|tojson }};
@@ -810,12 +810,12 @@
     <div class="tracking-feature-card">
       <div class="feature-icon-circle"><i class="fa-solid fa-warehouse"></i></div>
       <h3>Custodia en Planta Central</h3>
-      <p>Paquetes resguardados con protocolo estricto de 15 días corridos y retiro presencial mediante firma digital y acreditación de DNI.</p>
+      <p>Paquetes resguardados durante 15 días hábiles para retiro por el remitente registrado, con firma y acreditación de DNI.</p>
     </div>
     <div class="tracking-feature-card">
       <div class="feature-icon-circle"><i class="fa-solid fa-file-shield"></i></div>
       <h3>Constancias y Comprobantes</h3>
-      <p>Descargá actas digitales de entrega firmadas por el destinatario con validez interna inmediata para remitentes.</p>
+      <p>Consultá la constancia de estado de tu envío. Las firmas y los documentos completos quedan reservados al personal autorizado.</p>
     </div>
   </section>
 
@@ -860,7 +860,7 @@
       <form id="form-init-chat" style="display:flex; flex-direction:column; gap:10px;">
         <div>
           <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:3px;">Tu nombre</label>
-          <input type="text" id="chat-client-name" class="form-control" value="{% if envio %}{{ envio.destinatario }}{% endif %}" placeholder="Ej. Juan Pérez" required style="width:100%; padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px;">
+          <input type="text" id="chat-client-name" class="form-control" placeholder="Ej. Juan Pérez" required style="width:100%; padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <div>
           <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:3px;">Correo electrónico (opcional)</label>
