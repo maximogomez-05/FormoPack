@@ -16,12 +16,19 @@ class MercadoPagoService:
         self._sdk = mercadopago.SDK(MercadoPagoConfig.ACCESS_TOKEN,
             request_options=RequestOptions(connection_timeout=8.0, max_retries=0))
 
-    def _respuesta(self, operacion):
+    def _respuesta(self, operacion, pago_consultado=False):
         try:
             resultado = operacion()
+            estado = resultado.get("status")
+            if estado not in (200, 201):
+                logger.warning("Respuesta de la API de Mercado Pago: HTTP %s", estado)
+            if pago_consultado and estado == 404:
+                raise PagoExternoError("El pago consultado no existe.", 404, "PAYMENT_NOT_FOUND")
             if resultado.get("status") not in (200, 201) or not isinstance(resultado.get("response"), dict):
                 raise ValueError("Respuesta no exitosa")
             return resultado["response"]
+        except PagoExternoError:
+            raise
         except Exception as exc:
             logger.warning("Mercado Pago no pudo completar una consulta")
             raise PagoExternoError("No se pudo consultar Mercado Pago. Intentá nuevamente.", 503, "PAYMENT_UNAVAILABLE") from exc
@@ -39,7 +46,7 @@ class MercadoPagoService:
             "statement_descriptor": "FORMOPACK EXPRESS"}))
 
     def obtener_pago(self, payment_id):
-        return self._respuesta(lambda: self._sdk.payment().get(payment_id))
+        return self._respuesta(lambda: self._sdk.payment().get(payment_id), pago_consultado=True)
 
     def buscar_pagos(self, nro_guia):
         respuesta = self._respuesta(lambda: self._sdk.payment().search({

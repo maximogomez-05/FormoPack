@@ -274,3 +274,24 @@ def test_diagnostico_firma_no_expone_credenciales(caplog):
     assert "HMAC distinto al esperado" in caplog.text
     for privado in (secreto, encabezado, "solicitud-privada", "98765"):
         assert privado not in caplog.text
+
+@pytest.mark.parametrize("estado", [401,403,429,500,503])
+def test_error_api_conserva_reintento_sin_exponer_respuesta(estado, caplog):
+    servicio = object.__new__(MercadoPagoService)
+    servicio._sdk = MagicMock()
+    servicio._sdk.payment().get.return_value = {"status":estado,"response":{"message":"detalle-privado"}}
+    with pytest.raises(PagoExternoError) as error:
+        servicio.obtener_pago("98765")
+    assert error.value.status == 503
+    assert f"HTTP {estado}" in caplog.text
+    assert "detalle-privado" not in caplog.text
+
+
+def test_pago_inexistente_es_distinto_de_caida_del_proveedor():
+    servicio = object.__new__(MercadoPagoService)
+    servicio._sdk = MagicMock()
+    servicio._sdk.payment().get.return_value = {"status":404,"response":{"message":"Payment not found"}}
+    with pytest.raises(PagoExternoError) as error:
+        servicio.obtener_pago("123456")
+    assert error.value.status == 404
+    assert error.value.code == "PAYMENT_NOT_FOUND"
