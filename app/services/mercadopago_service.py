@@ -5,6 +5,7 @@ import mercadopago
 from mercadopago.config import RequestOptions
 from config.settings import MercadoPagoConfig
 from app.utils.exceptions import PagoExternoError
+from app.services.referencia_pago import ReferenciaPagoMP
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class MercadoPagoService:
             "items": [{"title": f"FormoPack — {nro_guia}", "description": descripcion,
                        "quantity": 1, "unit_price": monto, "currency_id": "ARS"}],
             "payment_methods": {"excluded_payment_types": [{"id": "credit_card"}, {"id": "debit_card"}, {"id": "prepaid_card"}]},
-            "external_reference": nro_guia,
+            "external_reference": ReferenciaPagoMP.crear(id_orden),
             "metadata": {"formopack_orden": id_orden},
             "back_urls": {"success": cfg.SUCCESS_URL, "failure": cfg.FAILURE_URL, "pending": cfg.PENDING_URL},
             "notification_url": cfg.WEBHOOK_URL,
@@ -51,9 +52,12 @@ class MercadoPagoService:
     def obtener_orden_comercial(self, order_id):
         return self._respuesta(lambda: self._sdk.merchant_order().get(order_id))
 
-    def buscar_pagos(self, nro_guia):
+    def obtener_preferencia(self, preference_id):
+        return self._respuesta(lambda: self._sdk.preference().get(preference_id))
+
+    def buscar_pagos(self, referencia):
         respuesta = self._respuesta(lambda: self._sdk.payment().search({
-            "external_reference": nro_guia, "sort": "date_created", "criteria": "desc", "limit": 30}))
+            "external_reference": referencia, "sort": "date_created", "criteria": "desc", "limit": 30}))
         resultados = respuesta.get("results")
         if not isinstance(resultados, list):
             raise PagoExternoError("No se pudo consultar Mercado Pago.", 503, "PAYMENT_UNAVAILABLE")

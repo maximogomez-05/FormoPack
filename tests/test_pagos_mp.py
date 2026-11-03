@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Barrier
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,7 @@ from app.controllers.caja_controller import CajaController
 from app.services.conciliacion_mp import ConciliacionMP
 from app.services.firma_mercadopago import FirmaMercadoPago
 from app.services.mercadopago_service import MercadoPagoService
+from app.services.referencia_pago import ReferenciaPagoMP
 from app.utils.exceptions import PagoExternoError
 from config.settings import MercadoPagoConfig as C
 from tests.test_recepcion_bd import envio, cliente
@@ -25,9 +27,11 @@ def test_preferencia_excluye_tarjetas_sin_alterar_busqueda():
     servicio = object.__new__(MercadoPagoService)
     servicio._sdk = MagicMock()
     servicio._sdk.preference().create.return_value = {'status': 201, 'response': {'id': 'test'}}
-    servicio.crear_preferencia('GUIA-TEST', 'Envío', 500, 'orden-test')
+    servicio.crear_preferencia('GUIA-TEST', 'Envío', 500, 'a' * 32)
     payload = servicio._sdk.preference().create.call_args.args[0]
     assert {t['id'] for t in payload['payment_methods']['excluded_payment_types']} == {'credit_card', 'debit_card', 'prepaid_card'}
+    assert payload['external_reference'] == 'FPMP-' + 'a' * 32
+    assert payload['metadata']['formopack_orden'] == 'a' * 32
     servicio._sdk.payment().search.return_value = {'status': 200, 'response': {'results': []}}
     assert servicio.buscar_pagos('GUIA-TEST') == []
     assert 'payment_methods' not in servicio._sdk.payment().search.call_args.args[0]
@@ -189,6 +193,129 @@ def test_polling_recupera_pago_productivo_sin_metadata(aplicacion, db, monkeypat
     with db.cursor() as cur:
         cur.execute("SELECT COUNT(*) AS total FROM pagos")
         assert cur.fetchone()["total"] == 1
+
+
+def test_referencia_unica_recupera_pago_con_preferencia_y_aplicacion_derivadas(db):
+    servicio, api, pago, registro, turno, _ = contexto_sin_metadata(db)
+    orden = api.crear_preferencia.call_args.args[3]
+    referencia = ReferenciaPagoMP.crear(orden)
+    pago['external_reference'] = referencia
+    # Reproduce el recorrido observado: otra preferencia y ninguna metadata propia.
+    api.obtener_orden_comercial.return_value['preference_id'] = 'preferencia-derivada'
+    api.obtener_orden_comercial.return_value['external_reference'] = referencia
+    api.buscar_pagos.side_effect = lambda ref: ['98765'] if ref == referencia else []
+    assert servicio.verificar(registro['nro_guia'])['aprobado']
+    assert servicio.confirmar('98765')['aprobado']
+    api.buscar_pagos.assert_called_once_with(referencia)
+    # La identidad es la referencia de orden aleatoria, no la preferencia derivada.
+    api.obtener_orden_comercial.assert_not_called()
+    assert CajaController(db).cerrar_turno(turno.id_turno, 2)['cantidad_operaciones'] == 1
+
+
+@pytest.mark.parametrize('defecto', ['otra-orden', 'contradiccion', 'importe', 'receptor', 'moneda', 'modo', 'reembolso'])
+def test_referencia_nueva_conserva_controles(db, defecto):
+    servicio, api, pago, _, _, _ = contexto_sin_metadata(db)
+    orden = api.crear_preferencia.call_args.args[3]
+    pago['external_reference'] = ReferenciaPagoMP.crear(orden)
+    if defecto == 'otra-orden': pago['external_reference'] = ReferenciaPagoMP.crear('f' * 32)
+    if defecto == 'contradiccion': pago['metadata'] = {'formopack_orden': 'f' * 32}
+    if defecto == 'importe': pago['transaction_amount'] = 1
+    if defecto == 'receptor': pago['collector_id'] = 999
+    if defecto == 'moneda': pago['currency_id'] = 'USD'
+    if defecto == 'modo': pago['live_mode'] = True
+    if defecto == 'reembolso': pago['transaction_amount_refunded'] = 1
+    with pytest.raises(PagoExternoError):
+        servicio.confirmar('98765')
+    with db.cursor() as cur:
+        cur.execute('SELECT COUNT(*) AS total FROM pagos')
+        assert cur.fetchone()['total'] == 0
+
+
+def contexto_revision(db):
+    servicio, api, pago, registro, turno, comercial = contexto_sin_metadata(db)
+    comercial['preference_id'] = 'preferencia-derivada'
+    api.obtener_preferencia.return_value = {
+        'id': 'preferencia-test', 'collector_id': 12345,
+        'external_reference': registro['nro_guia'],
+        'metadata': {'formopack_orden': api.crear_preferencia.call_args.args[3]},
+    }
+    return servicio, api, pago, registro, turno
+
+
+def test_revision_legacy_explicita_y_auditada_no_habilita_acreditacion_automatica(db):
+    servicio, _, pago, registro, turno = contexto_revision(db)
+    guia = registro['nro_guia']
+    with pytest.raises(PagoExternoError):
+        servicio.confirmar('98765')
+    detalle = servicio.previsualizar_revision_legacy('98765', guia, 1)
+    assert detalle['preferencia_cobro'] == 'preferencia-derivada'
+    with db.cursor() as cur:
+        cur.execute('SELECT COUNT(*) AS total FROM pagos')
+        assert cur.fetchone()['total'] == 0
+    for _ in range(2):
+        assert servicio.conciliar_revision_legacy('98765', guia, 1, 'Cobro verificado con el pagador y en cuenta receptora')['aprobado']
+    with db.cursor() as cur:
+        cur.execute('SELECT * FROM revisiones_pago_mp')
+        auditoria = cur.fetchall()
+        assert len(auditoria) == 1
+        assert auditoria[0]['id_administrador'] == 1
+        assert auditoria[0]['preferencia_original'] == 'preferencia-test'
+        assert auditoria[0]['preferencia_cobro'] == 'preferencia-derivada'
+    resumen = CajaController(db).cerrar_turno(turno.id_turno, 2)
+    assert resumen['cantidad_operaciones'] == 1
+    assert resumen['ingresos_digitales'] == pago['transaction_amount']
+
+
+@pytest.mark.parametrize('actor', [2, 3, 999])
+def test_revision_solo_administrador_activo(db, actor):
+    servicio, api, _, registro, _ = contexto_revision(db)
+    with pytest.raises(PagoExternoError) as error:
+        servicio.conciliar_revision_legacy('98765', registro['nro_guia'], actor, 'Motivo suficientemente detallado de revisión')
+    assert error.value.status == 403
+    api.obtener_pago.assert_not_called()
+
+
+@pytest.mark.parametrize('defecto', ['inactivo', 'pendiente', 'importe', 'receptor', 'moneda', 'modo', 'reembolso',
+                                      'guia', 'orden-original', 'preferencia-original', 'receptor-original'])
+def test_revision_no_fuerza_pagos_inconsistentes(db, defecto):
+    servicio, api, pago, registro, _ = contexto_revision(db)
+    if defecto == 'inactivo':
+        with db.cursor() as cur: cur.execute('UPDATE usuarios SET activo=0 WHERE id_usuario=1')
+    if defecto == 'pendiente': pago['status'] = 'pending'
+    if defecto == 'importe': pago['transaction_amount'] = 1
+    if defecto == 'receptor': pago['collector_id'] = 999
+    if defecto == 'moneda': pago['currency_id'] = 'USD'
+    if defecto == 'modo': pago['live_mode'] = True
+    if defecto == 'reembolso': pago['transaction_amount_refunded'] = 1
+    if defecto == 'guia': pago['external_reference'] = 'GUIA-AJENA'
+    if defecto == 'orden-original': api.obtener_preferencia.return_value['metadata'] = {}
+    if defecto == 'preferencia-original': api.obtener_preferencia.return_value['id'] = 'preferencia-ajena'
+    if defecto == 'receptor-original': api.obtener_preferencia.return_value['collector_id'] = 999
+    with pytest.raises(PagoExternoError):
+        servicio.conciliar_revision_legacy('98765', registro['nro_guia'], 1, 'Motivo suficientemente detallado de revisión')
+    with db.cursor() as cur:
+        for tabla in ('pagos', 'revisiones_pago_mp'):
+            cur.execute(f'SELECT COUNT(*) AS total FROM {tabla}')
+            assert cur.fetchone()['total'] == 0
+
+
+def test_fallo_auditoria_revierte_cobro_y_permite_reintento(db):
+    servicio, _, _, registro, turno = contexto_revision(db)
+    with db.cursor(False) as cur:
+        cur.execute("CREATE TRIGGER fallo_revision BEFORE INSERT ON revisiones_pago_mp FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='fallo de prueba'")
+    with pytest.raises(PagoExternoError) as error:
+        servicio.conciliar_revision_legacy('98765', registro['nro_guia'], 1, 'Pago recibido y revisado con el cliente')
+    assert error.value.status == 503
+    with db.cursor() as cur:
+        cur.execute('SELECT COUNT(*) AS total FROM pagos')
+        assert cur.fetchone()['total'] == 0
+        cur.execute('DROP TRIGGER fallo_revision')
+    CajaController(db).cerrar_turno(turno.id_turno, 2)
+    assert servicio.conciliar_revision_legacy('98765', registro['nro_guia'], 1, 'Pago recibido y revisado con el cliente')['aprobado']
+    with db.cursor() as cur:
+        cur.execute('SELECT id_turno FROM pagos')
+        assert cur.fetchone()['id_turno'] is None
+    db.ejecutar_archivo(Path(__file__).resolve().parents[1] / 'scripts/migrations/012_revision_pagos_mp.sql')
 
 
 @pytest.mark.parametrize("campo,valor", [

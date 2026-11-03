@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from app.core.database import DatabaseManager
 from app.services.mercadopago_service import MercadoPagoService
+from app.services.referencia_pago import ReferenciaPagoMP
 from app.services.validacion_entrada import ValidacionEntrada as V
 from app.utils.exceptions import PagoExternoError, ValidationError
 from config.settings import MercadoPagoConfig
@@ -28,6 +29,11 @@ class PagoVerificadoMP:
         self.guia = datos.get("external_reference")
         metadata = datos.get("metadata")
         self.orden = metadata.get("formopack_orden") if isinstance(metadata, dict) else None
+        orden_referencia = ReferenciaPagoMP.leer(self.guia)
+        if orden_referencia is not None:
+            if self.orden is not None and self.orden != orden_referencia:
+                raise PagoExternoError("La referencia y los datos de la orden no coinciden.")
+            self.orden = orden_referencia
         self.preferencia_verificada = None
 
     def verificar_orden_comercial(self, proveedor):
@@ -47,17 +53,21 @@ class PagoVerificadoMP:
             raise PagoExternoError("La orden comercial no coincide con el pago. Requiere revisión.")
         self.preferencia_verificada = orden["preference_id"]
 
-    def validar(self, orden, guia):
+    def validar(self, orden, guia, revision_legacy=False):
         d = self.datos
         vinculo_valido = (self.orden == orden["id_orden"] if self.orden is not None
                           else self.preferencia_verificada is not None
                           and self.preferencia_verificada == orden["preference_id"])
+        if revision_legacy:
+            # Solo lo habilita la operación administrativa auditada, nunca el webhook.
+            vinculo_valido = self.orden is None and self.guia == guia
         try:
             monto = V.decimal(d.get("transaction_amount"), "importe externo", 0.01)
             devuelto = V.decimal(d.get("transaction_amount_refunded", 0), "reembolso")
         except ValidationError as exc:
             raise PagoExternoError("El importe del pago no es válido.") from exc
-        if (not self.aprobado or devuelto != 0 or self.guia != guia
+        if (not self.aprobado or devuelto != 0
+            or self.guia not in {guia, ReferenciaPagoMP.crear(orden["id_orden"])}
             or not vinculo_valido
             or d.get("currency_id") != "ARS"
             or str(d.get("collector_id")) != orden["collector_id"]
@@ -186,27 +196,31 @@ class ConciliacionMP:
             if len(ordenes) != 1:
                 raise PagoExternoError("No se encontró la orden local del pago.")
             orden = ordenes[0]
-            cur.execute("SELECT nro_guia,costo_total FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
-            envio = cur.fetchone()
-            if not envio or (guia_esperada is not None and envio["nro_guia"] != guia_esperada):
-                raise PagoExternoError("El pago pertenece a otro envío.")
-            monto = pago.validar(orden, envio["nro_guia"])
-            if monto != float(envio["costo_total"]):
-                raise PagoExternoError("El total del envío cambió. El cobro requiere revisión.")
-            cur.execute("SELECT id_pago,id_transaccion_ext FROM pagos WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
-            existentes = cur.fetchall()
-            if existentes:
-                if len(existentes) == 1 and existentes[0]["id_transaccion_ext"] == payment_id:
-                    return {"aprobado": True, "estado": "confirmado", "payment_id": payment_id}
-                raise PagoExternoError("El envío ya tiene otro cobro. Requiere revisión de administración.")
-            cur.execute("SELECT estado_caja FROM turnos_caja WHERE id_turno=%s FOR UPDATE", (orden["id_turno"],))
-            turno = cur.fetchone()
-            # Si la caja original ya cerró, no alterar su arqueo histórico.
-            id_turno = orden["id_turno"] if turno and turno["estado_caja"] == "abierto" else None
-            cur.execute("""INSERT INTO pagos (id_envio,id_turno,monto,tipo_pago,id_transaccion_ext,billetera_virtual)
-                VALUES (%s,%s,%s,'digital',%s,'MercadoPago')""", (orden["id_envio"], id_turno, monto, payment_id))
-            cur.execute("UPDATE envios SET modalidad_pago='digital' WHERE id_envio=%s", (orden["id_envio"],))
-            return {"aprobado": True, "estado": "confirmado", "payment_id": payment_id}
+            return self._registrar(cur, pago, orden, guia_esperada)
+
+    @staticmethod
+    def _registrar(cur, pago, orden, guia_esperada=None, revision_legacy=False):
+        cur.execute("SELECT nro_guia,costo_total FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
+        envio = cur.fetchone()
+        if not envio or (guia_esperada is not None and envio["nro_guia"] != guia_esperada):
+            raise PagoExternoError("El pago pertenece a otro envío.")
+        monto = pago.validar(orden, envio["nro_guia"], revision_legacy)
+        if monto != float(envio["costo_total"]):
+            raise PagoExternoError("El total del envío cambió. El cobro requiere revisión.")
+        cur.execute("SELECT id_pago,id_transaccion_ext FROM pagos WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
+        existentes = cur.fetchall()
+        if existentes:
+            if len(existentes) == 1 and existentes[0]["id_transaccion_ext"] == pago.id:
+                return {"aprobado": True, "estado": "confirmado", "payment_id": pago.id}
+            raise PagoExternoError("El envío ya tiene otro cobro. Requiere revisión de administración.")
+        cur.execute("SELECT estado_caja FROM turnos_caja WHERE id_turno=%s FOR UPDATE", (orden["id_turno"],))
+        turno = cur.fetchone()
+        # Si la caja original ya cerró, no alterar su arqueo histórico.
+        id_turno = orden["id_turno"] if turno and turno["estado_caja"] == "abierto" else None
+        cur.execute("""INSERT INTO pagos (id_envio,id_turno,monto,tipo_pago,id_transaccion_ext,billetera_virtual)
+            VALUES (%s,%s,%s,'digital',%s,'MercadoPago')""", (orden["id_envio"], id_turno, monto, pago.id))
+        cur.execute("UPDATE envios SET modalidad_pago='digital' WHERE id_envio=%s", (orden["id_envio"],))
+        return {"aprobado": True, "estado": "confirmado", "payment_id": pago.id}
 
     def verificar(self, guia):
         with self._transaccion() as cur:
@@ -215,10 +229,16 @@ class ConciliacionMP:
             pagos = cur.fetchall()
         if pagos:
             return {"aprobado": True, "estado": "confirmado", "payment_id": pagos[0]["id_transaccion_ext"]}
-        for payment_id in self.proveedor.buscar_pagos(guia):
-            resultado = self.confirmar(payment_id, guia)
-            if resultado["aprobado"]:
-                return resultado
+        with self._transaccion() as cur:
+            cur.execute("""SELECT o.id_orden FROM ordenes_pago_mp o JOIN envios e ON e.id_envio=o.id_envio
+                WHERE e.nro_guia=%s""", (guia,))
+            orden = cur.fetchone()
+        referencias = [ReferenciaPagoMP.crear(orden["id_orden"]), guia] if orden else [guia]
+        for referencia in referencias:
+            for payment_id in self.proveedor.buscar_pagos(referencia):
+                resultado = self.confirmar(payment_id, guia)
+                if resultado["aprobado"]:
+                    return resultado
         return {"aprobado": False, "estado": "pendiente"}
 
     def listar_sin_turno(self, id_usuario):
@@ -231,3 +251,65 @@ class ConciliacionMP:
                 JOIN envios e ON e.id_envio=p.id_envio WHERE p.id_turno IS NULL
                 AND p.id_transaccion_ext IS NOT NULL ORDER BY p.fecha DESC,p.id_pago DESC LIMIT 100""")
             return cur.fetchall()
+
+    @staticmethod
+    def _orden_para_revision(cur, guia, id_administrador):
+        cur.execute("SELECT activo,tipo_usuario FROM usuarios WHERE id_usuario=%s FOR UPDATE", (id_administrador,))
+        actor = cur.fetchone()
+        if not actor or not actor["activo"] or actor["tipo_usuario"] != "administrador":
+            raise PagoExternoError("La revisión de pagos requiere un administrador activo.", 403)
+        cur.execute("""SELECT o.* FROM ordenes_pago_mp o JOIN envios e ON e.id_envio=o.id_envio
+            WHERE e.nro_guia=%s""", (guia,))
+        orden = cur.fetchone()
+        if not orden or not orden["preference_id"]:
+            raise PagoExternoError("No se encontró una preferencia local para revisar.")
+        return orden
+
+    def _preparar_revision_legacy(self, payment_id, guia, id_administrador):
+        self._configuracion()
+        id_administrador = V.entero(id_administrador, "administrador")
+        if not isinstance(payment_id, str) or not re.fullmatch(r"[0-9]{1,30}", payment_id):
+            raise PagoExternoError("El identificador de pago no es válido.", 400)
+        with self._transaccion() as cur:
+            orden = self._orden_para_revision(cur, guia, id_administrador)
+        pago = PagoVerificadoMP(self.proveedor.obtener_pago(payment_id), payment_id)
+        # Este procedimiento excepcional solo cubre referencias antiguas de guía.
+        if pago.orden is not None or pago.guia != guia or not pago.aprobado:
+            raise PagoExternoError("El pago no corresponde a una revisión de referencia antigua.")
+        pago.verificar_orden_comercial(self.proveedor)
+        original = self.proveedor.obtener_preferencia(orden["preference_id"])
+        metadata = original.get("metadata") if isinstance(original, dict) else None
+        if (not isinstance(original, dict) or original.get("id") != orden["preference_id"]
+            or original.get("external_reference") != guia
+            or str(original.get("collector_id")) != orden["collector_id"]
+            or not isinstance(metadata, dict) or metadata.get("formopack_orden") != orden["id_orden"]):
+            raise PagoExternoError("No se pudo verificar la preferencia original de FormoPack.")
+        pago.validar(orden, guia, revision_legacy=True)
+        return pago, orden
+
+    def previsualizar_revision_legacy(self, payment_id, guia, id_administrador):
+        """Lectura para que administración revise los dos enlaces antes de conciliar."""
+        pago, orden = self._preparar_revision_legacy(payment_id, guia, id_administrador)
+        return {"guia": guia, "payment_id": pago.id, "monto": float(orden["monto"]),
+                "preferencia_original": orden["preference_id"],
+                "preferencia_cobro": pago.preferencia_verificada}
+
+    def conciliar_revision_legacy(self, payment_id, guia, id_administrador, motivo):
+        """Excepción administrativa explícita, auditada en la misma transacción."""
+        motivo = V.texto(motivo, "motivo de revisión", 20, 500)
+        pago, revisada = self._preparar_revision_legacy(payment_id, guia, id_administrador)
+        with self._transaccion() as cur:
+            orden = self._orden_para_revision(cur, guia, id_administrador)
+            if orden["id_orden"] != revisada["id_orden"] or orden["preference_id"] != revisada["preference_id"]:
+                raise PagoExternoError("La orden cambió durante la revisión. Volvé a consultarla.")
+            resultado = self._registrar(cur, pago, orden, guia, revision_legacy=True)
+            cur.execute("SELECT id_pago FROM pagos WHERE id_transaccion_ext=%s", (pago.id,))
+            id_pago = cur.fetchone()["id_pago"]
+            cur.execute("SELECT id_pago FROM revisiones_pago_mp WHERE id_pago=%s", (id_pago,))
+            if not cur.fetchone():
+                cur.execute("""INSERT INTO revisiones_pago_mp
+                    (id_pago,id_orden,id_administrador,preferencia_original,preferencia_cobro,motivo)
+                    VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (id_pago, orden["id_orden"], id_administrador,
+                     orden["preference_id"], pago.preferencia_verificada, motivo))
+            return resultado

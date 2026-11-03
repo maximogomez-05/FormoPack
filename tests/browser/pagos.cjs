@@ -21,7 +21,7 @@ const path = require('node:path');
     });
     await page.goto(`${base}/admin/dashboard`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    const estilo = await page.locator('.metric-card').first().evaluate(el => ({
+    const estilo = await page.locator('.ops-card').first().evaluate(el => ({
       color: getComputedStyle(el).color, duration: getComputedStyle(el).animationDuration,
       borde: getComputedStyle(el).borderTopWidth,
       overflow: document.documentElement.scrollWidth > window.innerWidth

@@ -13,6 +13,7 @@ from tests.test_regresion_paginas import aplicacion, db
 from tests.test_recepcion_bd import envio
 from app.controllers.caja_controller import CajaController
 from app.services.conciliacion_mp import ConciliacionMP
+from app.services.referencia_pago import ReferenciaPagoMP
 from app.utils.exceptions import PagoExternoError
 from config.settings import MercadoPagoConfig as C
 from web.extensions import limiter
@@ -38,8 +39,8 @@ def test_checkout_y_presentacion(aplicacion, db, monkeypatch):
             return ["98765"]
         def obtener_pago(self, payment_id):
             return {"id": 98765, "status": "approved", "transaction_amount": registro["cotizacion"]["costo_total"],
-                "collector_id": 12345, "external_reference": registro["nro_guia"], "currency_id": "ARS", "live_mode": False,
-                "metadata": {"formopack_orden": self.orden}}
+                "collector_id": 12345, "external_reference": ReferenciaPagoMP.crear(self.orden), "currency_id": "ARS", "live_mode": False,
+                "metadata": {"hide_payer_information": True}}
 
     api = ProveedorPrueba()
     servicio = ConciliacionMP(db, api)

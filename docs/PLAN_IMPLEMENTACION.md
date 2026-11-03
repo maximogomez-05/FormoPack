@@ -315,3 +315,11 @@ rutas, plantillas y permisos, usando bases desechables y API simulada.
 Pendiente: desplegar esta corrección, conciliar el cobro existente en el VPS
 y comprobar su reflejo único en caja. La firma del webhook externo todavía
 requiere validación independiente; esta corrección no desactiva su verificación.
+
+El diagnóstico posterior mostró una preferencia de cobro diferente de la
+original, con otro `client_id` y sin metadata, tras escanear desde la aplicación
+de Mercado Pago. Se agrega una referencia aleatoria `FPMP-<UUID local>` para
+enlaces nuevos y la herramienta administrativa `scripts/revisar_pago_mp.py`
+para cobros antiguos. La migración 012 añade auditoría transaccional, sin
+reasignar preferencias ni modificar cobros históricos automáticamente. Los
+detalles y pasos de despliegue están en [pagos](PAGOS_MERCADOPAGO.md#actualización-del-3-de-noviembre-de-2026-escaneo-desde-mercado-pago).

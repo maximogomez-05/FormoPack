@@ -12,7 +12,8 @@ pagos. `PagoVerificadoMP` valida la respuesta consultada al proveedor.
 
 Antes de abrir Checkout se exige personal activo, un turno propio abierto, envío
 existente y ausencia de otro cobro. La orden conserva usuario, caja original,
-importe, cuenta receptora y preferencia; su identificador va en metadata.
+importe, cuenta receptora y preferencia; su identificador va en metadata y,
+desde el 3 de noviembre, en `external_reference` con formato `FPMP-<UUID local>`.
 Volver a abrir el pago reutiliza el enlace guardado. Mientras se prepara uno,
 otro inicio se rechaza; si falló la preparación, se permite reintentar después
 de treinta segundos. Las llamadas al proveedor no retienen bloqueos SQL.
@@ -20,7 +21,8 @@ de treinta segundos. Las llamadas al proveedor no retienen bloqueos SQL.
 Para acreditar se consulta el ID concreto al proveedor y se comprueban:
 
 - Identificador, estado aprobado y ausencia de importe reembolsado.
-- Guía esperada, metadata y existencia de la orden local.
+- Referencia única de orden (o metadata/preferencia original en enlaces antiguos),
+  guía esperada y existencia de la orden local.
 - Importe de la orden y costo vigente, moneda ARS y cuenta receptora.
 - Modo de prueba/producción según la configuración de esta instalación.
 
@@ -172,3 +174,60 @@ las clases de firma, validación y conciliación. Las secuencias deben reflejar
 firma antes de consultar, retorno sin acreditación, validación del recurso,
 bloqueo/idempotencia, commit antes de confirmar y caja cerrada sin alterar arqueo.
 Los archivos gráficos permanecen para la etapa final.
+
+## Actualización del 3 de noviembre de 2026: escaneo desde Mercado Pago
+
+El VPS ya está publicado con HTTPS y correo real. Se recibió un pago real de
+ARS 500 durante una prueba del usuario. En el recorrido informado (escaneo
+desde la aplicación de Mercado Pago), la respuesta observada tiene una
+preferencia y un `client_id` diferentes de los originales y no conserva la
+metadata de FormoPack. Sí conserva `external_reference`. La documentación
+consultada no permite asegurar que todos los recorridos móviles se comporten
+así: se registra el comportamiento observado, no una garantía del proveedor.
+
+Las preferencias nuevas incluyen la identidad aleatoria de la orden local en
+`external_reference`, además de metadata. La guía permanece en el título y la
+descripción del servicio. La consulta periódica busca primero esa referencia,
+y luego la guía para enlaces previos. Si metadata y referencia identifican
+órdenes distintas se rechaza el pago. Se conservan los controles de monto,
+cuenta receptora, moneda, entorno, reembolso, envío y acreditación única.
+Si solo falta metadata en un enlace antiguo, todavía puede verificarse por
+la orden comercial y su preferencia original. Una preferencia diferente con
+la sola referencia antigua de guía requiere revisión administrativa.
+
+### Recuperación de cobros antiguos
+
+`scripts/revisar_pago_mp.py` se ejecuta en el servidor y autentica a un
+administrador con su cuenta de FormoPack. Muestra pago, guía, importe y ambas
+preferencias, solicita motivo y confirmación explícita. Consulta otra vez al
+proveedor antes de escribir. Verifica el pago aprobado, la orden comercial,
+la preferencia original y su metadata local. La decisión humana vincula el
+cobro antiguo cuando no existe una identidad de orden preservada: no debe
+usarse como sustituto de verificar con el pagador y la cuenta receptora.
+
+La migración `012_revision_pagos_mp.sql` añade `revisiones_pago_mp`, con pago,
+orden local, administrador, ambas preferencias, motivo y fecha. El cobro y la
+auditoría se guardan juntos; si falla cualquiera, se revierten ambos. Repetir
+la revisión conserva un único pago y un único registro. Una caja ya cerrada
+mantiene su arqueo, y el ingreso queda sin turno para revisión administrativa.
+No se modifica ni se cobra ni se reembolsa dinero mediante esta herramienta.
+No existe una ruta HTTP que permita omitir automáticamente estos controles.
+
+Con respaldo previo, en el VPS ya inicializado:
+
+```bash
+sudo mariadb formopack_db < scripts/migrations/012_revision_pagos_mp.sql
+sudo systemctl restart formopack
+.venv/bin/python scripts/revisar_pago_mp.py --guia GUIA --pago ID_DEL_PAGO
+```
+
+Se preservan la firma HMAC del webhook y el POST autenticado con CSRF para la
+consulta periódica. El webhook externo y la referencia nueva requieren
+comprobación en el proveedor real después del despliegue; las pruebas locales
+usan respuestas simuladas y bases desechables.
+
+Referencia oficial: [referencia externa de Checkout Pro](https://www.mercadopago.com.ar/developers/en/docs/checkout-pro-preferences/configure-back-urls).
+
+En el DER final agregar la auditoría `revisiones_pago_mp` y sus relaciones con
+pagos, usuarios y órdenes. Las secuencias deben distinguir conciliación
+automática por identidad de orden y revisión administrativa de enlaces antiguos.
