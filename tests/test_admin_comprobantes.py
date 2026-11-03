@@ -1,5 +1,7 @@
 """Pruebas unitarias para el módulo de Comprobantes de Servicios del Administrador (RF 2.7)."""
 
+from time import time
+
 import unittest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, date
@@ -84,6 +86,7 @@ class TestComprobantesAdmin(unittest.TestCase):
 
         with self.client.session_transaction() as sess:
             sess["usuario_id"] = 1
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
             sess["version_sesion"] = 0
@@ -132,6 +135,7 @@ class TestComprobantesAdmin(unittest.TestCase):
 
         with self.client.session_transaction() as sess:
             sess["usuario_id"] = 1
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
             sess["version_sesion"] = 0
@@ -157,6 +161,7 @@ class TestComprobantesAdmin(unittest.TestCase):
         """Verifica que usuarios con rol distinto a administrador no puedan acceder (403 o redirect)."""
         with self.client.session_transaction() as sess:
             sess["usuario_id"] = 2
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Chofer Test"
             sess["rol"] = "chofer"
 
@@ -170,6 +175,7 @@ class TestComprobantesAdmin(unittest.TestCase):
 
         with self.client.session_transaction() as sess:
             sess["usuario_id"] = 1
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
             sess["version_sesion"] = 0
@@ -232,6 +238,7 @@ class TestComprobantesAdmin(unittest.TestCase):
 
         with self.client.session_transaction() as sess:
             sess["usuario_id"] = 1
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
             sess["version_sesion"] = 0

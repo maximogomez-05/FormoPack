@@ -1,5 +1,7 @@
 """Pruebas unitarias e integrales para el Dashboard y la Actualización de Envíos."""
 
+from time import time
+
 import pytest
 from app.core.database import DatabaseManager
 from web.app import create_app
@@ -14,6 +16,7 @@ def client():
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess["usuario_id"] = 1
+            sess.update(inicio_sesion=time(), ultima_actividad=time())
             sess["nombre"] = "Admin Test"
             sess["rol"] = "administrador"
             sess["version_sesion"] = 0

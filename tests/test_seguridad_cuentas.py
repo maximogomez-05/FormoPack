@@ -1,5 +1,7 @@
 """Límites, criptografía y sesiones sin persistencia ni correo reales."""
 
+from time import time
+
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -108,6 +110,7 @@ class TestSesionesHTTP:
         client = app.test_client()
         with client.session_transaction() as session:
             session.update(usuario_id=17, version_sesion=version, rol="administrador")
+            session.update(inicio_sesion=time(), ultima_actividad=time())
         return client
 
     @staticmethod
@@ -150,13 +153,14 @@ class TestSesionesHTTP:
             session["recuperar_email"] = "anterior@example.com"
             sid_anterior = session.sid
         usuario = Usuario(17, "Operador", "operador@example.com", "hash", "administrador", version_sesion=3)
+        DatabaseManager.get_instance.return_value.cursor.return_value.__enter__.return_value.rowcount = 1
         with patch("web.routes.auth.AuthController") as auth:
             auth.return_value.login.return_value = SimpleNamespace(usuario=usuario, rol="administrador")
             response = client.post("/login", data={"email": usuario.email, "password": "Clave1234"})
         assert response.status_code == 302
         with client.session_transaction() as session:
             assert session.sid != sid_anterior
-            assert session["version_sesion"] == 3
+            assert session["version_sesion"] == 4
             assert "recuperar_email" not in session
         anterior = app.test_client()
         anterior.set_cookie("session", sid_anterior)

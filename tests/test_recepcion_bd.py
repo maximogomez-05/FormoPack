@@ -1,5 +1,7 @@
 """Recepción y caja con MariaDB aislada y fallos controlados."""
 
+from time import time
+
 import re
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
@@ -19,6 +21,7 @@ def cliente(app, usuario=2):
     client = app.test_client()
     with client.session_transaction() as sesion:
         sesion.update(usuario_id=usuario, version_sesion=0)
+        sesion.update(inicio_sesion=time(), ultima_actividad=time())
     pagina = client.get("/recepcion/clientes/nuevo").get_data(as_text=True)
     token = re.search(r'<meta name="csrf-token" content="([^"]+)"', pagina).group(1)
     return client, token

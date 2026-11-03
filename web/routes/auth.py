@@ -130,9 +130,16 @@ def dashboard():
 def logout():
     """Cierra la sesión del usuario."""
     nombre = session.get("nombre", "Usuario")
-    session.clear()
+    ControlSesion.finalizar()
     flash(f"Sesión cerrada. ¡Hasta luego, {nombre}!", "info")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/sesion")
+@login_required
+def estado_sesion():
+    """Revalida pantallas restauradas sin prolongar su tiempo de inactividad."""
+    return jsonify(ok=True)
 
 
 @auth_bp.route("/recuperar-password", methods=["GET", "POST"])

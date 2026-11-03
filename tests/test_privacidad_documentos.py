@@ -1,5 +1,7 @@
 """Privacidad de archivos, documentos internos y seguimiento público."""
 
+from time import time
+
 import io
 import re
 import uuid
@@ -20,6 +22,7 @@ def sesion(app, usuario):
     if usuario:
         with cliente.session_transaction() as datos:
             datos.update(usuario_id=usuario, version_sesion=0)
+            datos.update(inicio_sesion=time(), ultima_actividad=time())
     return cliente
 
 

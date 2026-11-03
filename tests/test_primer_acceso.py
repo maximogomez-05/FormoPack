@@ -60,7 +60,7 @@ def test_rechazos_no_consumen_clave_provisoria(db, actual, nueva, confirmacion):
 
 def test_url_api_y_sesion_de_otro_navegador_no_evaden_restriccion(aplicacion, db):
     nueva_cuenta(db)
-    primero, segundo = autenticar(aplicacion), autenticar(aplicacion)
+    segundo, primero = autenticar(aplicacion), autenticar(aplicacion)
     assert primero.get("/admin/dashboard").location.endswith("/primer-acceso")
     assert primero.get("/recepcion/caja").location.endswith("/primer-acceso")
     api = primero.get("/recepcion/clientes/buscar?dni=12345678", headers={"X-Requested-With": "XMLHttpRequest"})

@@ -154,6 +154,34 @@
 {% block scripts %}{% endblock %}
 <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
 <script>
+  // BFCache puede restaurar una pantalla sin consultar al servidor.
+  async function revalidarSesion(restaurada = false) {
+    if (!navigator.onLine) return;
+    const content = document.querySelector('.layout');
+    if (restaurada) content.hidden = true;
+    try {
+      const response = await fetch({{ url_for('auth.estado_sesion') | tojson }}, {
+        cache: 'no-store', headers: {Accept: 'application/json'}
+      });
+      if (response.status === 401) {
+        location.replace({{ url_for('auth.login') | tojson }});
+      } else if (response.ok && restaurada) {
+        location.reload();
+      } else if (!response.ok && restaurada) {
+        content.hidden = false;
+        location.reload();
+      }
+    } catch {
+      content.hidden = false;
+    }
+  }
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) revalidarSesion(true);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) revalidarSesion();
+  });
+  setInterval(revalidarSesion, 60000);
   if (window.AOS) {
     window.AOS.init({ duration: 260, once: true, offset: 24, disable: window.matchMedia('(prefers-reduced-motion: reduce)').matches });
   } else {

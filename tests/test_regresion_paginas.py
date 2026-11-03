@@ -1,5 +1,7 @@
 """Recorridos de lectura con usuarios reales en una base aislada opt-in."""
 
+from time import time
+
 import logging
 from unittest.mock import patch
 
@@ -48,6 +50,7 @@ def test_paginas_y_permisos(aplicacion, usuario, ruta, estado, caplog):
     if usuario:
         with cliente.session_transaction() as sesion:
             sesion.update(usuario_id=usuario, version_sesion=0)
+            sesion.update(inicio_sesion=time(), ultima_actividad=time())
     with caplog.at_level(logging.ERROR):
         respuesta = cliente.get(ruta, follow_redirects=True)
     assert respuesta.status_code == estado
@@ -71,6 +74,7 @@ def test_dashboard_distingue_fallo_de_indicadores_de_dia_sin_movimiento(aplicaci
     cliente = aplicacion.test_client()
     with cliente.session_transaction() as sesion:
         sesion.update(usuario_id=1, version_sesion=0)
+        sesion.update(inicio_sesion=time(), ultima_actividad=time())
     respuesta = cliente.get("/admin/dashboard")
     assert respuesta.status_code == 200
     html = respuesta.get_data(as_text=True)
@@ -83,6 +87,7 @@ def test_dashboard_separa_pendientes_vacios_de_error(aplicacion, monkeypatch):
     cliente = aplicacion.test_client()
     with cliente.session_transaction() as sesion:
         sesion.update(usuario_id=2, version_sesion=0)
+        sesion.update(inicio_sesion=time(), ultima_actividad=time())
     vacio = cliente.get("/admin/dashboard").get_data(as_text=True)
     assert "Sin pendientes de despacho" in vacio
     assert "Sin movimientos en los últimos siete días" in vacio

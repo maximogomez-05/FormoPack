@@ -4,6 +4,8 @@ FORMOPACK_TEST_DB_PORT debe apuntar a una instancia local exclusiva de pruebas.
 Se crea una base con nombre aleatorio y se elimina solamente esa base al salir.
 """
 
+from time import time
+
 import os
 import re
 import uuid
@@ -182,6 +184,7 @@ class TestSeguridadPersistente:
         codigo = self.emitir(db)
         with app.test_request_context():
             session.update(usuario_id=1, version_sesion=0)
+            session.update(inicio_sesion=time(), ultima_actividad=time())
             assert ControlSesion(db).validar()
             AuthController(db).restablecer_password("admin@formopack.com", codigo, "ClaveNueva123", "ClaveNueva123")
             assert ControlSesion(db).validar() is False
@@ -211,6 +214,7 @@ class TestSeguridadPersistente:
             assert UsuarioController().toggle_activo(2, 1) is True
         with app.test_request_context():
             session.update(usuario_id=2, version_sesion=0)
+            session.update(inicio_sesion=time(), ultima_actividad=time())
             assert ControlSesion(db).validar() is False
 
     def test_inicializacion_no_reemplaza_password_modificada(self, db):

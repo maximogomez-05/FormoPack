@@ -1,5 +1,7 @@
 """RF 5.6: políticas y HTTP aislados de la base operativa."""
 
+from time import time
+
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -61,6 +63,7 @@ class TestSoporteHTTP:
         }
         with client.session_transaction() as sesion:
             sesion.update(usuario_id=id_usuario, rol=rol, version_sesion=0)
+            sesion.update(inicio_sesion=time(), ultima_actividad=time())
 
     @staticmethod
     def token_csrf(client):
