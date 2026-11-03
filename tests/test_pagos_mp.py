@@ -263,3 +263,14 @@ def test_transferencia_manual_exige_confirmacion_y_no_se_presenta_como_mp(aplica
         assert len(pagos) == (1 if verificada else 0)
         if verificada:
             assert pagos[0] == {"billetera_virtual": "Transferencia Bancaria", "id_transaccion_ext": None}
+
+def test_diagnostico_firma_no_expone_credenciales(caplog):
+    secreto = "secreto-privado-de-prueba"
+    encabezado = "ts=1800000000,v1=" + "0" * 64
+    with pytest.raises(PagoExternoError):
+        FirmaMercadoPago(secreto, lambda: 1800000000).validar(
+            encabezado, "solicitud-privada", "98765"
+        )
+    assert "HMAC distinto al esperado" in caplog.text
+    for privado in (secreto, encabezado, "solicitud-privada", "98765"):
+        assert privado not in caplog.text
