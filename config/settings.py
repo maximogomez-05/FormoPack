@@ -53,6 +53,7 @@ class EmailConfig:
     USER: str = os.getenv("GMAIL_USER", "")
     PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
     RECIPIENT: str = os.getenv("ALERTAS_EMAIL", "")
+    BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:5050").rstrip("/")
 
 
 class RoleConfig:

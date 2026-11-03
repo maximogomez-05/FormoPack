@@ -188,7 +188,7 @@ class ServicioNotificacion:
                     {('<tr><th>Observación</th><td style="color:#c62828;">' + observacion + '</td></tr>') if observacion else ''}
                 </table>
                 <div style="text-align:center;">
-                    <a href="{EmailConfig.BASE_URL if hasattr(EmailConfig, 'BASE_URL') else 'http://localhost:5050'}/admin/tracking" class="btn">Rastrear mi Envío</a>
+                    <a href="{EmailConfig.BASE_URL}/admin/tracking" class="btn">Rastrear mi Envío</a>
                 </div>
             </div>
             <div class="footer">
