@@ -1,0 +1,81 @@
+/* La mesa de jornada comparte el lenguaje del menú y concentra el color en las acciones. */
+.tablero {
+  --tinta: #142e48;
+  --linea: #d5dfe5;
+  --papel: #fff;
+  color: var(--tinta);
+  font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  max-width: 1480px;
+  margin-inline: auto;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+}
+.tablero :is(h1,h2,h3,p,dl,dd) { margin: 0; }
+.tablero h1 { font-size: clamp(1.65rem, 3vw, 2.5rem); letter-spacing: -.045em; line-height: 1.2; }
+.tablero h2 { font-size: 1.13rem; line-height: 1.4; }
+.tablero h3, .tablero .rotulo { font-size: .74rem; letter-spacing: .07em; font-weight: 700; text-transform: uppercase; }
+.jornada, .balance header, .atajos { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.jornada { border-bottom: 3px solid var(--tinta); padding: 4px 0 20px; }
+.jornada .rotulo { margin-bottom: 7px; color: #315d74; }
+#fecha-jornada { color: #495e6e; margin-top: 5px; }
+.atajos a, .balance header a, .tablero summary { font-weight: 600; cursor: pointer; }
+.atajos a, .balance header a { display: inline-flex; align-items: center; min-height: 44px; }
+.tablero a:not(.btn), .tablero summary { color: #145680; }
+.tablero a:not(.btn):hover, .tablero summary:hover { text-decoration: underline; }
+.tablero :focus-visible { outline: 3px solid #3076aa; outline-offset: 2px; }
+.tablero .mesa, .balance { background: var(--papel); border: 1px solid var(--linea); border-radius: 6px; }
+.mesa, .balance section { padding: clamp(14px, 2vw, 26px); }
+.mesa > p, .tablero details p { color: #425769; margin-top: 8px; }
+.cola { list-style: none; margin: 10px 0 0; padding: 0; }
+.cola li { border-top: 1px solid var(--linea); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cola a { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.cola a:first-child { flex: 1; }
+.cola a span { margin-left: auto; }
+.tablero .cola .vencidos { color: #9d3828; }
+.balance { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.balance section + section { border-left: 1px solid var(--linea); }
+.balance header a { min-height: auto; }
+.cifras { display: flex; flex-wrap: wrap; gap: 2rem; padding: 16px 0; }
+.cifras dt { font-size: .85rem; color: #455d70; }
+.cifras dd { font-weight: 700; font-size: clamp(1.6rem, 2.6vw, 2.25rem); letter-spacing: -.04em; overflow-wrap: anywhere; }
+.renglones > div { border-top: 1px solid var(--linea); display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 8px 0; }
+.renglones dd { font-weight: 700; }
+.balance h3 { margin: 4px 0 10px; }
+.balance details { margin-top: 10px; }
+.tablero .card, .tablero .dashboard-columns { margin-bottom: 0 !important; min-width: 0; }
+.tablero .card-header { gap: 12px; flex-wrap: wrap; }
+.exportacion form { margin-top: 12px; }
+.tablero [id] { scroll-margin-top: 72px; }
+@media (max-width: 1000px) {
+  .balance { grid-template-columns: minmax(0,1fr); }
+  .balance section + section { border-left: 0; border-top: 1px solid var(--linea); }
+}
+@media (max-width: 600px) {
+  .tablero { gap: 14px; }
+  .atajos { justify-content: flex-start; gap: 4px 16px; }
+  .tablero :is(.btn,summary,select,input:not([type=hidden]),.balance header a) { min-height: 44px; }
+  .tablero summary { align-content: center; }
+  .tablero form > div { max-width: 100%; }
+  .tablero .exportacion form { display: grid !important; }
+  .tablero .exportacion :is(input,select) { max-width: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tablero *, body[data-page="admin.dashboard"] .sidebar { transition: none !important; animation: none !important; }
+}
+
+#modalActualizarEstado { width: min(480px, calc(100% - 24px)); max-height: 90dvh; margin: auto; padding: 0; border: 0; border-radius: 8px; color: #142e48; }
+#modalActualizarEstado::backdrop { background: rgb(12 30 48 / 65%); }
+
+@media (max-width: 600px) {
+  #envios .table-responsive > table { min-width: 0; }
+  #envios thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #envios :is(table, tbody, tr) { display: block; }
+  #envios tbody tr { padding: 10px 0; border-top: 2px solid var(--linea); }
+  #envios td { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); text-align: left; align-items: baseline; padding: 6px; white-space: normal; overflow-wrap: anywhere; }
+  #envios td::before { content: attr(data-label); color: #495e6e; font: 600 .75rem var(--font-sans); }
+  #envios td:last-child { display: block; }
+  #envios td:last-child::before { display: none; }
+  #envios td > div { flex-wrap: wrap; }
+}

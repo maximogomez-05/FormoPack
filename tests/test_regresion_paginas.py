@@ -39,6 +39,7 @@ def aplicacion(db, tmp_path):
     (2, "/soporte/panel", 200),
     (2, "/admin/usuarios", 403),
     (3, "/chofer", 200),
+    (3, "/admin/dashboard", 403),
     (3, "/admin/usuarios", 403),
     (3, "/soporte/panel", 403),
 ])
@@ -75,3 +76,24 @@ def test_dashboard_distingue_fallo_de_indicadores_de_dia_sin_movimiento(aplicaci
     html = respuesta.get_data(as_text=True)
     assert "No se pudieron cargar los indicadores" in html
     assert "Valor de envíos registrados hoy" not in html
+
+def test_dashboard_separa_pendientes_vacios_de_error(aplicacion, monkeypatch):
+    from web.routes import admin
+
+    cliente = aplicacion.test_client()
+    with cliente.session_transaction() as sesion:
+        sesion.update(usuario_id=2, version_sesion=0)
+    vacio = cliente.get("/admin/dashboard").get_data(as_text=True)
+    assert "Sin pendientes de despacho" in vacio
+    assert "Sin movimientos en los últimos siete días" in vacio
+
+    monkeypatch.setattr(admin, "_obtener_pendientes_operativos", lambda: {"error": True})
+    monkeypatch.setattr(admin, "construir_alertas_operativas", lambda _: [
+        {"guia": "FP-PRUEBA", "mensaje": "Visita pendiente", "tipo": "warning"}
+    ])
+    html = cliente.get("/admin/dashboard").get_data(as_text=True)
+    assert "No se pudieron cargar los pendientes" in html
+    assert "Sin pendientes de despacho" not in html
+    assert "Dinero cobrado hoy" in html
+    assert "Visita pendiente" in html
+    assert "Notificar por Gmail" not in html

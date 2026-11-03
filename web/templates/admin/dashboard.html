@@ -1,302 +1,84 @@
 {% extends "base.html" %}
 {% block title %}Panel de Control — FormoPack{% endblock %}
-{% block page_title %}<i class="fa-solid fa-chart-line"></i> Panel de Control{% endblock %}
-
+{% block page_title %}Panel de Control{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{{ url_for('static', filename='css/tablero.css') }}">{% endblock %}
 {% block content %}
-<!-- Encabezado de la Jornada -->
-<div class="dashboard-top-hero">
-  <div class="dashboard-hero-title">
-    <h1>
-      <i class="fa-solid fa-boxes-stacked" style="color:var(--fp-blue-primary);"></i>
-      Tablero Operativo de Encomiendas
-    </h1>
-    <p>Formosa Capital · Distribución al interior provincial y rendición diaria</p>
-  </div>
-  <div class="dashboard-hero-right">
-    <!-- Reloj Operativo en Vivo -->
-    <div class="dashboard-live-clock" title="Hora oficial de control operativo y despacho (Formosa, Argentina)">
-      <div class="live-clock-meta">
-        <span class="live-clock-dot"></span>
-        <span class="live-clock-tag">OPERACIÓN EN VIVO</span>
-        <span class="live-clock-tz">Formosa · UTC-3</span>
-      </div>
-      <div class="live-clock-time mono-data" id="dashboardLiveClockTime">--:--:-- hs</div>
-      <div class="live-clock-date" id="dashboardLiveClockDate">Cargando fecha...</div>
+<main class="tablero">
+  <header class="jornada">
+    <div>
+      <p class="rotulo">Formosa Capital · Distribución provincial</p>
+      <h1>Control de jornada</h1>
+      <p id="fecha-jornada"></p>
     </div>
-
-    <div class="dashboard-hero-actions">
-      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-plus"></i> Nuevo Envío
-      </a>
+    <nav class="atajos" aria-label="Acciones de jornada">
+      <a class="btn btn-primary" href="{{ url_for('recepcion.nuevo_envio') }}">Nuevo envío</a>
       {% if session.rol == 'administrador' %}
-      <a href="{{ url_for('admin.logistica') }}" class="btn btn-secondary btn-sm">
-        <i class="fa-solid fa-truck-fast"></i> Despacho y Flota
-      </a>
+      <a href="{{ url_for('admin.logistica') }}">Despacho y flota</a>
       {% endif %}
-      <a href="{{ url_for('admin.retornos') }}" class="btn btn-secondary btn-sm">
-        <i class="fa-solid fa-warehouse"></i> Devoluciones en central
-      </a>
-    </div>
-  </div>
-</div>
-
-{% if metricas is none %}
-<div class="alert alert-warning" role="status">
-  <i class="fa-solid fa-triangle-exclamation"></i>
-  <span>No se pudieron cargar los indicadores operativos en este momento. Actualizá la página para reintentar.</span>
-</div>
-{% else %}
-
-<!-- 1. PENDIENTES QUE REQUIEREN ACCIÓN -->
-<section class="section-pendientes" aria-labelledby="heading-pendientes">
-  <div class="pendientes-header">
-    <div class="pendientes-heading-wrap">
-      <h2 id="heading-pendientes"><i class="fa-solid fa-bell-concierge" style="color:var(--fp-blue-primary); margin-right:6px;"></i> Atención requerida para iniciar la jornada</h2>
-      {% if pendientes.total > 0 %}
-      <span class="pendientes-badge-count">
-        <i class="fa-solid fa-circle-exclamation"></i> {{ pendientes.total }} pendiente{{ 's' if pendientes.total != 1 else '' }}
-      </span>
-      {% endif %}
-    </div>
-    <span class="pendientes-header-hint">
-      {% if pendientes.total > 0 %}
-      Seleccioná cualquier pendiente para consultar las guías involucradas o ejecutar la acción directa.
-      {% else %}
-      Operación sincronizada en tiempo real.
-      {% endif %}
-    </span>
-  </div>
-
-  {% if pendientes.total == 0 %}
-  <div class="pendientes-empty-state" role="status">
-    <div class="pendientes-empty-icon"><i class="fa-solid fa-circle-check"></i></div>
-    <div class="pendientes-empty-text">
-      <strong>Sin pendientes urgentes: la recepción, los despachos y las devoluciones se encuentran al día.</strong>
-      <span>Todos los envíos registrados cuentan con hoja asignada o resolución confirmada; no hay retornos demorados ni retiros vencidos en central.</span>
-    </div>
-  </div>
+      <a href="{{ url_for('admin.retornos') }}">Devoluciones en central</a>
+    </nav>
+  </header>
+  <section class="mesa" aria-labelledby="titulo-pendientes">
+    <h2 id="titulo-pendientes">Pendientes de atención</h2>
+    {% if pendientes.error %}
+    <p role="alert">No se pudieron cargar los pendientes. Actualizá la página para reintentar.</p>
+    {% elif not pendientes.total %}
+    <p>Sin pendientes de despacho, reprogramación o devolución en central.</p>
+    {% else %}
+    <ul class="cola">
+      {% for cantidad, titulo, filtro in [
+        (pendientes.ingreso_central, 'Retornos pendientes de ingreso físico a central', 'ingreso_central'),
+        (pendientes.retiro_remitente, 'En central para retiro del remitente', 'retiro_remitente'),
+        (pendientes.reprogramacion, 'Visitas para reprogramar', 'reprogramacion'),
+        (pendientes.listos_despacho, 'Envíos listos para despachar', 'despacho')] if cantidad %}
+      <li><a href="{{ url_for('admin.dashboard', pendiente=filtro, _anchor='envios') }}"><strong>{{ cantidad }}</strong> {{ titulo }} <span aria-hidden="true">→</span></a>
+        {% if filtro == 'retiro_remitente' and pendientes.retiro_vencido %}
+        <a class="vencidos" href="{{ url_for('admin.dashboard', pendiente='retiro_vencido', _anchor='envios') }}">Fuera de plazo · {{ pendientes.retiro_vencido }}</a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  {% if metricas is none %}
+  <p class="alert alert-warning" role="alert">No se pudieron cargar los indicadores operativos. Actualizá la página para reintentar.</p>
   {% else %}
-  <div class="pendientes-list-compact">
-    <!-- Listos para despachar -->
-    <div class="pendiente-item {% if pendientes.listos_despacho > 0 %}is-has-count{% endif %}">
-      <div class="pendiente-qty">{{ pendientes.listos_despacho }}</div>
-      <div class="pendiente-info">
-        <div class="pendiente-title">Listos para despachar</div>
-        <div class="pendiente-desc">Envíos en mostrador o planta sin hoja de ruta asignada</div>
-      </div>
-      <div class="pendiente-actions">
-        <a href="{{ url_for('admin.dashboard', pendiente='despacho') }}" class="btn-link-action" title="Filtrar envíos listos para despacho">
-          Ver envíos <i class="fa-solid fa-arrow-right"></i>
-        </a>
-        {% if session.rol == 'administrador' and pendientes.listos_despacho > 0 %}
-        <a href="{{ url_for('admin.logistica') }}" class="btn-pill-action" title="Crear hoja de ruta en Logística">
-          <i class="fa-solid fa-truck-ramp-box"></i> Despachar
-        </a>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- Visitas que admiten reprogramación -->
-    <div class="pendiente-item {% if pendientes.reprogramacion > 0 %}is-warn{% endif %}">
-      <div class="pendiente-qty">{{ pendientes.reprogramacion }}</div>
-      <div class="pendiente-info">
-        <div class="pendiente-title">Visitas para reprogramar</div>
-        <div class="pendiente-desc">1 o 2 intentos domiciliarios fallidos y hoja cerrada; admiten nuevo despacho</div>
-      </div>
-      <div class="pendiente-actions">
-        <a href="{{ url_for('admin.dashboard', pendiente='reprogramacion') }}" class="btn-link-action" title="Filtrar visitas con posibilidad de reintento">
-          Ver visitas <i class="fa-solid fa-arrow-right"></i>
-        </a>
-        {% if session.rol == 'administrador' and pendientes.reprogramacion > 0 %}
-        <a href="{{ url_for('admin.logistica') }}" class="btn-pill-action" title="Asignar reintento en nueva hoja">
-          <i class="fa-solid fa-calendar-check"></i> Reasignar
-        </a>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- Paquetes pendientes de ingreso físico a central -->
-    <div class="pendiente-item {% if pendientes.ingreso_central > 0 %}is-alert{% endif %}">
-      <div class="pendiente-qty">{{ pendientes.ingreso_central }}</div>
-      <div class="pendiente-info">
-        <div class="pendiente-title">Llegada pendiente a central</div>
-        <div class="pendiente-desc">Retornos a Formosa Capital (tras 3 fallos o cancelación) esperando ingreso a depósito</div>
-      </div>
-      <div class="pendiente-actions">
-        <a href="{{ url_for('admin.dashboard', pendiente='ingreso_central') }}" class="btn-link-action" title="Filtrar encomiendas en retorno">
-          Ver listado <i class="fa-solid fa-arrow-right"></i>
-        </a>
-        <a href="{{ url_for('admin.retornos') }}" class="btn-pill-action" title="Confirmar recepción física en Almacén Central">
-          <i class="fa-solid fa-inbox"></i> Confirmar ingreso
-        </a>
-      </div>
-    </div>
-
-    <!-- Disponibles para retiro por remitente -->
-    <div class="pendiente-item {% if pendientes.retiro_vencido > 0 %}is-alert{% elif pendientes.retiro_remitente > 0 %}is-warn{% endif %}">
-      <div class="pendiente-qty">{{ pendientes.retiro_remitente }}</div>
-      <div class="pendiente-info">
-        <div class="pendiente-title">
-          Disponibles para el remitente
-          {% if pendientes.retiro_vencido > 0 %}
-          <span class="badge-vencido-tag"><i class="fa-solid fa-clock"></i> {{ pendientes.retiro_vencido }} plazo vencido</span>
-          {% endif %}
-        </div>
-        <div class="pendiente-desc">En resguardo en central esperando retiro presencial con DNI y firma</div>
-      </div>
-      <div class="pendiente-actions">
-        {% if pendientes.retiro_vencido > 0 %}
-        <a href="{{ url_for('admin.dashboard', pendiente='retiro_vencido') }}" class="btn-link-action link-danger" title="Filtrar encomiendas con plazo de 15 días vencido">
-          Ver vencidos <i class="fa-solid fa-arrow-right"></i>
-        </a>
-        {% else %}
-        <a href="{{ url_for('admin.dashboard', pendiente='retiro_remitente') }}" class="btn-link-action" title="Filtrar encomiendas disponibles para retiro">
-          Ver retiros <i class="fa-solid fa-arrow-right"></i>
-        </a>
-        {% endif %}
-        <a href="{{ url_for('admin.retornos') }}" class="btn-pill-action" title="Registrar retiro con firma en mostrador">
-          <i class="fa-solid fa-signature"></i> Gestionar en central
-        </a>
-      </div>
-    </div>
+  <div class="balance">
+    <section>
+      <h2>Envíos y reparto</h2>
+      <dl class="cifras">
+        <div><dt>Registrados hoy</dt><dd>{{ metricas.total_envios }}</dd></div>
+        <div><dt>Entregados hoy</dt><dd>{{ metricas.entregados }}</dd></div>
+      </dl>
+      <h3>Situación actual</h3>
+      <dl class="renglones">
+        {% for etiqueta, valor in [('Asignados por salir', metricas.en_preparacion), ('En ruta', metricas.en_ruta), ('En planta', metricas.en_planta), ('Incidencias activas', metricas.fallidos)] %}
+        <div><dt>{{ etiqueta }}</dt><dd>{{ valor }}</dd></div>
+        {% endfor %}
+      </dl>
+      <details><summary>Cómo leer estos estados</summary><p>Una asignación reserva el envío hasta la salida. Las incidencias incluyen visitas fallidas, retornos pendientes y siniestros. El ingreso físico a central requiere confirmación.</p></details>
+    </section>
+    <section>
+      <header><h2>Caja del día</h2><a href="{{ url_for('recepcion.caja') }}">Ver turno</a></header>
+      <dl class="cifras"><div><dt>Dinero cobrado hoy</dt><dd>{{ metricas.total_cobrado_hoy | pesos_ars }}</dd></div></dl>
+      <h3>Detalle de la jornada</h3>
+      <dl class="renglones">
+        <div><dt>Efectivo</dt><dd>{{ metricas.efectivo_hoy | pesos_ars }}</dd></div>
+        <div><dt>Medios digitales</dt><dd>{{ metricas.digital_hoy | pesos_ars }}</dd></div>
+        <div><dt>Cantidad de cobros</dt><dd>{{ metricas.pagos_hoy }}</dd></div>
+        <div><dt>Valor de envíos registrados hoy</dt><dd>{{ metricas.facturado_total | pesos_ars }}</dd></div>
+      </dl>
+    </section>
   </div>
   {% endif %}
-</section>
 
-<!-- 2. OPERACIÓN DE REPARTO Y 3. CAJA DEL DÍA -->
-<div class="ops-and-cash-layout">
-  <!-- Operación de Reparto -->
-  <section class="ops-card" aria-labelledby="heading-reparto">
-    <div class="card-subheading" id="heading-reparto">
-      <i class="fa-solid fa-route" style="color:var(--fp-blue-primary);"></i>
-      Operación de reparto
-    </div>
-
-    <div class="reparto-groups">
-      <!-- Lo que sucedió hoy -->
-      <div class="reparto-block">
-        <div class="reparto-block-label">
-          <i class="fa-regular fa-calendar-check" style="color:#0284c7;"></i>
-          Jornada de hoy (acumulado)
-        </div>
-        <div class="reparto-metric-row">
-          <div class="reparto-metric-box">
-            <div class="reparto-metric-val">{{ metricas.total_envios }}</div>
-            <div class="reparto-metric-lbl">Registrados hoy</div>
-          </div>
-          <div class="reparto-metric-box highlight-ok">
-            <div class="reparto-metric-val">{{ metricas.entregados }}</div>
-            <div class="reparto-metric-lbl">Entregados hoy</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lo que ocurre ahora en tiempo real -->
-      <div class="reparto-block">
-        <div class="reparto-block-label">
-          <i class="fa-solid fa-satellite-dish" style="color:#22c55e;"></i>
-          Situación en tiempo real (ahora)
-        </div>
-        <div class="reparto-metric-row">
-          <div class="reparto-metric-box highlight-transit">
-            <div class="reparto-metric-val">{{ metricas.en_ruta }}</div>
-            <div class="reparto-metric-lbl">Actualmente en ruta</div>
-          </div>
-          <div class="reparto-metric-box">
-            <div class="reparto-metric-val">{{ metricas.en_preparacion }}</div>
-            <div class="reparto-metric-lbl">Asignados por salir</div>
-          </div>
-          <div class="reparto-metric-box">
-            <div class="reparto-metric-val">{{ metricas.en_planta }}</div>
-            <div class="reparto-metric-lbl">En planta / centro</div>
-          </div>
-          <div class="reparto-metric-box highlight-alert">
-            <div class="reparto-metric-val">{{ metricas.fallidos }}</div>
-            <div class="reparto-metric-lbl">Incidencias activas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="reparto-explanatory-note">
-      <i class="fa-solid fa-circle-info" style="color:#64748b; margin-top:2px;"></i>
-      <span>Un envío asignado a una hoja que todavía no arrancó ya no está disponible para otro despacho. Un intento fallido tampoco significa que el paquete esté físicamente en central.</span>
-    </div>
-  </section>
-
-  <!-- Caja del Día -->
-  <section class="cash-card" aria-labelledby="heading-caja">
-    <div class="cash-card-header">
-      <div class="card-subheading" id="heading-caja" style="margin-bottom:0;">
-        <i class="fa-solid fa-cash-register" style="color:var(--fp-blue-primary);"></i>
-        Caja del día
-      </div>
-      <a href="{{ url_for('recepcion.caja') }}" class="btn-link-action" style="padding:4px 8px; font-size:11px;">
-        <i class="fa-solid fa-receipt"></i> Turno de caja
-      </a>
-    </div>
-
-    <div class="cash-main-metrics">
-      <!-- Dinero efectivamente cobrado -->
-      <div class="cash-big-box collected">
-        <div class="cash-box-kicker">Dinero efectivamente cobrado hoy</div>
-        <div class="cash-big-amount">{{ metricas.total_cobrado_hoy | pesos_ars }}</div>
-        <div class="cash-big-sub">Efectivo recibido y pagos digitales confirmados en caja</div>
-      </div>
-
-      <!-- Valor de envíos registrados -->
-      <div class="cash-big-box registered">
-        <div class="cash-box-kicker">Valor de envíos registrados hoy</div>
-        <div class="cash-big-amount">{{ metricas.facturado_total | pesos_ars }}</div>
-        <div class="cash-big-sub">Monto total tarifado correspondiente a las guías ingresadas hoy</div>
-      </div>
-    </div>
-
-    <!-- Desglose de Medios y Cantidad de Cobros -->
-    <div class="cash-breakdown-list">
-      <div class="cash-breakdown-row">
-        <span><i class="fa-solid fa-money-bill-wave" style="color:#28624d;"></i> Cobrado en efectivo:</span>
-        <strong>{{ metricas.efectivo_hoy | pesos_ars }}</strong>
-      </div>
-      <div class="cash-breakdown-row">
-        <span><i class="fa-solid fa-mobile-screen-button" style="color:#0284c7;"></i> Cobrado por medios digitales:</span>
-        <strong>{{ metricas.digital_hoy | pesos_ars }}</strong>
-      </div>
-      <div class="cash-breakdown-row">
-        <span><i class="fa-solid fa-receipt" style="color:#64748b;"></i> Cantidad de cobros realizados hoy:</span>
-        <strong>{{ metricas.pagos_hoy }} operaci{{ 'ones' if metricas.pagos_hoy != 1 else 'ón' }}</strong>
-      </div>
-    </div>
-  </section>
-</div>
-
-{% endif %}
 
 <!-- Alertas Operativas y Exportación de Reportes -->
 <div class="card" style="margin-bottom:20px;">
   <div class="card-header" style="flex-wrap:wrap; gap:12px;">
     <span class="card-title"><i class="fa-solid fa-bell"></i> Alertas Operativas</span>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      <form method="get" action="{{ url_for('admin.descargar_reporte_envios') }}" style="display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <label style="font-size:12px; color:var(--text-muted);">Desde</label>
-        <input type="date" name="desde" class="form-control" style="max-width:140px; padding:6px 8px; font-size:12px;">
-        <label style="font-size:12px; color:var(--text-muted);">Hasta</label>
-        <input type="date" name="hasta" class="form-control" style="max-width:140px; padding:6px 8px; font-size:12px;">
-        <label style="font-size:12px; color:var(--text-muted);">Estado</label>
-        <select name="estado" class="form-control" style="max-width:130px; padding:6px 8px; font-size:12px;">
-          <option value="">Todos</option>
-          <option value="recibido">Recibido</option>
-          <option value="en_planta">En planta</option>
-          <option value="en_ruta">En ruta</option>
-          <option value="entregado">Entregado</option>
-          <option value="fallido">Fallido</option>
-          <option value="devolucion">Devolución</option>
-        </select>
-        <button type="submit" class="btn btn-secondary btn-sm">
-          <i class="fa-solid fa-file-csv"></i> Exportar CSV
-        </button>
-      </form>
-      {% if alertas %}
+      {% if alertas and session.rol == 'administrador' %}
       <form method="post" action="{{ url_for('admin.enviar_alertas_email') }}" style="display:inline;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <button type="submit" class="btn btn-primary btn-sm">
@@ -328,7 +110,7 @@
 </div>
 
 <!-- Gráfica Histórica de Actividad (Últimos 7 días) -->
-<div class="dashboard-columns" style="margin-bottom:20px;">
+<div id="actividad" class="dashboard-columns" style="margin-bottom:20px;">
   <div class="card">
     <div class="card-header">
       <div>
@@ -336,8 +118,8 @@
         <p class="activity-caption">{{ actividad.con_movimiento|length }} de {{ actividad.dias|length }} días con movimiento · Registros, entregas e incidencias</p>
       </div>
       <nav class="activity-switch" aria-label="Días de actividad">
-        <a class="btn btn-sm {{ 'btn-secondary' if mostrar_todos else 'btn-primary' }}" href="{{ url_for('admin.dashboard', actividad='con_movimiento', **filtros) }}" {{ 'aria-current=page' if not mostrar_todos else '' }}>Con movimiento</a>
-        <a class="btn btn-sm {{ 'btn-primary' if mostrar_todos else 'btn-secondary' }}" href="{{ url_for('admin.dashboard', actividad='todos', **filtros) }}" {{ 'aria-current=page' if mostrar_todos else '' }}>Ver los 7 días</a>
+        <a class="btn btn-sm {{ 'btn-secondary' if mostrar_todos else 'btn-primary' }}" href="{{ url_for('admin.dashboard', actividad='con_movimiento', _anchor='actividad', **filtros) }}" {{ 'aria-current=page' if not mostrar_todos else '' }}>Con movimiento</a>
+        <a class="btn btn-sm {{ 'btn-primary' if mostrar_todos else 'btn-secondary' }}" href="{{ url_for('admin.dashboard', actividad='todos', _anchor='actividad', **filtros) }}" {{ 'aria-current=page' if mostrar_todos else '' }}>Ver los 7 días</a>
       </nav>
     </div>
     {% if historico %}
@@ -352,7 +134,7 @@
       </div>
       {% endfor %}
     </div>
-    <div class="table-responsive" style="margin-top:16px;">
+    <div tabindex="0" class="table-responsive" style="margin-top:16px;">
       <table>
         <thead>
           <tr>
@@ -360,7 +142,7 @@
             <th>Nuevos Registros</th>
             <th>Entregas</th>
             <th>Incidencias</th>
-            <th>Facturación</th>
+            <th>Valor de envíos</th>
           </tr>
         </thead>
         <tbody>
@@ -381,28 +163,14 @@
       <span class="activity-empty-mark" aria-hidden="true">—</span>
       <h3>Sin movimientos en los últimos siete días</h3>
       <p>Cuando se registren envíos, entregas o incidencias, aparecerán acá.</p>
-      <a class="btn btn-secondary btn-sm" href="{{ url_for('admin.dashboard', actividad='todos', **filtros) }}">Ver el período completo</a>
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('admin.dashboard', actividad='todos', _anchor='actividad', **filtros) }}">Ver el período completo</a>
     </div>
     {% endif %}
   </div>
 </div>
 
-<!-- 4. GESTIÓN Y SEGUIMIENTO DE ENVÍOS -->
-<div class="card">
-  <div class="card-header" style="flex-wrap:wrap; gap:12px;">
-    <div>
-      <span class="card-title"><i class="fa-solid fa-boxes-packing"></i> Gestión y Seguimiento de Envíos</span>
-      <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
-        Visualizá, buscá y actualizá el estado de pedidos recientes y antiguos.
-      </div>
-    </div>
-    <div style="display:flex; gap:8px;">
-      <a href="{{ url_for('recepcion.nuevo_envio') }}" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-plus"></i> Nuevo Envío
-      </a>
-    </div>
-  </div>
-
+<section class="card" id="envios" aria-labelledby="titulo-envios">
+  <header class="card-header"><h2 id="titulo-envios">Registro de envíos</h2></header>
   <!-- Banner si hay filtro aplicado desde pendientes -->
   {% if filtro_pendiente_activo %}
   <div class="active-filter-banner" role="status">
@@ -422,15 +190,16 @@
   {% endif %}
 
   <!-- Barra de Filtros y Búsqueda -->
-  <form method="GET" action="{{ url_for('admin.dashboard') }}" style="margin-bottom:16px; padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+  <form method="GET" action="{{ url_for('admin.dashboard', _anchor='envios') }}" style="margin-bottom:16px; padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    {% if mostrar_todos %}<input type="hidden" name="actividad" value="todos">{% endif %}
     {% if filtros.pendiente %}
     <input type="hidden" name="pendiente" value="{{ filtros.pendiente }}">
     {% endif %}
     <div style="flex:1; min-width:220px;">
-      <input type="text" name="q" value="{{ filtros.q or '' }}" class="form-control" placeholder="Buscar por guía (ej. FPX-...), cliente o destino..." style="padding:8px 12px; font-size:13px;">
+      <input type="text" aria-label="Buscar por guía, cliente o destino" name="q" value="{{ filtros.q or '' }}" class="form-control" placeholder="Buscar por guía (ej. FPX-...), cliente o destino..." style="padding:8px 12px; font-size:13px;">
     </div>
     <div style="min-width:160px;">
-      <select name="estado" class="form-control" style="padding:8px 12px; font-size:13px;">
+      <select aria-label="Estado del envío" name="estado" class="form-control" style="padding:8px 12px; font-size:13px;">
         <option value="">Estado: Todos</option>
         {% for est in estados_disponibles %}
         <option value="{{ est.codigo }}" {% if filtros.estado == est.codigo %}selected{% endif %}>{{ est.nombre }}</option>
@@ -438,7 +207,7 @@
       </select>
     </div>
     <div style="min-width:120px;">
-      <select name="limite" class="form-control" style="padding:8px 12px; font-size:13px;">
+      <select aria-label="Cantidad de envíos" name="limite" class="form-control" style="padding:8px 12px; font-size:13px;">
         <option value="10" {% if filtros.limite == '10' %}selected{% endif %}>Mostrar: 10</option>
         <option value="25" {% if filtros.limite == '25' or not filtros.limite %}selected{% endif %}>Mostrar: 25</option>
         <option value="50" {% if filtros.limite == '50' %}selected{% endif %}>Mostrar: 50</option>
@@ -457,7 +226,7 @@
   </form>
 
   {% if ultimos_envios %}
-  <div class="table-responsive">
+  <div tabindex="0" class="table-responsive">
     <table>
       <thead>
         <tr>
@@ -475,20 +244,20 @@
       <tbody>
         {% for e in ultimos_envios %}
         <tr>
-          <td>
+          <td data-label="Guía">
             <div class="guia-cell-wrap">
               <a href="{{ url_for('admin.tracking_publico', guia=e.nro_guia) }}" target="_blank" class="guia-code" title="Abrir seguimiento público en nueva pestaña">
                 <i class="fa-solid fa-barcode"></i> {{ e.nro_guia }}
               </a>
               <button type="button" class="btn-copy-guia" onclick="copiarGuia('{{ e.nro_guia }}', this)" title="Copiar número de guía" aria-label="Copiar guía {{ e.nro_guia }}">
-                <i class="fa-regular fa-copy"></i>
+                <i class="fa-regular fa-copy"></i> Copiar
               </button>
             </div>
           </td>
-          <td>{{ e.remitente }}</td>
-          <td>{{ e.destinatario }}</td>
-          <td><i class="fa-solid fa-location-dot" style="color:#94a3b8; font-size:11px; margin-right:3px;"></i> {{ e.localidad_destino }}</td>
-          <td>
+          <td data-label="Remitente">{{ e.remitente }}</td>
+          <td data-label="Destinatario">{{ e.destinatario }}</td>
+          <td data-label="Destino"><i class="fa-solid fa-location-dot" style="color:#94a3b8; font-size:11px; margin-right:3px;"></i> {{ e.localidad_destino }}</td>
+          <td data-label="Estado">
             <span class="badge badge-{{ e.estado_actual }}">{{ e.estado_actual|replace('_', ' ') }}</span>
             {% if e.retiro_vencido %}
             <span class="badge-vencido-tag" style="margin-top:3px; display:inline-block;" title="Plazo de 15 días hábiles superado">
@@ -496,14 +265,14 @@
             </span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Modalidad">
             <span class="badge badge-{{ e.modalidad_pago }}">{{ e.modalidad_pago }}</span>
           </td>
-          <td><strong class="amount-ars">{{ e.costo_total | pesos_ars }}</strong></td>
-          <td style="color:var(--text-muted); font-size:12px;" class="tabular-nums">
+          <td data-label="Importe"><strong class="amount-ars">{{ e.costo_total | pesos_ars }}</strong></td>
+          <td data-label="Registro" style="color:var(--text-muted); font-size:12px;" class="tabular-nums">
             {{ e.fecha_creacion.strftime('%d/%m/%Y %H:%M') if e.fecha_creacion.strftime is defined else e.fecha_creacion }}
           </td>
-          <td style="text-align:center; white-space:nowrap;">
+          <td data-label="Acciones" style="text-align:center; white-space:nowrap;">
             <div style="display:inline-flex; gap:6px;">
               <!-- Botón Actualizar Estado -->
               <button type="button" class="btn btn-secondary btn-sm" 
@@ -515,12 +284,12 @@
 
               <!-- Botón Tracking -->
               <a href="{{ url_for('admin.tracking_publico', guia=e.nro_guia) }}" target="_blank" class="btn btn-sm" style="background:#e0f2fe; color:#0369a1; padding:4px 8px; font-size:12px;" title="Ver Tracking Público">
-                <i class="fa-solid fa-location-dot"></i>
+                Seguimiento
               </a>
 
               <!-- Botón Comprobante -->
               <a href="{{ url_for('recepcion.comprobante', nro_guia=e.nro_guia) }}" target="_blank" class="btn btn-sm" style="background:#f1f5f9; color:#475569; padding:4px 8px; font-size:12px;" title="Ver Comprobante">
-                <i class="fa-solid fa-print"></i>
+                Comprobante
               </a>
 
               <!-- Botón Cobro si está pendiente -->
@@ -545,17 +314,35 @@
     </div>
   </div>
   {% endif %}
-</div>
+</section>
+<details class="mesa exportacion"><summary>Exportar reporte de envíos</summary>
+      <form method="get" action="{{ url_for('admin.descargar_reporte_envios') }}" style="display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label for="csv-desde" style="font-size:12px; color:var(--text-muted);">Desde</label>
+        <input type="date" id="csv-desde" name="desde" class="form-control" style="max-width:140px; padding:6px 8px; font-size:12px;">
+        <label for="csv-hasta" style="font-size:12px; color:var(--text-muted);">Hasta</label>
+        <input type="date" id="csv-hasta" name="hasta" class="form-control" style="max-width:140px; padding:6px 8px; font-size:12px;">
+        <label for="csv-estado" style="font-size:12px; color:var(--text-muted);">Estado</label>
+        <select id="csv-estado" name="estado" class="form-control" style="max-width:130px; padding:6px 8px; font-size:12px;">
+          <option value="">Todos</option>
+          {% for estado in estados_disponibles %}
+          <option value="{{ estado.codigo }}">{{ estado.nombre }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">
+          <i class="fa-solid fa-file-csv"></i> Exportar CSV
+        </button>
+      </form>
+</details>
+</main>
 
 <!-- Modal para Actualizar Estado Operativo de Envíos -->
-<div id="modalActualizarEstado" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,25,47,0.7); z-index:1100; backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:16px;">
-  <div style="background:#ffffff; width:100%; max-width:480px; border-radius:10px; box-shadow:0 20px 50px rgba(0,0,0,0.3); overflow:hidden; border:1px solid #dce2e9;">
+<dialog id="modalActualizarEstado" aria-labelledby="titulo-actualizar">
     <div style="padding:16px 20px; background:#004481; color:#ffffff; display:flex; align-items:center; justify-content:space-between;">
-      <h3 style="margin:0; font-size:16px; font-weight:700;">
+      <h3 id="titulo-actualizar" style="margin:0; font-size:16px; font-weight:700;">
         <i class="fa-solid fa-boxes-packing" style="margin-right:8px;"></i> Actualizar Estado Operativo
       </h3>
       <button type="button" onclick="cerrarModalActualizar()" style="background:none; border:none; color:#ffffff; font-size:18px; cursor:pointer;" aria-label="Cerrar ventana">
-        <i class="fa-solid fa-xmark"></i>
+        ×
       </button>
     </div>
 
@@ -567,7 +354,7 @@
       </div>
 
       <div class="form-group" style="margin-bottom:16px;">
-        <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Nuevo Estado Operativo</label>
+        <label for="modalNuevoEstado" style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Nuevo Estado Operativo</label>
         <select name="nuevo_estado" id="modalNuevoEstado" class="form-control" required style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:14px;">
           <option value="en_planta">En Planta (Centro de distribución / Clasificación)</option>
           {% if session.rol == 'administrador' %}
@@ -579,12 +366,12 @@
       </div>
 
       <div class="form-group" style="margin-bottom:16px;">
-        <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Ubicación del Movimiento</label>
+        <label for="modalUbicacion" style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Ubicación del Movimiento</label>
         <input type="text" name="ubicacion" maxlength="100" id="modalUbicacion" class="form-control" value="Planta Central FormoPack" placeholder="Ej: Sucursal Central, Almacén Formosa, etc." style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:14px;">
       </div>
 
       <div class="form-group" style="margin-bottom:20px;">
-        <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Observación / Motivo</label>
+        <label for="modalObservacion" style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:#334155; margin-bottom:6px;">Observación / Motivo</label>
         <textarea name="observacion" maxlength="1000" id="modalObservacion" rows="3" class="form-control" placeholder="Detalle informativo del cambio (ej: recepción en depósito o revisión de una incidencia)" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:13px;"></textarea>
       </div>
 
@@ -597,8 +384,7 @@
         </button>
       </div>
     </form>
-  </div>
-</div>
+</dialog>
 
 <script>
 function abrirModalActualizar(idEnvio, nroGuia, estadoActual) {
@@ -617,12 +403,12 @@ function abrirModalActualizar(idEnvio, nroGuia, estadoActual) {
     selectEstado.value = estadoActual;
   }
 
-  modal.style.display = 'flex';
+  modal.showModal();
 }
 
 function cerrarModalActualizar() {
   const modal = document.getElementById('modalActualizarEstado');
-  modal.style.display = 'none';
+  modal.close();
 }
 
 function copiarGuia(texto, btn) {
@@ -648,28 +434,8 @@ function copiarGuia(texto, btn) {
   });
 }
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    cerrarModalActualizar();
-  }
-});
-
-// Reloj operativo en vivo de despacho
-(function iniciarReloj() {
-  function tick() {
-    const ahora = new Date();
-    const tiempoEl = document.getElementById('dashboardLiveClockTime');
-    const fechaEl = document.getElementById('dashboardLiveClockDate');
-    if (tiempoEl) {
-      tiempoEl.textContent = ahora.toLocaleTimeString('es-AR', { hour12: false }) + ' hs';
-    }
-    if (fechaEl) {
-      let f = ahora.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-      fechaEl.textContent = f.charAt(0).toUpperCase() + f.slice(1);
-    }
-  }
-  tick();
-  setInterval(tick, 1000);
-})();
+document.getElementById('fecha-jornada').textContent = new Intl.DateTimeFormat('es-AR', {
+  dateStyle: 'full', timeZone: 'America/Argentina/Buenos_Aires'
+}).format(new Date());
 </script>
 {% endblock %}
