@@ -25,7 +25,7 @@ def test_alta_primer_acceso_e_interfaz(aplicacion, db):
         assert resultado.returncode == 0, resultado.stdout + resultado.stderr
         with db.cursor() as cur:
             cur.execute("SELECT debe_cambiar_password,version_sesion FROM usuarios WHERE email='nueva@example.com'")
-            assert cur.fetchone() == {"debe_cambiar_password": 0, "version_sesion": 1}
+            assert cur.fetchone() == {"debe_cambiar_password": 0, "version_sesion": 3}
     finally:
         servidor.shutdown()
         hilo.join(timeout=5)

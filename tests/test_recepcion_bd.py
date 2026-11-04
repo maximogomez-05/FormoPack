@@ -31,8 +31,11 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     client, token = cliente(aplicacion)
     datos = formulario()
     datos["csrf_token"] = token
+    datos["solicitud_id"] = "a" * 32
     with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
         respuesta = client.post("/recepcion/nuevo-envio", data=datos)
+        repetida = client.post("/recepcion/nuevo-envio", data=datos)
+    assert repetida.location == respuesta.location
     assert respuesta.status_code == 302 and "/cobrar/" in respuesta.location
     with db.cursor() as cur:
         cur.execute("SELECT es_fragil FROM bultos ORDER BY id_bulto")
@@ -41,12 +44,37 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     assert pagina.status_code == 200
 
 
+def test_alta_concurrente_y_reintento_tras_fallo(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    solicitud = SolicitudRecepcion(formulario())
+    servicio = EnvioController(db)
+    identificador = "b" * 32
+    with patch.object(servicio, "_insertar_envio", side_effect=DatabaseQueryError("fallo de prueba")):
+        with pytest.raises(DatabaseQueryError):
+            servicio.registrar_en_mostrador(solicitud, 2, identificador)
+    with db.cursor() as cur:
+        for tabla in ("clientes", "solicitudes_mostrador", "envios"):
+            cur.execute("SELECT COUNT(*) AS total FROM " + tabla)
+            assert cur.fetchone()["total"] == 0
+
+    barrera = Barrier(2)
+    def enviar(_):
+        barrera.wait(timeout=10)
+        return servicio.registrar_en_mostrador(solicitud, 2, identificador)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async") as correo:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            resultados = list(pool.map(enviar, range(2)))
+        assert resultados[0]["nro_guia"] == resultados[1]["nro_guia"]
+        correo.assert_called_once()
+
+
 @pytest.mark.parametrize("campo,valor", [("dest_nombre", "123456"), ("direccion_destino", "a" * 201), ("valor_declarado", "NaN"), ("id_localidad_destino", "999999"), ("modalidad_pago", "inventada")])
 def test_rechazo_no_crea_clientes_ni_envio(aplicacion, db, campo, valor):
     client, token = cliente(aplicacion)
     datos = formulario()
     datos[campo] = valor
     datos["csrf_token"] = token
+    datos["solicitud_id"] = "a" * 32
     respuesta = client.post("/recepcion/nuevo-envio", data=datos)
     assert respuesta.status_code == 400
     assert "Juan" in respuesta.get_data(as_text=True)

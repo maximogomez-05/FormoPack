@@ -4,6 +4,8 @@ Blueprint: recepcion_bp
 """
 
 import io
+import re
+from uuid import uuid4
 import logging
 import qrcode
 import base64
@@ -198,25 +200,21 @@ def nuevo_envio():
     localidades = _obtener_localidades()
     seguros = _obtener_seguros()
 
+    solicitud_id = request.form.get("solicitud_id", "")
+    identificador_valido = bool(re.fullmatch(r"[0-9a-f]{32}", solicitud_id))
+    contexto = dict(localidades=localidades, seguros=seguros,
+                    solicitud_id=solicitud_id if identificador_valido else uuid4().hex)
+
     if request.method == "POST":
         try:
+            if not identificador_valido:
+                raise ValidationError("formulario", "Revisá los datos y volvé a confirmar el envío")
             solicitud = SolicitudRecepcion(request.form)
-            # Comprobar referencias y cotización antes de crear clientes.
-            envio_ctrl = EnvioController()
-            envio_ctrl.cotizar_envio(solicitud.bultos, solicitud.localidad, solicitud.declarado, solicitud.seguro)
-            cliente_ctrl = ClienteController()
-            remitente = cliente_ctrl.obtener_o_crear(**solicitud.clientes["rem"])
-            destinatario = cliente_ctrl.obtener_o_crear(**solicitud.clientes["dest"])
-            resultado = envio_ctrl.crear_envio(
-                id_remitente=remitente.id_cliente, id_destinatario=destinatario.id_cliente,
-                id_localidad_destino=solicitud.localidad, direccion_destino=solicitud.direccion,
-                bultos_data=solicitud.bultos, modalidad_pago=solicitud.modalidad,
-                valor_declarado=solicitud.declarado, id_seguro=solicitud.seguro)
-
-            flash(
-                f"✅ Envío registrado. Guía: {resultado['nro_guia']} — Total: ${resultado['cotizacion']['costo_total']:.2f}",
-                "success",
-            )
+            resultado = EnvioController().registrar_en_mostrador(solicitud, session["usuario_id"], solicitud_id)
+            if resultado.get("repetida"):
+                flash(f"Este formulario ya registró la guía {resultado['nro_guia']}.", "info")
+            else:
+                flash(f"Envío registrado. Guía: {resultado['nro_guia']} — Total: ${resultado['cotizacion']['costo_total']:.2f}", "success")
             # Redirigir a cobro
             return redirect(url_for(
                 "recepcion.cobrar_envio",
@@ -225,19 +223,18 @@ def nuevo_envio():
 
         except (ValidationError, CotizacionError) as e:
             flash(_mensaje_usuario_error(e, "Los datos del envío no son válidos."), "danger")
-            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 400
+            return render_template("recepcion/nuevo_envio.html", **contexto), 400
         except DuplicateError:
             flash("Otro registro utilizó esos datos. Revisá el cliente antes de reintentar.", "warning")
-            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 409
+            return render_template("recepcion/nuevo_envio.html", **contexto), 409
         except Exception:
             logger.exception("No se pudo registrar el envío")
             flash("No se pudo confirmar el registro. Consultá los envíos antes de reintentar.", "danger")
-            return render_template("recepcion/nuevo_envio.html", localidades=localidades, seguros=seguros), 503
+            return render_template("recepcion/nuevo_envio.html", **contexto), 503
 
     return render_template(
         "recepcion/nuevo_envio.html",
-        localidades=localidades,
-        seguros=seguros,
+        **contexto,
     )
 
 

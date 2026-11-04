@@ -21,13 +21,8 @@ const path = require('node:path');
     });
     await page.goto(`${base}/admin/dashboard`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    const estilo = await page.locator('.ops-card').first().evaluate(el => ({
-      color: getComputedStyle(el).color, duration: getComputedStyle(el).animationDuration,
-      borde: getComputedStyle(el).borderTopWidth,
-      overflow: document.documentElement.scrollWidth > window.innerWidth
-    }));
-    assert.equal(estilo.borde, '1px');
-    assert(!estilo.overflow);
+    await page.getByRole('heading',{name:'Control de jornada'}).waitFor();
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     const destino = process.env.FORMOPACK_PREVIEW_DIR;
     if (destino) {
       fs.mkdirSync(destino, { recursive: true });

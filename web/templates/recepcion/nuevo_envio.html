@@ -4,6 +4,7 @@
 
 {% block content %}
 <form method="POST" id="form-envio">
+<input type="hidden" name="solicitud_id" value="{{ solicitud_id }}">
 <div class="page-grid-2col">
 
   <!-- Columna izquierda -->
@@ -11,29 +12,29 @@
     <div class="card">
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-user"></i> Datos del Remitente</span></div>
       <div class="form-group">
-        <label class="form-label">Documento (DNI/CUIT) (*)</label>
+        <label for="rem_dni" class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="rem_dni" id="rem_dni" class="form-control"
                  placeholder="Solo números, sin puntos" required
                  maxlength="15" minlength="7"
                  pattern="[0-9]{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
-          <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')"><i class="fa-solid fa-magnifying-glass"></i></button>
+          <button type="button" class="btn btn-secondary" onclick="buscarCliente('rem')">Buscar remitente</button>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Razón Social / Nombre Completo (*)</label>
+        <label for="rem_nombre" class="form-label">Razón Social / Nombre Completo (*)</label>
         <input type="text" name="rem_nombre" id="rem_nombre" class="form-control" required
                maxlength="100" minlength="3"
                pattern="[\p{L} .’\x27\-]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
-        <label class="form-label">Teléfono de Contacto (*)</label>
+        <label for="rem_telefono" class="form-label">Teléfono de Contacto (*)</label>
         <input type="tel" name="rem_telefono" id="rem_telefono" class="form-control" required
                maxlength="20" minlength="6"
                placeholder="Ej: 3704 123456">
       </div>
       <div class="form-group">
-        <label class="form-label">Correo Electrónico (Notificaciones)</label>
+        <label for="rem_email" class="form-label">Correo Electrónico (Notificaciones)</label>
         <input type="email" name="rem_email" id="rem_email" class="form-control"
                maxlength="100" placeholder="remitente@ejemplo.com">
       </div>
@@ -42,29 +43,29 @@
     <div class="card">
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-location-dot"></i> Datos del Destinatario</span></div>
       <div class="form-group">
-        <label class="form-label">Documento (DNI/CUIT) (*)</label>
+        <label for="dest_dni" class="form-label">Documento (DNI/CUIT) (*)</label>
         <div style="display:flex;gap:8px;">
           <input type="text" name="dest_dni" id="dest_dni" class="form-control"
                  placeholder="Solo números, sin puntos" required
                  maxlength="15" minlength="7"
                  pattern="[0-9]{7,15}" title="Solo números, entre 7 y 15 dígitos, sin puntos ni guiones">
-          <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')"><i class="fa-solid fa-magnifying-glass"></i></button>
+          <button type="button" class="btn btn-secondary" onclick="buscarCliente('dest')">Buscar destinatario</button>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Razón Social / Nombre Completo (*)</label>
+        <label for="dest_nombre" class="form-label">Razón Social / Nombre Completo (*)</label>
         <input type="text" name="dest_nombre" id="dest_nombre" class="form-control" required
                maxlength="100" minlength="3"
                pattern="[\p{L} .’\x27\-]+" title="Solo letras y espacios">
       </div>
       <div class="form-group">
-        <label class="form-label">Teléfono de Contacto (*)</label>
+        <label for="dest_telefono" class="form-label">Teléfono de Contacto (*)</label>
         <input type="tel" name="dest_telefono" id="dest_telefono" class="form-control" required
                maxlength="20" minlength="6"
                placeholder="Ej: 3704 123456">
       </div>
       <div class="form-group">
-        <label class="form-label">Correo Electrónico (Notificaciones)</label>
+        <label for="dest_email" class="form-label">Correo Electrónico (Notificaciones)</label>
         <input type="email" name="dest_email" id="dest_email" class="form-control"
                maxlength="100" placeholder="destinatario@ejemplo.com">
       </div>
@@ -76,7 +77,7 @@
     <div class="card">
       <div class="card-header"><span class="card-title"><i class="fa-solid fa-truck-fast"></i> Logística y Facturación</span></div>
       <div class="form-group">
-        <label class="form-label">Localidad de Destino (*)</label>
+        <label for="id_localidad_destino" class="form-label">Localidad de Destino (*)</label>
         <select name="id_localidad_destino" id="id_localidad_destino" class="form-control" required onchange="recalcularCotizacionEnVivo();">
           <option value="">Seleccione destino...</option>
           {% for loc in localidades %}
@@ -85,20 +86,20 @@
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Dirección Exacta de Entrega (*)</label>
-        <input type="text" name="direccion_destino" class="form-control" required maxlength="200" minlength="3" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
+        <label for="direccion_destino" class="form-label">Dirección Exacta de Entrega (*)</label>
+        <input type="text" name="direccion_destino" id="direccion_destino" class="form-control" required maxlength="200" minlength="3" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Modalidad de Pago</label>
-          <select name="modalidad_pago" class="form-control">
+          <label for="modalidad_pago" class="form-label">Modalidad de Pago</label>
+          <select name="modalidad_pago" id="modalidad_pago" class="form-control">
             <option value="efectivo">Efectivo (Mostrador)</option>
             <option value="digital">Digital (Transferencia/QR)</option>
             <option value="cuenta_corriente">Cuenta Corriente</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Cobertura (Seguro)</label>
+          <label for="id_seguro" class="form-label">Cobertura (Seguro)</label>
           <select name="id_seguro" id="id_seguro" class="form-control" onchange="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
             <option value="" data-base="0" data-pct="0">Sin seguro adicional (cobertura básica)</option>
             {% for seg in seguros %}
@@ -110,7 +111,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label" id="lbl_valor_declarado">Valor Declarado de la Mercadería ($)</label>
+        <label for="valor_declarado" class="form-label" id="lbl_valor_declarado">Valor Declarado de la Mercadería ($)</label>
         <input type="number" name="valor_declarado" id="valor_declarado" class="form-control" min="0" max="9999999999.99" step="0.01" placeholder="0.00" oninput="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
         <div id="seguro-helper" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:4px;"></div>
       </div>
@@ -119,7 +120,7 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title"><i class="fa-solid fa-boxes-stacked"></i> Detalle de Bultos</span>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="agregarBulto()"><i class="fa-solid fa-plus"></i></button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="agregarBulto()">Agregar bulto</button>
       </div>
 
       <div id="bultos-form">
@@ -130,12 +131,12 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Peso Real (kg) (*)</label>
-              <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
+              <label for="peso_real-1" class="form-label">Peso Real (kg) (*)</label>
+              <input type="number" name="peso_real[]" id="peso_real-1" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
             </div>
             <div class="form-group">
-              <label class="form-label">Peso Vol. (kg)</label>
-              <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
+              <label for="peso_volumetrico-1" class="form-label">Peso Vol. (kg)</label>
+              <input type="number" name="peso_volumetrico[]" id="peso_volumetrico-1" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
@@ -185,17 +186,17 @@ function agregarBulto() {
       <span class="bulto-numero">Bulto ${nb < 10 ? '0'+nb : nb}</span>
       <div>
         <span style="font-size:11px;color:var(--primary);font-weight:600;">Desc. Multibulto 50%</span>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.bulto-item').remove(); recalcularCotizacionEnVivo();" style="margin-left:8px;"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.bulto-item').remove(); recalcularCotizacionEnVivo();" style="margin-left:8px;">Quitar</button>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Peso Real (kg) (*)</label>
-        <input type="number" name="peso_real[]" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
+        <label for="peso_real-${nb}" class="form-label">Peso Real (kg) (*)</label>
+        <input type="number" name="peso_real[]" id="peso_real-${nb}" class="form-control peso-real" min="0.01" max="999999.99" step="0.01" required oninput="recalcularCotizacionEnVivo();">
       </div>
       <div class="form-group">
-        <label class="form-label">Peso Vol. (kg)</label>
-        <input type="number" name="peso_volumetrico[]" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
+        <label for="peso_volumetrico-${nb}" class="form-label">Peso Vol. (kg)</label>
+        <input type="number" name="peso_volumetrico[]" id="peso_volumetrico-${nb}" class="form-control peso-vol" max="999999.99" min="0" step="0.01" value="0" oninput="recalcularCotizacionEnVivo();">
       </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
@@ -245,8 +246,12 @@ function actualizarSeguroInfo() {
 }
 
 let debounceTimer = null;
+let versionCotizacion = 0;
 function recalcularCotizacionEnVivo() {
   document.querySelectorAll('.bulto-item .es-fragil').forEach((input, indice) => { input.value = String(indice); });
+  const version = ++versionCotizacion;
+  document.getElementById('live-loc-badge').style.display = 'none';
+  document.getElementById('live-desglose').textContent = 'Actualizando cotización…';
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
     const locSel = document.getElementById('id_localidad_destino');
@@ -294,6 +299,7 @@ function recalcularCotizacionEnVivo() {
       });
 
       const data = await resp.json();
+      if (version !== versionCotizacion) return;
       if (!resp.ok) {
         document.getElementById('live-desglose').textContent = data.error || 'No se pudo actualizar la cotización.';
         document.getElementById('live-loc-badge').style.display = 'none';
@@ -342,7 +348,9 @@ function recalcularCotizacionEnVivo() {
         locBadge.textContent = `${data.localidad_destino} (${data.distancia_km} km)`;
       }
     } catch (e) {
-      console.error("Error al calcular cotización en vivo:", e);
+      if (version === versionCotizacion) {
+        document.getElementById('live-desglose').textContent = 'No se pudo actualizar la cotización. Revisá la conexión y volvé a calcular.';
+      }
     }
   }, 250);
 }
@@ -353,6 +361,11 @@ async function buscarCliente(prefix) {
   try {
     const resp = await fetch(`/recepcion/clientes/buscar?dni=${encodeURIComponent(dni)}`);
     const data = await resp.json();
+    if (dni !== document.getElementById(`${prefix}_dni`).value.trim()) return;
+    if (!resp.ok) {
+      alert(data.error || 'No se pudo consultar el cliente. Intentá nuevamente.');
+      return;
+    }
     if (data.encontrado) {
       document.getElementById(`${prefix}_nombre`).value = data.cliente.nombre_completo;
       document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
@@ -362,13 +375,13 @@ async function buscarCliente(prefix) {
     } else {
       alert('Cliente no registrado en la base de datos. Los datos ingresados generarán un nuevo registro al confirmar.');
     }
-  } catch(e) { console.error(e); }
+  } catch(e) { alert('No se pudo consultar el cliente. Revisá la conexión y volvé a buscar.'); }
 }
 
 // Pre-llenar campos desde los parámetros enviados por el cotizador
 (function preCargarDesdeCotizador() {
   const p = new URLSearchParams(window.location.search);
-  if (!p.has('id_localidad') && !p.has('peso_real')) {
+  if ({{ (request.method == 'POST')|tojson }} || (!p.has('id_localidad') && !p.has('peso_real'))) {
     actualizarSeguroInfo();
     return;
   }
@@ -399,7 +412,7 @@ async function buscarCliente(prefix) {
   }
 
   // Crear bultos adicionales si hay más de uno
-  for (let i = 1; i < pesosReales.length; i++) {
+  for (let i = 1; i < Math.min(100, pesosReales.length); i++) {
     agregarBulto();
     const nuevosBultos = document.querySelectorAll('.bulto-item');
     const b = nuevosBultos[i];
@@ -418,9 +431,11 @@ async function buscarCliente(prefix) {
 const datosRechazados = {{ request.form.to_dict(flat=False)|tojson }};
 if (Object.keys(datosRechazados).length) {
   for (const [nombre, valores] of Object.entries(datosRechazados)) {
-    if (nombre.endsWith('[]') || nombre === 'csrf_token') continue;
+    if (nombre.endsWith('[]') || nombre === 'csrf_token' || nombre === 'solicitud_id') continue;
     const input = document.getElementsByName(nombre)[0];
-    if (input) input.value = valores[0];
+    if (input && (input.tagName !== 'SELECT' || [...input.options].some(o => o.value === valores[0]))) {
+      input.value = valores[0];
+    }
   }
   const pesos = datosRechazados['peso_real[]'] || [];
   for (let i = document.querySelectorAll('.bulto-item').length; i < Math.min(pesos.length, 100); i++) agregarBulto();

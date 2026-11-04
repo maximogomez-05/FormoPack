@@ -115,102 +115,116 @@ class EnvioController:
         cotizacion = self.cotizar_envio(bultos_data, id_localidad_destino, valor_declarado, id_seguro)
 
         V.decimal(cotizacion["costo_total"], "costo_total", 0.01)
-        conn = None
-        cursor = None
         try:
-            conn = self._db.get_connection()
-            cursor = conn.cursor()
-
-            # Generar número de guía de forma atómica con bloqueo de lectura
-            fecha_hoy = datetime.now().strftime("%Y%m%d")
-            patron = f"FPX-{fecha_hoy}-%"
-            cursor.execute(
-                "SELECT COUNT(*) AS total FROM envios WHERE nro_guia LIKE %s FOR UPDATE",
-                (patron,)
-            )
-            fila_corr = cursor.fetchone()
-            correlativo_actual = fila_corr[0] if fila_corr else 0
-            nro_guia = self._generador.generar_nro_guia(correlativo_actual)
-
-            # Insertar envío
-            sql_envio = """
-                INSERT INTO envios
-                    (nro_guia, id_remitente, id_destinatario, id_localidad_destino,
-                     id_seguro, direccion_destino, valor_declarado, modalidad_pago,
-                     costo_total, estado_actual, es_devolucion)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql_envio, (
-                nro_guia, id_remitente, id_destinatario, id_localidad_destino,
-                id_seguro, direccion_destino.strip(), valor_declarado, modalidad_pago,
-                cotizacion["costo_total"], EstadosEnvio.RECIBIDO, False,
-            ))
-            id_envio = cursor.lastrowid
-
-            # Insertar bultos
-            sql_bulto = """
-                INSERT INTO bultos (id_envio, peso_real, peso_volumetrico, es_fragil)
-                VALUES (%s, %s, %s, %s)
-            """
-            for b in bultos_data:
-                cursor.execute(sql_bulto, (
-                    id_envio,
-                    float(b["peso_real"]),
-                    float(b["peso_volumetrico"]),
-                    bool(b.get("es_fragil", False)),
-                ))
-
-            # Registrar estado inicial en historial
-            sql_historial = """
-                INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(sql_historial, (
-                id_envio, EstadosEnvio.RECIBIDO, "Sucursal Origen", "Envio recibido en mostrador.",
-            ))
-
-            # Generar comprobante interno de recepcion (RF 2.7)
-            nro_comprobante = ComprobanteInterno.generar_nro_comprobante(id_envio, "recepcion")
-            sql_comprobante = """
-                INSERT INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante)
-                VALUES (%s, %s, 'recepcion')
-            """
-            cursor.execute(sql_comprobante, (id_envio, nro_comprobante))
-
-            conn.commit()
-
-            logger.info("Envio creado: guia=%s, costo=$%.2f", nro_guia, cotizacion["costo_total"])
-
-            # Notificación asíncrona (RF 5.4 / RF 6.2)
-            notificar_cambio_estado_async(
-                id_envio,
-                nuevo_estado=EstadosEnvio.RECIBIDO,
-                observacion="Envío recibido en mostrador.",
-            )
-
-            return {
-                "id_envio": id_envio,
-                "nro_guia": nro_guia,
-                "cotizacion": cotizacion,
-                "estado": EstadosEnvio.RECIBIDO,
-            }
-
+            with self._db.cursor(dictionary=False) as cursor:
+                resultado = self._insertar_envio(cursor, id_remitente, id_destinatario, id_localidad_destino,
+                    direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion)
         except (ValidationError, DatabaseQueryError):
-            if conn:
-                conn.rollback()
             raise
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            logger.exception("Error interno al crear envio: %s", e)
-            raise DatabaseQueryError("No se pudo registrar el envío debido a un error en el sistema.") from e
-        finally:
-            if cursor:
-                try: cursor.close()
-                except Exception: pass
-            if conn:
-                try: conn.close()
-                except Exception: pass
+        except Exception as exc:
+            raise DatabaseQueryError("No se pudo registrar el envío.") from exc
+        self._notificar_recepcion(resultado["id_envio"])
+        return resultado
+
+    def registrar_en_mostrador(self, solicitud: SolicitudRecepcion, usuario: int, solicitud_id: str) -> dict:
+        """Confirma una sola guía por formulario y operador, incluso ante reenvíos."""
+        cotizacion = self.cotizar_envio(solicitud.bultos, solicitud.localidad, solicitud.declarado, solicitud.seguro)
+        V.decimal(cotizacion["costo_total"], "costo_total", 0.01)
+        with self._db.cursor(dictionary=False) as cursor:
+            # El bloqueo de esta fila serializa dos envíos del mismo formulario.
+            cursor.execute("""INSERT INTO solicitudes_mostrador (id_usuario, solicitud_id)
+                VALUES (%s, %s) ON DUPLICATE KEY UPDATE solicitud_id=VALUES(solicitud_id)""",
+                (usuario, solicitud_id))
+            cursor.execute("""SELECT e.nro_guia FROM solicitudes_mostrador s
+                JOIN envios e ON e.id_envio=s.id_envio WHERE s.id_usuario=%s AND s.solicitud_id=%s
+                FOR UPDATE""", (usuario, solicitud_id))
+            anterior = cursor.fetchone()
+            if anterior:
+                return {"nro_guia": anterior[0], "repetida": True}
+
+            clientes = []
+            for rol in ("rem", "dest"):
+                datos = solicitud.clientes[rol]
+                cursor.execute("""INSERT INTO clientes (dni, nombre_completo, telefono, email)
+                    VALUES (%s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente)""",
+                    (datos["dni"].strip(), datos["nombre_completo"].strip(),
+                     datos["telefono"].strip(), V.email(datos["email"])))
+                clientes.append(cursor.lastrowid)
+            resultado = self._insertar_envio(cursor, *clientes, solicitud.localidad, solicitud.direccion,
+                solicitud.bultos, solicitud.modalidad, solicitud.declarado, solicitud.seguro, cotizacion)
+            cursor.execute("""UPDATE solicitudes_mostrador SET id_envio=%s
+                WHERE id_usuario=%s AND solicitud_id=%s""", (resultado["id_envio"], usuario, solicitud_id))
+        self._notificar_recepcion(resultado["id_envio"])
+        return resultado
+
+    @staticmethod
+    def _notificar_recepcion(id_envio):
+        try:
+            notificar_cambio_estado_async(id_envio, nuevo_estado=EstadosEnvio.RECIBIDO,
+                observacion="Envío recibido en mostrador.")
+        except Exception:
+            logger.exception("Envío %s confirmado, no se pudo iniciar su notificación", id_envio)
+
+    def _insertar_envio(self, cursor, id_remitente, id_destinatario, id_localidad_destino,
+                        direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion):
+        # Generar número de guía de forma atómica con bloqueo de lectura
+        fecha_hoy = datetime.now().strftime("%Y%m%d")
+        patron = f"FPX-{fecha_hoy}-%"
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM envios WHERE nro_guia LIKE %s FOR UPDATE",
+            (patron,)
+        )
+        fila_corr = cursor.fetchone()
+        correlativo_actual = fila_corr[0] if fila_corr else 0
+        nro_guia = self._generador.generar_nro_guia(correlativo_actual)
+
+        # Insertar envío
+        sql_envio = """
+            INSERT INTO envios
+                (nro_guia, id_remitente, id_destinatario, id_localidad_destino,
+                 id_seguro, direccion_destino, valor_declarado, modalidad_pago,
+                 costo_total, estado_actual, es_devolucion)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(sql_envio, (
+            nro_guia, id_remitente, id_destinatario, id_localidad_destino,
+            id_seguro, direccion_destino.strip(), valor_declarado, modalidad_pago,
+            cotizacion["costo_total"], EstadosEnvio.RECIBIDO, False,
+        ))
+        id_envio = cursor.lastrowid
+
+        # Insertar bultos
+        sql_bulto = """
+            INSERT INTO bultos (id_envio, peso_real, peso_volumetrico, es_fragil)
+            VALUES (%s, %s, %s, %s)
+        """
+        for b in bultos_data:
+            cursor.execute(sql_bulto, (
+                id_envio,
+                float(b["peso_real"]),
+                float(b["peso_volumetrico"]),
+                bool(b.get("es_fragil", False)),
+            ))
+
+        # Registrar estado inicial en historial
+        sql_historial = """
+            INSERT INTO historial_estados (id_envio, estado, ubicacion, observacion)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(sql_historial, (
+            id_envio, EstadosEnvio.RECIBIDO, "Sucursal Origen", "Envio recibido en mostrador.",
+        ))
+
+        # Generar comprobante interno de recepcion (RF 2.7)
+        nro_comprobante = ComprobanteInterno.generar_nro_comprobante(id_envio, "recepcion")
+        sql_comprobante = """
+            INSERT INTO comprobantes_internos (id_envio, nro_comprobante, tipo_comprobante)
+            VALUES (%s, %s, 'recepcion')
+        """
+        cursor.execute(sql_comprobante, (id_envio, nro_comprobante))
+
+        return {"id_envio": id_envio, "nro_guia": nro_guia, "cotizacion": cotizacion, "estado": EstadosEnvio.RECIBIDO}
 
     def registrar_pago(
         self,

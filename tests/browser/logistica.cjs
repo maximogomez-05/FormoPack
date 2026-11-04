@@ -68,9 +68,30 @@ const path = require('node:path');
         }, {times:1});
         await driver.getByRole('button',{name:'Guardar entrega',exact:true}).click();
         await driver.locator('#queue-banner').waitFor();
-        const confirmacion = driver.waitForResponse(r => r.url().endsWith(endpoint) && r.request().method()==='POST');
+        await driver.route('**'+endpoint, r => r.fulfill({status:401, contentType:'application/json',
+          body:JSON.stringify({ok:false,code:'SESSION_EXPIRED'})}), {times:1});
+        await driver.getByRole('button',{name:'Sincronizar',exact:true}).click();
+        await driver.getByRole('link',{name:'Reabrir mi panel'}).waitFor();
+        assert.equal(await driver.evaluate(async () => (await leerPendientes()).length),1);
+        // La primera visita queda para revisión. La segunda debe sincronizarse en el mismo lote.
+        const original = await driver.evaluate(async () => {
+          const [pendiente] = await leerPendientes();
+          const id = pendiente.id;
+          delete pendiente.id;
+          await guardarPendiente(pendiente);
+          return id;
+        });
+        await driver.route('**'+endpoint, r => r.fulfill({status:409, contentType:'application/json',
+          body:JSON.stringify({ok:false,error:'Visita en revisión'})}), {times:1});
+        const confirmacion = driver.waitForResponse(r => r.url().endsWith(endpoint) && r.status() === 200);
         await driver.getByRole('button',{name:'Sincronizar',exact:true}).click();
         assert.deepEqual(await (await confirmacion).json(),{ok:true,repetida:true,id_intento:intentoGuardado});
+        await driver.getByText(/Revisá con mostrador.*Visita en revisión/).waitFor();
+        const pendientes = await driver.evaluate(() => leerPendientes());
+        assert.equal(pendientes.length,1);
+        assert.equal(pendientes[0].id,original);
+        // El operador puede reintentar explícitamente la visita revisada.
+        await driver.getByRole('button',{name:'Sincronizar',exact:true}).click();
         await driver.locator('#queue-banner').waitFor({state:'hidden'});
         await driver.reload();
       } else {

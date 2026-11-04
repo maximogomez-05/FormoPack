@@ -18,11 +18,25 @@ const assert = require('node:assert/strict');
         body: new URLSearchParams({ email: 'recepcion@formopack.com', password: 'recep456', csrf_token: token }) });
     });
     await page.goto(`${base}/recepcion/nuevo-envio`);
+    for (const width of [1440, 820, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Desborde a '+width);
+    }
     for (const [name, value] of Object.entries({ rem_dni: '12345678', rem_nombre: 'José Pérez',
       rem_telefono: '3704123456', dest_dni: '23456789', dest_nombre: 'María Gómez',
       dest_telefono: '3704654321', direccion_destino: 'Av. San Martín 123' })) {
       await page.locator(`[name="${name}"]`).fill(value);
     }
+    await page.route('**/recepcion/clientes/buscar?*', route => route.fulfill({
+      status:503, contentType:'application/json', body:JSON.stringify({encontrado:false,error:'Consulta temporalmente indisponible'})
+    }), {times:1});
+    const mensaje = page.waitForEvent('dialog').then(async dialog => {
+      const texto = dialog.message();
+      await dialog.accept();
+      return texto;
+    });
+    await page.getByRole('button',{name:'Buscar remitente'}).click();
+    assert.equal(await mensaje,'Consulta temporalmente indisponible');
     assert(await page.locator('[name="rem_nombre"]').evaluate(input => input.checkValidity()));
     await page.locator('#id_localidad_destino').selectOption('1');
     await page.locator('.peso-real').fill('10');
