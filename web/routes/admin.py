@@ -22,7 +22,7 @@ from app.services.actividad_operativa import ActividadOperativa
 from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.services.tracking_publico import TrackingPublico
 from app.controllers.liquidacion_controller import LiquidacionController
-from config.settings import EmailConfig
+from config.settings import EmailConfig, EstadosEnvio
 admin_bp = Blueprint("admin", __name__)
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,11 @@ def dashboard():
     ultimos_envios = _obtener_ultimos_envios(filtros=filtros)
     alertas = construir_alertas_operativas(_obtener_envios_para_alertas())
 
+    por_pagina = 8
+    paginas_alertas = max(1, (len(alertas) + por_pagina - 1) // por_pagina)
+    pagina_alertas = min(paginas_alertas, max(1, request.args.get("pagina_alertas", 1, type=int)))
+    inicio_alertas = (pagina_alertas - 1) * por_pagina
+
     info_pendientes = {
         "despacho": {
             "clave": "despacho",
@@ -182,7 +187,8 @@ def dashboard():
         filtro_pendiente_activo=filtro_pendiente_activo,
         historico=historico, actividad=actividad, mostrar_todos=mostrar_todos,
         ultimos_envios=ultimos_envios,
-        alertas=alertas,
+        alertas=alertas[inicio_alertas:inicio_alertas + por_pagina],
+        total_alertas=len(alertas), pagina_alertas=pagina_alertas, paginas_alertas=paginas_alertas,
         filtros=filtros,
         estados_disponibles=estados_disponibles,
     )
@@ -217,6 +223,8 @@ def descargar_reporte_envios():
     fecha_desde = request.args.get("desde", "").strip()
     fecha_hasta = request.args.get("hasta", "").strip()
     estado = request.args.get("estado", "").strip().lower()
+    if estado and estado not in EstadosEnvio.TODOS:
+        return Response("Estado de envío inválido.\n", status=400, mimetype="text/plain")
     try:
         desde = datetime.strptime(fecha_desde, "%Y-%m-%d").date() if fecha_desde else datetime.now().date() - timedelta(days=6)
         hasta = datetime.strptime(fecha_hasta, "%Y-%m-%d").date() if fecha_hasta else datetime.now().date()
@@ -877,7 +885,7 @@ def _obtener_metricas() -> dict | None:
                 COUNT(*) AS total_envios_hoy,
                 COALESCE(SUM(costo_total), 0) AS facturado_hoy
             FROM envios
-            WHERE DATE(fecha_creacion) = CURDATE()
+            WHERE fecha_creacion >= CURDATE() AND fecha_creacion < CURDATE() + INTERVAL 1 DAY
         """)
         m_hoy = cursor.fetchone() or {}
 
@@ -897,19 +905,10 @@ def _obtener_metricas() -> dict | None:
         cursor.execute("""
             SELECT COUNT(DISTINCT id_envio) AS entregados_hoy
             FROM historial_estados
-            WHERE estado = 'entregado' AND DATE(fecha_hora) = CURDATE()
+            WHERE estado = 'entregado' AND fecha_hora >= CURDATE() AND fecha_hora < CURDATE() + INTERVAL 1 DAY
         """)
         r_ent = cursor.fetchone() or {}
         entregados_hoy = int(r_ent.get("entregados_hoy", 0))
-
-        if entregados_hoy == 0:
-            cursor.execute("""
-                SELECT COUNT(*) AS c
-                FROM envios
-                WHERE estado_actual = 'entregado' AND DATE(fecha_creacion) = CURDATE()
-            """)
-            r2 = cursor.fetchone() or {}
-            entregados_hoy = int(r2.get("c", 0))
 
         # 4. Envíos asignados en preparación (en hojas de ruta abiertas que aún no salieron a ruta)
         cursor.execute("""
@@ -979,11 +978,8 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
         q = filtros.get("q", "").strip()
         estado = filtros.get("estado", "").strip()
         pendiente = filtros.get("pendiente", "").strip()
-        limite_val = filtros.get("limite", limite)
-        try:
-            limite_num = int(limite_val) if limite_val not in ("todos", "0", "") else 500
-        except ValueError:
-            limite_num = 25
+        limite_val = str(filtros.get("limite", limite))
+        limite_num = {"10": 10, "25": 25, "50": 50, "100": 100, "todos": 500}.get(limite_val, 25)
 
         db = DatabaseManager.get_instance()
         conn = db.get_connection()
@@ -1057,7 +1053,7 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
             JOIN localidades l ON e.id_localidad_destino = l.id_localidad
             LEFT JOIN retiros_central r ON r.id_envio = e.id_envio
             {where_sql}
-            ORDER BY e.fecha_creacion DESC
+            ORDER BY e.fecha_creacion DESC, e.id_envio DESC
             LIMIT %s
         """
         params.append(limite_num)
@@ -1097,7 +1093,7 @@ def _obtener_envios_para_alertas() -> list:
             FROM envios e
             LEFT JOIN retiros_central r ON r.id_envio=e.id_envio
             WHERE e.estado_actual IN ('recibido', 'en_ruta', 'fallido') OR (e.estado_actual='retiro_remitente' AND r.vence<CURDATE() AND r.retiro IS NULL)
-            ORDER BY fecha_estado ASC
+            ORDER BY fecha_estado ASC, e.id_envio ASC
         """)
         return cursor.fetchall()
     except Exception as e:

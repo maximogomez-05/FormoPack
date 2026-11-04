@@ -66,7 +66,7 @@ class AuthController:
         """Consume la clave provisoria y revoca las sesiones previas atómicamente."""
         if nueva_password != confirmacion:
             raise ValidationError("confirmacion", "Las contraseñas no coinciden")
-        Usuario.validar_complejidad_password(nueva_password)
+        Usuario.validar_password_personal(nueva_password)
         conn, cursor = None, None
         try:
             conn = self._db.get_connection()
@@ -209,7 +209,7 @@ class AuthController:
         RecuperacionContrasena.validar_formato(codigo_clean)
         if nueva_password != confirmar_password:
             raise ValidationError(field="confirmar_password", reason="Las contraseñas no coinciden")
-        Usuario.validar_complejidad_password(nueva_password)
+        Usuario.validar_password_personal(nueva_password)
 
         conn = None
         cursor = None

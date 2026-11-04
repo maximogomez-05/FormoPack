@@ -57,7 +57,7 @@ class PerfilUsuario:
     def cambiar_password(self, identificador, version, actual, nueva, confirmacion):
         if nueva != confirmacion:
             raise ValidationError("confirmacion", "Las contraseñas no coinciden")
-        Usuario.validar_complejidad_password(nueva)
+        Usuario.validar_password_personal(nueva)
         with self.db.cursor() as cur:
             usuario = self._vigente(cur, identificador, version)
             if not usuario.verificar_password(actual):

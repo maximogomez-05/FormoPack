@@ -10,14 +10,16 @@ import io
 
 from app.models.comprobante_interno import ComprobanteInterno
 from web.routes.admin import _obtener_comprobantes_admin
-from web.app import create_app
+import pytest
+from tests.test_regresion_paginas import aplicacion, db
 
 
 class TestComprobantesAdmin(unittest.TestCase):
     """Test suite para el nuevo sector de comprobantes de servicio del administrador."""
 
-    def setUp(self):
-        self.app = create_app()
+    @pytest.fixture(autouse=True)
+    def preparar(self, aplicacion):
+        self.app = aplicacion
         self.app.config["TESTING"] = True
         self.app.config["SECRET_KEY"] = "test-secret"
         self.client = self.app.test_client()
@@ -258,4 +260,4 @@ class TestComprobantesAdmin(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    raise SystemExit(pytest.main([__file__, "-q"]))

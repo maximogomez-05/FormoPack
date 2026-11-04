@@ -227,3 +227,57 @@ def test_recorrido_http_caja_cobro_y_comprobante(aplicacion, db):
         turno = cur.fetchone()["id_turno"]
     assert client.post(f"/recepcion/caja/cerrar/{turno}", data={"csrf_token": token}).status_code == 302
     assert client.get("/recepcion/caja").status_code == 200
+
+def test_guia_con_hueco_y_operadores_simultaneos(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    def alta(numero):
+        datos = formulario()
+        if numero % 2 == 0:
+            for campo in ("dni", "nombre", "telefono"):
+                rem, dest = "rem_" + campo, "dest_" + campo
+                datos[rem], datos[dest] = datos[dest], datos[rem]
+        solicitud = SolicitudRecepcion(datos)
+        return EnvioController(db).registrar_en_mostrador(solicitud, 1 + numero % 2, f"{numero:032x}")
+
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        primero = alta(1)
+        alta(2)
+        with db.cursor() as cur:
+            cur.execute("DELETE FROM comprobantes_internos WHERE id_envio=%s", (primero["id_envio"],))
+            cur.execute("DELETE FROM envios WHERE id_envio=%s", (primero["id_envio"],))
+        tercero = alta(3)
+        assert tercero["nro_guia"].endswith("-0003")
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            altas = list(pool.map(alta, range(4, 8)))
+        guias = [r["nro_guia"] for r in altas]
+        assert sorted(int(g.split("-")[-1]) for g in guias) == [4, 5, 6, 7]
+        with db.cursor() as cur:
+            for numero, resultado in enumerate(altas, start=4):
+                cur.execute("""SELECT r.dni AS remitente, d.dni AS destino FROM envios e
+                    JOIN clientes r ON r.id_cliente=e.id_remitente
+                    JOIN clientes d ON d.id_cliente=e.id_destinatario WHERE e.id_envio=%s""",
+                    (resultado["id_envio"],))
+                fila = cur.fetchone()
+                esperados = ("12345678", "23456789") if numero % 2 else ("23456789", "12345678")
+                assert (fila["remitente"], fila["destino"]) == esperados
+
+
+def test_migracion_guia_con_numeracion_previa_y_reaplicacion(db):
+    from tests.test_seguridad_bd import ROOT
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    anterior = envio(db)
+    prefijo = anterior["nro_guia"].rsplit("-", 1)[0]
+    with db.cursor() as cur:
+        cur.execute("UPDATE envios SET nro_guia=%s WHERE id_envio=%s", (prefijo + "-0017", anterior["id_envio"]))
+        cur.execute("DELETE FROM correlativos_guia")
+    migracion = ROOT / "scripts/migrations/015_correlativos_guia.sql"
+    db.ejecutar_archivo(migracion)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        nueva = EnvioController(db).registrar_en_mostrador(SolicitudRecepcion(formulario()), 2, "f" * 32)
+    assert nueva["nro_guia"] == prefijo + "-0018"
+    with db.cursor() as cur:
+        cur.execute("UPDATE correlativos_guia SET ultimo=23")
+    db.ejecutar_archivo(migracion)
+    with db.cursor() as cur:
+        cur.execute("SELECT ultimo FROM correlativos_guia")
+        assert cur.fetchone()["ultimo"] == 23

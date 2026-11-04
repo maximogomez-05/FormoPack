@@ -23,6 +23,7 @@ from app.services.ruteo import ServicioRuteo
 from app.utils.exceptions import ValidationError, TurnoCajaError, DatabaseQueryError
 from config.settings import EstadosEnvio
 from web.routes.admin import _mensaje_usuario_error
+from tests.test_seguridad_bd import db
 
 
 def test_cliente_validacion():
@@ -180,10 +181,12 @@ def test_mensaje_usuario_error():
     print("  [OK] Admin: mensajes de error legibles para usuario")
 
 
-def test_cliente_compatibilidad_sin_email():
+def test_cliente_compatibilidad_sin_email(db):
     """Los esquemas viejos sin columna email deben seguir funcionando."""
-    ctrl = ClienteController()
-    assert isinstance(ctrl._tiene_columna_email(), bool)
+    with db.cursor() as cursor:
+        cursor.execute("ALTER TABLE clientes DROP COLUMN email")
+    ctrl = ClienteController(db)
+    assert not ctrl._tiene_columna_email()
     print("  [OK] Cliente: compatibilidad con esquema sin columna email")
 
 
@@ -399,7 +402,7 @@ def test_serialization():
     print("  [OK] Serialización to_dict() de todos los modelos")
 
 
-def test_rf6_validaciones():
+def test_rf6_validaciones(db):
     """Pruebas de validación de RF 6 (6.1, 6.2 y 6.3)."""
     from app.services.servicio_notificacion import ServicioNotificacion
 
@@ -414,7 +417,7 @@ def test_rf6_validaciones():
     assert "entregado" in asunto_entregado
 
     # RF 6.3: Compatibilidad de esquemas
-    ctrl_chofer = ChoferController()
+    ctrl_chofer = ChoferController(db)
     assert isinstance(ctrl_chofer._tiene_columna_estado(), bool)
     print("  [OK] RF 6: Cierre de hoja, notificaciones duales y compatibilidad")
 
@@ -437,7 +440,6 @@ def main():
     test_comprobante_interno_generacion()
     test_registro_devolucion_fallida()
     test_serialization()
-    test_rf6_validaciones()
     print("--- Todas las pruebas de modelos pasaron ---\n")
 
 

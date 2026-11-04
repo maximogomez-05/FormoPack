@@ -3,14 +3,18 @@
 from time import time
 
 import pytest
-from app.core.database import DatabaseManager
-from web.app import create_app
+from tests.test_regresion_paginas import aplicacion, db
+from tests.test_recepcion_bd import envio
+
 from web.routes.admin import _obtener_metricas, _obtener_historico_metricas, _obtener_ultimos_envios
 
 
+pytestmark = pytest.mark.usefixtures("aplicacion")
+
+
 @pytest.fixture
-def client():
-    app = create_app()
+def client(aplicacion):
+    app = aplicacion
     app.config["TESTING"] = True
     app.config["WTF_CSRF_ENABLED"] = False
     with app.test_client() as client:
@@ -76,20 +80,9 @@ def test_obtener_envios_con_filtros_y_busqueda():
         assert busqueda[0]["nro_guia"] == primera_guia
 
 
-def test_actualizar_estado_envio_exitoso(client):
+def test_actualizar_estado_envio_exitoso(client, db):
     """Valida la actualización del estado de un envío y el registro en historial_estados."""
-    db = DatabaseManager.get_instance()
-
-    # Seleccionar un envío de prueba existente en estado recibido
-    with db.cursor(dictionary=True) as cur:
-        cur.execute("SELECT id_envio, estado_actual FROM envios WHERE estado_actual = 'recibido' LIMIT 1")
-        envio_fila = cur.fetchone()
-
-    if not envio_fila:
-        pytest.skip("No hay envíos en la base de datos para probar actualización")
-
-    id_test = envio_fila["id_envio"]
-    estado_original = envio_fila["estado_actual"]
+    id_test = envio(db)["id_envio"]
     nuevo_estado_test = "en_planta"
 
     # Actualizar estado
@@ -119,19 +112,12 @@ def test_actualizar_estado_envio_exitoso(client):
         assert hist["estado"] == nuevo_estado_test
         assert "Cambio de estado administrativo" in hist["observacion"]
 
-    # Restaurar al estado previo en base de datos
-    with db.cursor() as cur:
-        cur.execute("UPDATE envios SET estado_actual = %s WHERE id_envio = %s", (estado_original, id_test))
-        cur.execute("DELETE FROM historial_estados WHERE id_envio = %s ORDER BY id_historial DESC LIMIT 1", (id_test,))
-    conn = db.get_connection()
-    conn.commit()
-    conn.close()
 
-
-def test_actualizar_estado_invalido_es_rechazado(client):
+def test_actualizar_estado_invalido_es_rechazado(client, db):
     """Valida que un estado inexistente sea rechazado."""
+    registro = envio(db)
     res = client.post(
-        "/admin/envios/1/actualizar-estado",
+        f"/admin/envios/{registro['id_envio']}/actualizar-estado",
         data={"nuevo_estado": "estado_magico_invalido"},
         follow_redirects=True,
     )
@@ -151,6 +137,7 @@ def test_dashboard_render_admin_y_recepcionista(client):
 
     # 2. Recepcionista
     with client.session_transaction() as sess:
+        sess["usuario_id"] = 2
         sess["rol"] = "recepcionista"
         sess["nombre"] = "Recepcionista Test"
         sess["version_sesion"] = 0
@@ -163,3 +150,9 @@ def test_dashboard_render_admin_y_recepcionista(client):
     res_dash = client.get("/dashboard", follow_redirects=False)
     assert res_dash.status_code == 302
     assert "/admin/dashboard" in res_dash.location
+
+
+def test_reporte_rechaza_estado_invalido(client):
+    respuesta = client.get("/admin/reportes/envios.csv", query_string={"estado": "recibido\nX: 1"})
+    assert respuesta.status_code == 400
+    assert "Content-Disposition" not in respuesta.headers

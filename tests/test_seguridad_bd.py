@@ -83,6 +83,17 @@ def db():
         admin.close()
 
 
+@pytest.fixture
+def pool_aislado(db, monkeypatch):
+    """Ejercita el pool real únicamente sobre la base temporal de esta prueba."""
+    from config.settings import DatabaseConfig
+    from app.core.database import DatabaseManager
+    for campo, valor in dict(HOST="127.0.0.1", PORT=db.port, NAME=db.nombre, USER="root", PASSWORD="").items():
+        monkeypatch.setattr(DatabaseConfig, campo, valor)
+    monkeypatch.setattr(DatabaseManager, "_instance", None)
+    yield db
+
+
 class TestSeguridadPersistente:
     @staticmethod
     def emitir(db):

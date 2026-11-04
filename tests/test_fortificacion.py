@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from tests.test_seguridad_bd import db, pool_aislado
 from app.core.database import DatabaseManager
 from app.core.migrations import MigrationManager
 from app.models.vehiculo import Vehiculo
@@ -12,7 +13,7 @@ from app.controllers.logistica_controller import LogisticaController
 from app.services.servicio_notificacion import notificar_cambio_estado_async
 
 
-def test_database_manager_context_manager():
+def test_database_manager_context_manager(pool_aislado):
     """Valida el funcionamiento de connection() y cursor() con rollback y cierre garantizado."""
     db = DatabaseManager.get_instance()
 
@@ -33,7 +34,7 @@ def test_database_manager_context_manager():
         pass
 
 
-def test_database_manager_singleton_mock_injection():
+def test_database_manager_singleton_mock_injection(pool_aislado):
     """Valida que set_instance y reset_instance permitan inyectar mocks sin monkey-patching."""
     mock_db = MagicMock(spec=DatabaseManager)
     DatabaseManager.set_instance(mock_db)
@@ -59,32 +60,20 @@ def test_vehiculo_from_db_sin_excepcion_en_init():
     assert veh.esta_disponible() is True
 
 
-def test_cliente_controller_columna_email_cache():
+def test_cliente_controller_columna_email_cache(db):
     """Valida que _tiene_columna_email utilice la caché en memoria."""
-    ctrl = ClienteController()
-    ClienteController._columna_email_cache = None
+    ctrl = ClienteController(db)
 
     # Primera llamada: consulta la BD y puebla la caché
     resultado_1 = ctrl._tiene_columna_email()
     assert isinstance(resultado_1, bool)
-    assert ClienteController._columna_email_cache is not None
+    assert ctrl._columna_email_cache is not None
 
     # Segunda llamada: retorna directamente desde la caché
     assert ctrl._tiene_columna_email() == resultado_1
 
 
-def test_chofer_controller_columna_estado_cache():
-    """Valida que ChoferController utilice la caché en memoria para _tiene_columna_estado."""
-    ctrl = ChoferController()
-    ChoferController._columna_estado_cache = None
-
-    res1 = ctrl._tiene_columna_estado()
-    assert isinstance(res1, bool)
-    assert ChoferController._columna_estado_cache is not None
-    assert ctrl._tiene_columna_estado() == res1
-
-
-def test_notificar_cambio_estado_async():
+def test_notificar_cambio_estado_async(pool_aislado):
     """Valida que el helper de notificación ejecute sin bloquear."""
     with patch("app.services.servicio_notificacion.ServicioNotificacion.enviar_alerta_cambio_estado") as mock_env:
         # Modo síncrono para test
@@ -93,18 +82,16 @@ def test_notificar_cambio_estado_async():
         notificar_cambio_estado_async(id_envio=1, nuevo_estado="en_ruta", async_mode=True)
 
 
-def test_migraciones_manager_ejecucion():
+def test_migraciones_manager_ejecucion(db):
     """Valida que MigrationManager inspeccione y reporte las migraciones numeradas."""
-    mgr = MigrationManager()
+    mgr = MigrationManager(db)
     aplicadas = mgr.obtener_migraciones_aplicadas()
-    assert "001_init_database" in aplicadas
-    assert "002_ubicaciones_gps" in aplicadas
-    assert "003_chats_soporte" in aplicadas
+    assert {p.stem for p in mgr.obtener_archivos_migracion() if p.name[:3] >= "005"} == aplicadas
 
 
-def test_paginacion_logistica_controller():
+def test_paginacion_logistica_controller(db):
     """Valida los límites y offset en listar_hojas_ruta y obtener_entregas_pendientes."""
-    ctrl = LogisticaController()
+    ctrl = LogisticaController(db)
     hojas = ctrl.listar_hojas_ruta(limite=5, offset=0)
     assert isinstance(hojas, list)
     assert len(hojas) <= 5

@@ -52,3 +52,29 @@ systemctl is-active formopack
 ```
 
 El ensayo de enlaces simbólicos se omitió en Windows por permisos. Quedan para aceptación en el entorno correspondiente la restauración de una copia externa que incluya evidencias, el ensayo en Linux de enlaces simbólicos, la suspensión y reapertura en teléfono físico, y un nuevo QR real con conciliación automática. La cuenta de ejecución de la aplicación conserva sus permisos habituales.
+
+## Guías, tablero y cuentas · 4 de noviembre
+
+La guía se reserva dentro de la transacción del envío. Antes, contar filas permitía generar un número ya ocupado después de eliminar una guía. La migración 015 inicia cada contador con el mayor sufijo existente de esa fecha. Se ensayó con huecos, cuatro altas concurrentes y una segunda aplicación de la migración sobre un contador más avanzado.
+
+El tablero presenta ocho alertas por página. Conserva los filtros al avanzar y mantiene un orden estable para fechas iguales. Los entregados de hoy se cuentan por el evento de entrega. En MariaDB local con 4.001 envíos, el filtro de registros de hoy por rango aprovechó el índice existente y pasó de 4,04 a 0,38 ms en promedio en 100 consultas. Con 4.000 alertas, una solicitud de la primera página tardó 87 ms y una de la última, 60 ms. Son tiempos locales del servidor. La paginación limita el HTML, aunque la clasificación de alertas todavía recorre los candidatos en el servidor.
+
+Las contraseñas personales nuevas exigen al menos doce caracteres, una letra y un número. El máximo es de 72 bytes UTF-8. La regla se aplica al primer acceso, al cambio desde el perfil y a la recuperación. El ingreso de cuentas existentes y las contraseñas provisorias mantienen su flujo. Los PDF de recepción admiten nombres largos y direcciones con caracteres especiales. Los encabezados de los bultos se repiten en las tablas multipágina.
+
+### Actualizar desde la versión con la migración 014
+
+Durante una pausa de mostrador, detener la aplicación antes de inicializar los contadores para evitar altas con la versión anterior durante la migración. Ejecutar en el VPS con el usuario de despliegue. La operación de esquema usa la cuenta administrativa local de MariaDB.
+
+```bash
+cd ~/formopack-app &&
+git fetch origin &&
+sudo systemctl stop formopack &&
+sudo /usr/local/sbin/formopack-backup &&
+git merge --ff-only origin/main &&
+sudo mariadb formopack_db < scripts/migrations/015_correlativos_guia.sql &&
+sudo systemctl start formopack &&
+systemctl is-active formopack &&
+curl --retry 5 --retry-all-errors --retry-delay 2 -fsS -o /dev/null -w '%{http_code}\n' https://formopackexpress.tech/
+```
+
+Si falla un paso después de detener el servicio, conservar la salida del comando y resolver el fallo antes de reabrir mostrador.

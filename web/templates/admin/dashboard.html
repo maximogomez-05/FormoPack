@@ -73,41 +73,40 @@
   {% endif %}
 
 
-<!-- Alertas Operativas y Exportación de Reportes -->
-<div class="card" style="margin-bottom:20px;">
-  <div class="card-header" style="flex-wrap:wrap; gap:12px;">
-    <span class="card-title"><i class="fa-solid fa-bell"></i> Alertas Operativas</span>
-    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      {% if alertas and session.rol == 'administrador' %}
-      <form method="post" action="{{ url_for('admin.enviar_alertas_email') }}" style="display:inline;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <button type="submit" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-envelope"></i> Notificar por Gmail
-        </button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
+<section class="mesa avisos" id="alertas" aria-labelledby="titulo-alertas">
+  <header>
+    <h2 id="titulo-alertas">Alertas operativas{% if total_alertas %} · {{ total_alertas }}{% endif %}</h2>
+    {% if alertas and session.rol == 'administrador' %}
+    <form method="post" action="{{ url_for('admin.enviar_alertas_email') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary btn-sm">Notificar por Gmail</button>
+    </form>
+    {% endif %}
+  </header>
   {% if alertas %}
-  <div style="padding-top:8px;">
+  <ul>
     {% for alerta in alertas %}
-    <div class="alert alert-{{ alerta.tipo }}" style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-      <div>
-        <i class="fa-solid {% if alerta.tipo == 'danger' %}fa-circle-exclamation{% else %}fa-clock{% endif %}" style="margin-right:6px;"></i>
-        <strong>{{ alerta.guia }}</strong>: {{ alerta.mensaje }}
-      </div>
-      <div>
-        <a href="{{ url_for('admin.tracking_publico', guia=alerta.guia) }}" class="btn btn-secondary btn-sm" target="_blank" style="padding:4px 10px; font-size:11px;">
-          <i class="fa-solid fa-magnifying-glass"></i> Ver seguimiento
-        </a>
-      </div>
-    </div>
+    <li>
+      <a class="guia-code" href="{{ url_for('admin.tracking_publico', guia=alerta.guia) }}">{{ alerta.guia }}</a>
+      <span>{{ alerta.mensaje }}</span>
+    </li>
     {% endfor %}
-  </div>
-  {% else %}
-  <p class="empty-state" style="padding:16px 0; margin:0;"><i class="fa-solid fa-circle-check" style="color:#22c55e; margin-right:6px;"></i>No hay alertas operativas pendientes en este momento.</p>
+  </ul>
+  {% if paginas_alertas > 1 %}
+  <nav aria-label="Páginas de alertas">
+    {% if pagina_alertas > 1 %}
+    <a href="{{ url_for('admin.dashboard', pagina_alertas=pagina_alertas-1, actividad='todos' if mostrar_todos else none, _anchor='alertas', **filtros) }}">Anteriores</a>
+    {% endif %}
+    <span>Página {{ pagina_alertas }} de {{ paginas_alertas }}</span>
+    {% if pagina_alertas < paginas_alertas %}
+    <a href="{{ url_for('admin.dashboard', pagina_alertas=pagina_alertas+1, actividad='todos' if mostrar_todos else none, _anchor='alertas', **filtros) }}">Siguientes</a>
+    {% endif %}
+  </nav>
   {% endif %}
-</div>
+  {% else %}
+  <p>No hay alertas operativas pendientes en este momento.</p>
+  {% endif %}
+</section>
 
 <!-- Gráfica Histórica de Actividad (Últimos 7 días) -->
 <div id="actividad" class="dashboard-columns" style="margin-bottom:20px;">
@@ -178,7 +177,7 @@
       <i class="fa-solid {{ filtro_pendiente_activo.icono }}"></i>
       <div>
         <div class="active-filter-heading">
-          Filtrando por: <strong>{{ filtro_pendiente_activo.titulo }}</strong> ({{ ultimos_envios|length }} encomienda{{ 's' if ultimos_envios|length != 1 else '' }})
+          Filtrando por: <strong>{{ filtro_pendiente_activo.titulo }}</strong> · {{ ultimos_envios|length }} en pantalla
         </div>
         <div class="active-filter-sub">{{ filtro_pendiente_activo.descripcion }}</div>
       </div>
@@ -212,7 +211,7 @@
         <option value="25" {% if filtros.limite == '25' or not filtros.limite %}selected{% endif %}>Mostrar: 25</option>
         <option value="50" {% if filtros.limite == '50' %}selected{% endif %}>Mostrar: 50</option>
         <option value="100" {% if filtros.limite == '100' %}selected{% endif %}>Mostrar: 100</option>
-        <option value="todos" {% if filtros.limite == 'todos' %}selected{% endif %}>Mostrar: Todos</option>
+        <option value="todos" {% if filtros.limite == 'todos' %}selected{% endif %}>Mostrar: hasta 500</option>
       </select>
     </div>
     <button type="submit" class="btn btn-secondary btn-sm" style="padding:8px 14px;">

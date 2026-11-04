@@ -2,7 +2,6 @@
 
 import logging
 from typing import Optional
-from datetime import datetime
 
 from app.core.database import DatabaseManager
 from app.models.envio import Envio
@@ -41,7 +40,6 @@ class EnvioController:
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self._db = db_manager or DatabaseManager.get_instance()
         self._cotizador = Cotizador()
-        self._generador = GeneradorGuia()
 
     def cotizar_envio(
         self,
@@ -142,16 +140,18 @@ class EnvioController:
             if anterior:
                 return {"nro_guia": anterior[0], "repetida": True}
 
-            clientes = []
-            for rol in ("rem", "dest"):
+            # Dos formularios pueden invertir remitente y destinatario. Tomar los
+            # bloqueos por DNI siempre en el mismo orden evita esperas circulares.
+            clientes = {}
+            for rol in sorted(("rem", "dest"), key=lambda rol: solicitud.clientes[rol]["dni"]):
                 datos = solicitud.clientes[rol]
                 cursor.execute("""INSERT INTO clientes (dni, nombre_completo, telefono, email)
                     VALUES (%s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente)""",
                     (datos["dni"].strip(), datos["nombre_completo"].strip(),
                      datos["telefono"].strip(), V.email(datos["email"])))
-                clientes.append(cursor.lastrowid)
-            resultado = self._insertar_envio(cursor, *clientes, solicitud.localidad, solicitud.direccion,
+                clientes[rol] = cursor.lastrowid
+            resultado = self._insertar_envio(cursor, clientes["rem"], clientes["dest"], solicitud.localidad, solicitud.direccion,
                 solicitud.bultos, solicitud.modalidad, solicitud.declarado, solicitud.seguro, cotizacion)
             cursor.execute("""UPDATE solicitudes_mostrador SET id_envio=%s
                 WHERE id_usuario=%s AND solicitud_id=%s""", (resultado["id_envio"], usuario, solicitud_id))
@@ -168,16 +168,7 @@ class EnvioController:
 
     def _insertar_envio(self, cursor, id_remitente, id_destinatario, id_localidad_destino,
                         direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion):
-        # Generar número de guía de forma atómica con bloqueo de lectura
-        fecha_hoy = datetime.now().strftime("%Y%m%d")
-        patron = f"FPX-{fecha_hoy}-%"
-        cursor.execute(
-            "SELECT COUNT(*) AS total FROM envios WHERE nro_guia LIKE %s FOR UPDATE",
-            (patron,)
-        )
-        fila_corr = cursor.fetchone()
-        correlativo_actual = fila_corr[0] if fila_corr else 0
-        nro_guia = self._generador.generar_nro_guia(correlativo_actual)
+        nro_guia = GeneradorGuia.reservar(cursor)
 
         # Insertar envío
         sql_envio = """
@@ -438,25 +429,6 @@ class EnvioController:
             raise
         except Exception as e:
             raise DatabaseQueryError(f"Error al obtener seguro: {e}") from e
-        finally:
-            if conn:
-                conn.close()
-
-    def _obtener_correlativo_diario(self) -> int:
-        """Obtiene el último correlativo de guía del día actual."""
-        fecha_hoy = datetime.now().strftime("%Y%m%d")
-        patron = f"FPX-{fecha_hoy}-%"
-        sql = "SELECT COUNT(*) as total FROM envios WHERE nro_guia LIKE %s"
-        conn = None
-        try:
-            conn = self._db.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(sql, (patron,))
-            fila = cursor.fetchone()
-            cursor.close()
-            return fila["total"] if fila else 0
-        except Exception:
-            return 0
         finally:
             if conn:
                 conn.close()
