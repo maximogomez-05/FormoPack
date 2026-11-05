@@ -355,7 +355,7 @@ function recalcularCotizacionEnVivo() {
   }, 250);
 }
 
-async function buscarCliente(prefix) {
+async function buscarCliente(prefix, automatico = false) {
   const dni = document.getElementById(`${prefix}_dni`).value.trim();
   if (!dni) return;
   try {
@@ -363,19 +363,43 @@ async function buscarCliente(prefix) {
     const data = await resp.json();
     if (dni !== document.getElementById(`${prefix}_dni`).value.trim()) return;
     if (!resp.ok) {
-      alert(data.error || 'No se pudo consultar el cliente. Intentá nuevamente.');
+      if (!automatico) alert(data.error || 'No se pudo consultar el cliente. Intentá nuevamente.');
       return;
     }
     if (data.encontrado) {
+      for (const campo of ['nombre', 'telefono', 'email']) {
+        document.getElementById(prefix + '_' + campo).readOnly = true;
+      }
+      document.getElementById(prefix + '_dni').dataset.cliente = dni;
       document.getElementById(`${prefix}_nombre`).value = data.cliente.nombre_completo;
       document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
       if (document.getElementById(`${prefix}_email`)) {
         document.getElementById(`${prefix}_email`).value = data.cliente.email || '';
       }
     } else {
-      alert('Cliente no registrado en la base de datos. Los datos ingresados generarán un nuevo registro al confirmar.');
+      if (!automatico) alert('Cliente no registrado en la base de datos. Los datos ingresados generarán un nuevo registro al confirmar.');
     }
-  } catch(e) { alert('No se pudo consultar el cliente. Revisá la conexión y volvé a buscar.'); }
+  } catch(e) { if (!automatico) alert('No se pudo consultar el cliente. Revisá la conexión y volvé a buscar.'); }
+}
+
+for (const prefix of ['rem', 'dest']) {
+  const documento = document.getElementById(prefix + '_dni');
+  let espera;
+  documento.addEventListener('input', () => {
+    clearTimeout(espera);
+    if (documento.dataset.cliente && documento.value.trim() !== documento.dataset.cliente) {
+      for (const campo of ['nombre', 'telefono', 'email']) {
+        const input = document.getElementById(prefix + '_' + campo);
+        input.readOnly = false;
+        input.value = '';
+      }
+      delete documento.dataset.cliente;
+    }
+    if (/^[0-9]{7,15}$/.test(documento.value.trim())) {
+      espera = setTimeout(() => buscarCliente(prefix, true), 400);
+    }
+  });
+  if (documento.value.trim()) buscarCliente(prefix, true);
 }
 
 // Pre-llenar campos desde los parámetros enviados por el cotizador

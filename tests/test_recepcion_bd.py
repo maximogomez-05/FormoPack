@@ -281,3 +281,17 @@ def test_migracion_guia_con_numeracion_previa_y_reaplicacion(db):
     with db.cursor() as cur:
         cur.execute("SELECT ultimo FROM correlativos_guia")
         assert cur.fetchone()["ultimo"] == 23
+
+
+def test_dni_existente_conserva_sus_datos(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    datos = formulario()
+    servicio = EnvioController(db)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "a" * 32)
+        datos["rem_nombre"] = "Nombre Modificado"
+        datos["rem_telefono"] = "3704999999"
+        servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "b" * 32)
+    with db.cursor() as cur:
+        cur.execute("SELECT nombre_completo,telefono FROM clientes WHERE dni='12345678'")
+        assert cur.fetchone() == {"nombre_completo": "Juan Pérez", "telefono": "3704123456"}

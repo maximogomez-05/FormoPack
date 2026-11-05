@@ -89,3 +89,10 @@
 @media (max-width: 600px) {
   .avisos nav a, .avisos li a { min-height: 44px; }
 }
+
+/* Mantener las cifras alineadas y permitir textos largos en cada columna. */
+.balance > section { min-width: 0; }
+.cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; }
+.cifras > div { min-width: 0; }
+.renglones dt { min-width: 0; overflow-wrap: anywhere; }
+.renglones dd { flex-shrink: 0; text-align: right; }

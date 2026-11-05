@@ -63,7 +63,7 @@
       <dl class="cifras"><div><dt>Dinero cobrado hoy</dt><dd>{{ metricas.total_cobrado_hoy | pesos_ars }}</dd></div></dl>
       <h3>Detalle de la jornada</h3>
       <dl class="renglones">
-        <div><dt>Efectivo</dt><dd>{{ metricas.efectivo_hoy | pesos_ars }}</dd></div>
+        <div><dt>Efectivo · vuelto ya descontado</dt><dd>{{ metricas.efectivo_hoy | pesos_ars }}</dd></div>
         <div><dt>Medios digitales</dt><dd>{{ metricas.digital_hoy | pesos_ars }}</dd></div>
         <div><dt>Cantidad de cobros</dt><dd>{{ metricas.pagos_hoy }}</dd></div>
         <div><dt>Valor de envíos registrados hoy</dt><dd>{{ metricas.facturado_total | pesos_ars }}</dd></div>

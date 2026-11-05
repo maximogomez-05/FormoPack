@@ -138,7 +138,7 @@
 
     <!-- Acciones de Cuenta -->
     <div class="user-card-footer">
-      <a class="btn btn-secondary btn-sm" href="{{ url_for('perfil.cuenta', identificador=u.id_usuario) }}">{{ 'Mi perfil' if u.id_usuario == session.usuario_id else 'Editar datos' }}</a>
+      {% if u.id_usuario == session.usuario_id %}<a class="btn btn-secondary btn-sm" href="{{ url_for('perfil.editar') }}">Mi perfil</a>{% endif %}
       {% if u.id_usuario == session.usuario_id %}
         <div class="current-user-notice">
           <i class="fa-solid fa-circle-check"></i> Tu sesión activa

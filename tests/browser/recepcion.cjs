@@ -61,6 +61,13 @@ const assert = require('node:assert/strict');
     await page.locator('[name="dest_nombre"]').fill('María Gómez');
     await page.locator('#form-envio button[type="submit"]').click();
     await page.waitForURL('**/recepcion/cobrar/**');
+    await page.goto(base + '/recepcion/nuevo-envio');
+    await page.locator('#rem_dni').fill('12345678');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly);
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    await page.locator('#rem_dni').fill('34567890');
+    assert.equal(await page.locator('#rem_nombre').inputValue(), '');
+    assert.equal(await page.locator('#rem_nombre').evaluate(input => input.readOnly), false);
     assert.deepEqual(errors, []);
     console.log('recepción y validaciones verificadas');
   } finally {

@@ -38,13 +38,13 @@ const path = require('node:path');
     await page.getByRole('button', { name: 'Quitar foto', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Quitar foto', exact: true }).count(), 0);
     await page.goto(base + '/admin/usuarios');
-    await page.locator('a[href="/perfil/cuentas/2"]').click();
-    await page.getByLabel('Nombre completo').fill('Recepcionista Actualizada');
-    await page.getByLabel('Correo de acceso').fill('recepcionista@example.com');
-    await page.getByRole('button', { name: 'Guardar datos', exact: true }).click();
-    assert(await page.getByText('recepcionista@example.com', { exact: true }).isVisible());
+    assert.equal(await page.locator('a[href="/perfil/cuentas/2"]').count(), 0);
+    const denegada = await page.request.post(base + '/perfil/cuentas/2', {
+      form: { nombre: 'Nombre ajeno', email: 'ajeno@example.com' }
+    });
+    assert.equal(denegada.status(), 400); // La petición sin token también exige CSRF.
     assert.deepEqual(errores, []);
-    console.log('Perfil, foto, edición administrativa y tres tamaños verificados');
+    console.log('Perfil propio, foto, restricción de edición y tres tamaños verificados');
   } finally {
     await browser.close();
   }
