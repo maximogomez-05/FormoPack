@@ -68,6 +68,35 @@ const assert = require('node:assert/strict');
     await page.locator('#rem_dni').fill('34567890');
     assert.equal(await page.locator('#rem_nombre').inputValue(), '');
     assert.equal(await page.locator('#rem_nombre').evaluate(input => input.readOnly), false);
+    // Una búsqueda lenta del DNI anterior nunca debe rellenar el cliente nuevo.
+    let resolverBusqueda;
+    const recibida = new Promise(resolve => { resolverBusqueda = resolve; });
+    let liberarBusqueda;
+    const esperaBusqueda = new Promise(resolve => { liberarBusqueda = resolve; });
+    await page.route('**/recepcion/clientes/buscar?dni=45678901', async route => {
+      resolverBusqueda();
+      await esperaBusqueda;
+      await route.fulfill({json:{encontrado:true,cliente:{nombre_completo:'Cliente Anterior',telefono:'3704111111'}}});
+    });
+    await page.locator('#rem_dni').fill('45678901');
+    await recibida;
+    await page.locator('#rem_dni').fill('12345678');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly);
+    const tardia = page.waitForResponse(r => r.url().includes('dni=45678901'));
+    liberarBusqueda();
+    await tardia;
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    // El formulario rechazado restaura también la identidad bloqueada del DNI existente.
+    await page.evaluate(async () => {
+      const form = document.querySelector('#form-envio');
+      form.noValidate = true;
+    });
+    const rechazoExistente = page.waitForResponse(r => r.url().endsWith('/recepcion/nuevo-envio') && r.request().method()==='POST');
+    await page.locator('#form-envio button[type="submit"]').click();
+    assert.equal((await rechazoExistente).status(), 400);
+    await page.waitForLoadState('load');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly, null, {timeout:3000});
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
     assert.deepEqual(errors, []);
     console.log('recepción y validaciones verificadas');
   } finally {

@@ -399,7 +399,6 @@ for (const prefix of ['rem', 'dest']) {
       espera = setTimeout(() => buscarCliente(prefix, true), 400);
     }
   });
-  if (documento.value.trim()) buscarCliente(prefix, true);
 }
 
 // Pre-llenar campos desde los parámetros enviados por el cotizador
@@ -470,6 +469,13 @@ if (Object.keys(datosRechazados).length) {
   });
   actualizarSeguroInfo();
   recalcularCotizacionEnVivo();
+}
+
+// Consultar después de restaurar los valores enviados, también tras un rechazo.
+for (const prefix of ['rem', 'dest']) {
+  if (/^[0-9]{7,15}$/.test(document.getElementById(prefix + '_dni').value.trim())) {
+    buscarCliente(prefix, true);
+  }
 }
 
 // Advertencia de cambios sin guardar (Data Loss Prevention)

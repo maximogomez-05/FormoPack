@@ -132,6 +132,7 @@ def nuevo_cliente():
         telefono = request.form.get("telefono", "").strip()
         email = request.form.get("email", "").strip() or None
         try:
+            V.campos_unicos(request.form)
             ctrl = ClienteController()
             cliente = ctrl.registrar_cliente(dni, nombre, telefono, email)
             flash(f"Cliente '{cliente.nombre_completo}' registrado exitosamente.", "success")
@@ -284,6 +285,7 @@ def cobrar_envio(nro_guia: str):
 
         tipo_pago = request.form.get("tipo_pago", "efectivo")
         try:
+            V.campos_unicos(request.form)
             monto = V.decimal(request.form.get("monto", str(envio.costo_total)), "monto", 0.01)
             monto_entregado = V.decimal(request.form.get("monto_entregado") or "0", "monto_entregado")
         except ValidationError as e:
@@ -448,6 +450,7 @@ def caja():
 def abrir_caja():
     """Abre un nuevo turno de caja."""
     try:
+        V.campos_unicos(request.form)
         saldo_inicial = V.decimal(request.form.get("saldo_inicial") or "0", "saldo_inicial")
         ctrl = CajaController()
         turno = ctrl.abrir_turno(

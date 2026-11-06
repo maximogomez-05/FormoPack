@@ -19,6 +19,7 @@ from app.controllers.logistica_controller import LogisticaController
 from app.utils.exceptions import DatabaseConnectionError, DatabaseQueryError, ValidationError, DuplicateError
 from app.controllers.usuario_controller import UsuarioController
 from app.services.actividad_operativa import ActividadOperativa
+from app.services.validacion_entrada import ValidacionEntrada as V
 from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.services.tracking_publico import TrackingPublico
 from app.controllers.liquidacion_controller import LiquidacionController
@@ -338,9 +339,10 @@ def datos_mapa_logistica():
 def registrar_vehiculo():
     """Registra un vehículo disponible desde la pantalla de logística."""
     try:
+        V.campos_unicos(request.form)
         LogisticaController().registrar_vehiculo(
             request.form.get("patente", ""),
-            float(request.form.get("capacidad_kg", 0)),
+            request.form.get("capacidad_kg", ""),
         )
         flash("Vehículo registrado correctamente.", "success")
     except ValueError:
@@ -364,11 +366,11 @@ def crear_hoja_ruta():
         flash('Debe seleccionar al menos un envío para crear la hoja de ruta.', 'warning')
         return redirect(url_for('admin.logistica'))
     try:
-        envios_ids = [int(value) for value in envios_ids]
+        V.campos_unicos(request.form, ("envios_ids",))
         LogisticaController().crear_hoja_ruta(
             request.form.get("nro_despacho", "").strip(),
-            int(request.form.get("id_chofer", 0)),
-            int(request.form.get("id_vehiculo", 0)),
+            request.form.get("id_chofer", ""),
+            request.form.get("id_vehiculo", ""),
             envios_ids, id_solicitante=session["usuario_id"],
         )
         flash("Hoja de ruta creada y envíos asignados correctamente.", "success")

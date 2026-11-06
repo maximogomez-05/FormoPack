@@ -56,14 +56,12 @@ def iniciar_hoja(id_hoja_ruta: int):
 @rol_requerido("chofer")
 def actualizar_ubicacion(id_hoja_ruta: int):
     """Recibe el punto GPS más reciente de la hoja activa del chofer."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(ok=False, error="Ingresá un objeto JSON con las coordenadas GPS."), 400
     try:
-        latitud = float(data["latitud"])
-        longitud = float(data["longitud"])
-        precision = data.get("precision_m")
-        precision_m = float(precision) if precision is not None else None
         ChoferController().actualizar_ubicacion_ruta(
-            session["usuario_id"], id_hoja_ruta, latitud, longitud, precision_m,
+            session["usuario_id"], id_hoja_ruta, data["latitud"], data["longitud"], data.get("precision_m"),
         )
         return jsonify({"ok": True})
     except (KeyError, TypeError, ValueError):
