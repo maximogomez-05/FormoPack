@@ -4,12 +4,11 @@ import io
 import re
 
 from PIL import Image, ImageOps, UnidentifiedImageError
-from mysql.connector import IntegrityError
 
 from app.core.database import DatabaseManager
 from app.models.usuario import Usuario
 from app.services.validacion_entrada import ValidacionEntrada as V
-from app.utils.exceptions import AuthenticationError, DuplicateError, ValidationError
+from app.utils.exceptions import AuthenticationError, ValidationError
 
 
 class PerfilUsuario:
@@ -57,7 +56,7 @@ class PerfilUsuario:
     def cambiar_password(self, identificador, version, actual, nueva, confirmacion):
         if nueva != confirmacion:
             raise ValidationError("confirmacion", "Las contraseñas no coinciden")
-        Usuario.validar_complejidad_password(nueva)
+        Usuario.validar_password_personal(nueva)
         with self.db.cursor() as cur:
             usuario = self._vigente(cur, identificador, version)
             if not usuario.verificar_password(actual):
@@ -112,27 +111,4 @@ class PerfilUsuario:
         return fila["imagen"] if fila else None
 
     def editar_cuenta(self, solicitante, version, identificador, nombre, email, licencia=""):
-        nombre, email = V.nombre(nombre), V.email(email)
-        if not email:
-            raise ValidationError("email", "El correo es obligatorio")
-        if solicitante == identificador:
-            raise ValidationError("usuario", "Editá tus datos desde Mi perfil")
-        try:
-            with self.db.cursor() as cur:
-                admin = self._vigente(cur, solicitante, version)
-                if admin.tipo_usuario != "administrador":
-                    raise AuthenticationError("No tenés permiso para editar cuentas")
-                cur.execute("SELECT tipo_usuario FROM usuarios WHERE id_usuario=%s FOR UPDATE", (identificador,))
-                cuenta = cur.fetchone()
-                if not cuenta:
-                    raise ValidationError("usuario", "La cuenta no existe")
-                licencia = self._licencia(licencia, cuenta["tipo_usuario"])
-                cur.execute("""UPDATE usuarios SET nombre=%s, email=%s, nro_licencia=%s,
-                    version_sesion=version_sesion+1 WHERE id_usuario=%s""",
-                            (nombre, email, licencia, identificador))
-                cur.execute("UPDATE recuperacion_contrasenas SET utilizado=1 WHERE id_usuario=%s",
-                            (identificador,))
-        except IntegrityError as exc:
-            if exc.errno == 1062:
-                raise DuplicateError(entity="Usuario", identifier=email) from exc
-            raise
+        raise AuthenticationError("Cada persona debe editar su propio perfil")

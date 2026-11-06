@@ -84,18 +84,16 @@ def test_password_incorrecta_no_cambia_y_nueva_revoca_sesion(aplicacion, db):
     assert AuthController(db).login("admin@formopack.com", "NuevaClave123").success
 
 
-def test_admin_edita_correo_y_revoca_cuenta_duplicados_se_rechazan(aplicacion, db):
+def test_perfiles_ajenos_protegidos_incluso_del_administrador(aplicacion, db):
     c = cliente(aplicacion)
-    operador = cliente(aplicacion, 2)
-    assert operador.post("/perfil/cuentas/1", data={"nombre": "Nombre ajeno"}).status_code == 403
-    assert c.post("/perfil/cuentas/2", data={"nombre": "Operadora Nueva",
-        "email": "admin@formopack.com"}).status_code == 400
-    assert c.post("/perfil/cuentas/2", data={"nombre": "Operadora Nueva",
-        "email": "operadora@example.com", "tipo_usuario": "administrador"}).status_code == 302
-    assert operador.get("/sesion", headers={"Accept": "application/json"}).status_code == 401
+    for metodo in (c.get, c.post):
+        assert metodo("/perfil/cuentas/2").status_code == 403
+    from app.utils.exceptions import AuthenticationError
+    with pytest.raises(AuthenticationError):
+        PerfilUsuario(db).editar_cuenta(1, 0, 2, "Nombre Nuevo", "nuevo@example.com")
     with db.cursor() as cur:
-        cur.execute("SELECT email,tipo_usuario FROM usuarios WHERE id_usuario=2")
-        assert cur.fetchone() == {"email": "operadora@example.com", "tipo_usuario": "recepcionista"}
+        cur.execute("SELECT email FROM usuarios WHERE id_usuario=2")
+        assert cur.fetchone()["email"] == "recepcion@formopack.com"
 
 
 def test_csrf_y_nombre_invalido(aplicacion):

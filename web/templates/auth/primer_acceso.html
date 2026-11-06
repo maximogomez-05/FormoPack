@@ -16,10 +16,10 @@
       <div class="form-group"><label class="form-label" for="password-actual">Contraseña provisoria</label>
         <input class="form-control" type="password" name="password_actual" id="password-actual" autocomplete="current-password" maxlength="72" required autofocus></div>
       <div class="form-group"><label class="form-label" for="password-nueva">Nueva contraseña personal</label>
-        <input class="form-control" type="password" name="nueva_password" id="password-nueva" autocomplete="new-password" minlength="8" maxlength="72" aria-describedby="password-ayuda" required>
-        <small id="password-ayuda" class="text-muted">Al menos 8 caracteres, una letra y un número. Máximo 72 bytes; las letras acentuadas pueden ocupar más de uno.</small></div>
+        <input class="form-control" type="password" name="nueva_password" id="password-nueva" autocomplete="new-password" minlength="12" maxlength="72" aria-describedby="password-ayuda" required>
+        <small id="password-ayuda" class="text-muted">Al menos 12 caracteres, una letra y un número. Máximo 72 bytes; las letras acentuadas pueden ocupar más de uno.</small></div>
       <div class="form-group"><label class="form-label" for="password-confirmar">Repetí tu nueva contraseña</label>
-        <input class="form-control" type="password" name="confirmar_password" id="password-confirmar" autocomplete="new-password" minlength="8" maxlength="72" required></div>
+        <input class="form-control" type="password" name="confirmar_password" id="password-confirmar" autocomplete="new-password" minlength="12" maxlength="72" required></div>
       <button type="submit" class="btn btn-primary w-100">Guardar contraseña y continuar</button>
     </form>
     <a class="first-access-exit" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>

@@ -31,8 +31,11 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     client, token = cliente(aplicacion)
     datos = formulario()
     datos["csrf_token"] = token
+    datos["solicitud_id"] = "a" * 32
     with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
         respuesta = client.post("/recepcion/nuevo-envio", data=datos)
+        repetida = client.post("/recepcion/nuevo-envio", data=datos)
+    assert repetida.location == respuesta.location
     assert respuesta.status_code == 302 and "/cobrar/" in respuesta.location
     with db.cursor() as cur:
         cur.execute("SELECT es_fragil FROM bultos ORDER BY id_bulto")
@@ -41,12 +44,37 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     assert pagina.status_code == 200
 
 
+def test_alta_concurrente_y_reintento_tras_fallo(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    solicitud = SolicitudRecepcion(formulario())
+    servicio = EnvioController(db)
+    identificador = "b" * 32
+    with patch.object(servicio, "_insertar_envio", side_effect=DatabaseQueryError("fallo de prueba")):
+        with pytest.raises(DatabaseQueryError):
+            servicio.registrar_en_mostrador(solicitud, 2, identificador)
+    with db.cursor() as cur:
+        for tabla in ("clientes", "solicitudes_mostrador", "envios"):
+            cur.execute("SELECT COUNT(*) AS total FROM " + tabla)
+            assert cur.fetchone()["total"] == 0
+
+    barrera = Barrier(2)
+    def enviar(_):
+        barrera.wait(timeout=10)
+        return servicio.registrar_en_mostrador(solicitud, 2, identificador)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async") as correo:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            resultados = list(pool.map(enviar, range(2)))
+        assert resultados[0]["nro_guia"] == resultados[1]["nro_guia"]
+        correo.assert_called_once()
+
+
 @pytest.mark.parametrize("campo,valor", [("dest_nombre", "123456"), ("direccion_destino", "a" * 201), ("valor_declarado", "NaN"), ("id_localidad_destino", "999999"), ("modalidad_pago", "inventada")])
 def test_rechazo_no_crea_clientes_ni_envio(aplicacion, db, campo, valor):
     client, token = cliente(aplicacion)
     datos = formulario()
     datos[campo] = valor
     datos["csrf_token"] = token
+    datos["solicitud_id"] = "a" * 32
     respuesta = client.post("/recepcion/nuevo-envio", data=datos)
     assert respuesta.status_code == 400
     assert "Juan" in respuesta.get_data(as_text=True)
@@ -199,3 +227,71 @@ def test_recorrido_http_caja_cobro_y_comprobante(aplicacion, db):
         turno = cur.fetchone()["id_turno"]
     assert client.post(f"/recepcion/caja/cerrar/{turno}", data={"csrf_token": token}).status_code == 302
     assert client.get("/recepcion/caja").status_code == 200
+
+def test_guia_con_hueco_y_operadores_simultaneos(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    def alta(numero):
+        datos = formulario()
+        if numero % 2 == 0:
+            for campo in ("dni", "nombre", "telefono"):
+                rem, dest = "rem_" + campo, "dest_" + campo
+                datos[rem], datos[dest] = datos[dest], datos[rem]
+        solicitud = SolicitudRecepcion(datos)
+        return EnvioController(db).registrar_en_mostrador(solicitud, 1 + numero % 2, f"{numero:032x}")
+
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        primero = alta(1)
+        alta(2)
+        with db.cursor() as cur:
+            cur.execute("DELETE FROM comprobantes_internos WHERE id_envio=%s", (primero["id_envio"],))
+            cur.execute("DELETE FROM envios WHERE id_envio=%s", (primero["id_envio"],))
+        tercero = alta(3)
+        assert tercero["nro_guia"].endswith("-0003")
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            altas = list(pool.map(alta, range(4, 8)))
+        guias = [r["nro_guia"] for r in altas]
+        assert sorted(int(g.split("-")[-1]) for g in guias) == [4, 5, 6, 7]
+        with db.cursor() as cur:
+            for numero, resultado in enumerate(altas, start=4):
+                cur.execute("""SELECT r.dni AS remitente, d.dni AS destino FROM envios e
+                    JOIN clientes r ON r.id_cliente=e.id_remitente
+                    JOIN clientes d ON d.id_cliente=e.id_destinatario WHERE e.id_envio=%s""",
+                    (resultado["id_envio"],))
+                fila = cur.fetchone()
+                esperados = ("12345678", "23456789") if numero % 2 else ("23456789", "12345678")
+                assert (fila["remitente"], fila["destino"]) == esperados
+
+
+def test_migracion_guia_con_numeracion_previa_y_reaplicacion(db):
+    from tests.test_seguridad_bd import ROOT
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    anterior = envio(db)
+    prefijo = anterior["nro_guia"].rsplit("-", 1)[0]
+    with db.cursor() as cur:
+        cur.execute("UPDATE envios SET nro_guia=%s WHERE id_envio=%s", (prefijo + "-0017", anterior["id_envio"]))
+        cur.execute("DELETE FROM correlativos_guia")
+    migracion = ROOT / "scripts/migrations/015_correlativos_guia.sql"
+    db.ejecutar_archivo(migracion)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        nueva = EnvioController(db).registrar_en_mostrador(SolicitudRecepcion(formulario()), 2, "f" * 32)
+    assert nueva["nro_guia"] == prefijo + "-0018"
+    with db.cursor() as cur:
+        cur.execute("UPDATE correlativos_guia SET ultimo=23")
+    db.ejecutar_archivo(migracion)
+    with db.cursor() as cur:
+        cur.execute("SELECT ultimo FROM correlativos_guia")
+        assert cur.fetchone()["ultimo"] == 23
+
+
+def test_dni_existente_conserva_sus_datos(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    datos = formulario()
+    servicio = EnvioController(db)
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "a" * 32)
+        datos["rem_nombre"] = "Nombre Modificado"
+        datos["rem_telefono"] = "3704999999"
+        servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "b" * 32)
+    with db.cursor() as cur:
+        cur.execute("SELECT nombre_completo,telefono FROM clientes WHERE dni='12345678'")
+        assert cur.fetchone() == {"nombre_completo": "Juan Pérez", "telefono": "3704123456"}

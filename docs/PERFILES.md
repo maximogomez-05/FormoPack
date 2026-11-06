@@ -2,7 +2,7 @@
 
 Mi perfil está disponible en el menú y al pulsar el avatar. Todos los roles pueden editar su nombre, reemplazar o quitar su foto y cambiar la contraseña mediante su clave actual. El chofer también puede corregir su número de licencia.
 
-Administración puede corregir nombre, correo de acceso y licencia de otras cuentas desde Gestión de usuarios. Esa edición invalida su sesión e inutiliza los códigos de recuperación anteriores. La edición personal del correo se canaliza por administración.
+Cada persona edita su propio perfil. La edición de perfiles ajenos está bloqueada también para administradores, tanto en la interfaz como mediante peticiones directas. El correo de acceso se conserva en esta pantalla.
 
 Las fotografías aceptan JPG, PNG y WebP estáticos de hasta 2 MB y 4096 × 4096 píxeles. Se recortan a 256 × 256, se vuelven a codificar como PNG y se eliminan sus metadatos. Se almacenan en fotos_perfil y su lectura requiere la sesión del dueño. El respaldo SQL existente incluye estas imágenes.
 

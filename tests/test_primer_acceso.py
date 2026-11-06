@@ -49,6 +49,7 @@ def test_cambio_revoca_clave_provisoria_y_flag(db):
     ("erronea", "PersonalNueva456", "PersonalNueva456"),
     ("Provisoria123", "Provisoria123", "Provisoria123"),
     ("Provisoria123", "1234", "1234"),
+    ("Provisoria123", "Personal123", "Personal123"),
     ("Provisoria123", "PersonalNueva456", "Diferente123"),
 ])
 def test_rechazos_no_consumen_clave_provisoria(db, actual, nueva, confirmacion):

@@ -18,11 +18,25 @@ const assert = require('node:assert/strict');
         body: new URLSearchParams({ email: 'recepcion@formopack.com', password: 'recep456', csrf_token: token }) });
     });
     await page.goto(`${base}/recepcion/nuevo-envio`);
+    for (const width of [1440, 820, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Desborde a '+width);
+    }
     for (const [name, value] of Object.entries({ rem_dni: '12345678', rem_nombre: 'José Pérez',
       rem_telefono: '3704123456', dest_dni: '23456789', dest_nombre: 'María Gómez',
       dest_telefono: '3704654321', direccion_destino: 'Av. San Martín 123' })) {
       await page.locator(`[name="${name}"]`).fill(value);
     }
+    await page.route('**/recepcion/clientes/buscar?*', route => route.fulfill({
+      status:503, contentType:'application/json', body:JSON.stringify({encontrado:false,error:'Consulta temporalmente indisponible'})
+    }), {times:1});
+    const mensaje = page.waitForEvent('dialog').then(async dialog => {
+      const texto = dialog.message();
+      await dialog.accept();
+      return texto;
+    });
+    await page.getByRole('button',{name:'Buscar remitente'}).click();
+    assert.equal(await mensaje,'Consulta temporalmente indisponible');
     assert(await page.locator('[name="rem_nombre"]').evaluate(input => input.checkValidity()));
     await page.locator('#id_localidad_destino').selectOption('1');
     await page.locator('.peso-real').fill('10');
@@ -47,6 +61,42 @@ const assert = require('node:assert/strict');
     await page.locator('[name="dest_nombre"]').fill('María Gómez');
     await page.locator('#form-envio button[type="submit"]').click();
     await page.waitForURL('**/recepcion/cobrar/**');
+    await page.goto(base + '/recepcion/nuevo-envio');
+    await page.locator('#rem_dni').fill('12345678');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly);
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    await page.locator('#rem_dni').fill('34567890');
+    assert.equal(await page.locator('#rem_nombre').inputValue(), '');
+    assert.equal(await page.locator('#rem_nombre').evaluate(input => input.readOnly), false);
+    // Una búsqueda lenta del DNI anterior nunca debe rellenar el cliente nuevo.
+    let resolverBusqueda;
+    const recibida = new Promise(resolve => { resolverBusqueda = resolve; });
+    let liberarBusqueda;
+    const esperaBusqueda = new Promise(resolve => { liberarBusqueda = resolve; });
+    await page.route('**/recepcion/clientes/buscar?dni=45678901', async route => {
+      resolverBusqueda();
+      await esperaBusqueda;
+      await route.fulfill({json:{encontrado:true,cliente:{nombre_completo:'Cliente Anterior',telefono:'3704111111'}}});
+    });
+    await page.locator('#rem_dni').fill('45678901');
+    await recibida;
+    await page.locator('#rem_dni').fill('12345678');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly);
+    const tardia = page.waitForResponse(r => r.url().includes('dni=45678901'));
+    liberarBusqueda();
+    await tardia;
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    // El formulario rechazado restaura también la identidad bloqueada del DNI existente.
+    await page.evaluate(async () => {
+      const form = document.querySelector('#form-envio');
+      form.noValidate = true;
+    });
+    const rechazoExistente = page.waitForResponse(r => r.url().endsWith('/recepcion/nuevo-envio') && r.request().method()==='POST');
+    await page.locator('#form-envio button[type="submit"]').click();
+    assert.equal((await rechazoExistente).status(), 400);
+    await page.waitForLoadState('load');
+    await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly, null, {timeout:3000});
+    assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
     assert.deepEqual(errors, []);
     console.log('recepción y validaciones verificadas');
   } finally {

@@ -20,7 +20,24 @@ const assert = require('node:assert/strict');
       await page.waitForFunction(async () => !!(await (await caches.open("formopack-panel")).match("/chofer")));
     }
     const a='chofer@formopack.com', b='otro-chofer@example.com';
+    // Una instalación anterior ya tiene el almacén y puede contener evidencia pendiente.
+    await page.goto(base);
+    await page.evaluate(() => new Promise((resolve,reject) => {
+      const abrir = indexedDB.open('formopack-offline',1);
+      abrir.onupgradeneeded = () => {
+        const store = abrir.result.createObjectStore('entregas-pendientes',{keyPath:'id',autoIncrement:true});
+        store.add({fields:{csrf_token:'otra-sesion-antigua'},photo:new Blob(['evidencia'])});
+      };
+      abrir.onsuccess = () => { abrir.result.close(); resolve(); };
+      abrir.onerror = () => reject(abrir.error);
+    }));
     await login(a);
+    assert.equal(await page.evaluate(async () => {
+      const db = await abrirBase();
+      const lectura = db.transaction('entregas-pendientes').objectStore('entregas-pendientes').get(1);
+      const antigua = await new Promise(resolve => { lectura.onsuccess = () => resolve(lectura.result); });
+      return [await antigua.photo.text(), (await leerPendientes()).length].join(',');
+    }), 'evidencia,0');
     await ctx.setOffline(true);
     await page.reload();
     await page.getByText('DES-COMPARTIDA-A',{exact:true}).waitFor();

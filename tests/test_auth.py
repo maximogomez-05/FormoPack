@@ -3,17 +3,16 @@
 import sys
 import os
 import logging
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from tests.test_seguridad_bd import db, pool_aislado
 from config.settings import RoleConfig
 from app.core.database import DatabaseManager
 from app.controllers.auth_controller import AuthController
 from app.models.usuario import Usuario
 from app.utils.exceptions import (
-    AuthenticationError,
-    DatabaseConnectionError,
-    UserInactiveError,
     UserNotFoundError,
     ValidationError,
 )
@@ -75,40 +74,16 @@ def test_validacion_login():
     print("  [OK] Validación de campos de login")
 
 
-def test_conexion_bd() -> bool:
-    """Prueba conexión al servidor MySQL (Singleton)."""
-    try:
-        db1 = DatabaseManager.get_instance()
-        db1.test_connection()
-        db2 = DatabaseManager.get_instance()
-        assert db1 is db2
-        print("  [OK] Conexión MySQL y Singleton")
-    except DatabaseConnectionError:
-        print("  [INFO] Conexión MySQL omitida (servidor no disponible)")
+def test_conexion_bd(pool_aislado):
+    gestor = DatabaseManager.get_instance()
+    assert gestor.test_connection()
+    assert DatabaseManager.get_instance() is gestor
 
 
-def test_login_con_bd():
-    """Prueba login contra base de datos activa."""
-    auth = AuthController()
-    try:
-        auth.login("noexiste@formopack.com", "pass")
-    except UserNotFoundError:
-        print("  [OK] Usuario no registrado detectado")
-    except DatabaseConnectionError:
-        return
-
-
-def main():
-    print("\n--- Pruebas Sprint 1 (Auth & POO) ---")
-    test_hash_password()
-    test_factory_usuario()
-    test_validacion_login()
-
-    test_conexion_bd()
-    test_login_con_bd()
-
-    print("--- Pruebas finalizadas ---\n")
+def test_login_con_bd(db):
+    with pytest.raises(UserNotFoundError):
+        AuthController(db).login("noexiste@formopack.com", "pass")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(pytest.main([__file__, "-q"]))

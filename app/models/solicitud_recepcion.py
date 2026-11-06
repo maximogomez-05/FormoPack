@@ -1,7 +1,6 @@
 """Datos validados de recepción antes de crear clientes o envíos."""
 
 from app.models.bulto import Bulto
-from app.models.cliente import Cliente
 from app.services.validacion_entrada import ValidacionEntrada as V
 from app.utils.exceptions import ValidationError
 
@@ -29,13 +28,17 @@ class SolicitudRecepcion:
         return datos, localidad, declarado, seguro
 
     def __init__(self, formulario):
+        V.campos_unicos(formulario, ("peso_real[]", "peso_volumetrico[]", "es_fragil[]"))
         self.clientes = {}
         for prefijo in ("rem", "dest"):
             datos = {"dni": formulario.get(prefijo + "_dni", ""),
                      "nombre_completo": formulario.get(prefijo + "_nombre", ""),
                      "telefono": formulario.get(prefijo + "_telefono", ""),
                      "email": formulario.get(prefijo + "_email")}
-            Cliente.validar_datos(**datos)
+            datos = {"dni": V.documento(datos["dni"]),
+                     "nombre_completo": V.nombre(datos["nombre_completo"]),
+                     "telefono": V.telefono(datos["telefono"]),
+                     "email": V.email(datos["email"])}
             self.clientes[prefijo] = datos
         pesos = formulario.getlist("peso_real[]")
         volumenes = formulario.getlist("peso_volumetrico[]")

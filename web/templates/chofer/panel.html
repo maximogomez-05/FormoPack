@@ -15,7 +15,8 @@
   <span>Sin conexión. Las entregas se guardarán en este dispositivo y se enviarán al recuperar Internet.</span>
 </div>
 <div class="queue-banner" id="queue-banner" hidden>
-  <span id="queue-message"></span>
+  <span id="queue-message" role="status"></span>
+  <a id="renovar-panel" href="{{ url_for('chofer.panel') }}" hidden>Reabrir mi panel</a>
   <button type="button" class="btn btn-secondary btn-sm" id="sync-now">Sincronizar</button>
 </div>
 
@@ -91,9 +92,9 @@
       <button type="button" class="icon-button" onclick="cerrarEntrega()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <form id="entrega-form" method="POST" enctype="multipart/form-data">
-      <div id="modal-error" style="color: #e74c3c; background: #fadbd8; padding: 10px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #e74c3c; font-weight: bold;" hidden></div>
+      <div id="modal-error" role="alert" style="color: #74231c; background: #fadbd8; padding: 10px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #e74c3c; font-weight: bold;" hidden></div>
       <div class="form-group">
-        <label class="form-label">Resultado</label>
+        <label for="tipo-intento" class="form-label">Resultado</label>
         <select name="tipo_intento" id="tipo-intento" class="form-control" required onchange="alternarCampos()">
           <option value="entregado">Entrega exitosa</option>
           <option value="fallido">Entrega fallida</option>
@@ -101,24 +102,24 @@
       </div>
       <div id="exito-fields">
         <div class="form-group">
-          <label class="form-label">DNI del receptor</label>
-          <input name="dni_receptor" class="form-control" inputmode="numeric" maxlength="15" placeholder="DNI de quien recibe">
+          <label for="dni-receptor" class="form-label">DNI del receptor</label>
+          <input name="dni_receptor" id="dni-receptor" class="form-control" inputmode="numeric" maxlength="15" placeholder="DNI de quien recibe">
         </div>
         <div class="form-group">
-          <label class="form-label">Firma del receptor</label>
-          <canvas id="firma-canvas" class="signature-pad" width="560" height="170"></canvas>
+          <span class="form-label" id="etiqueta-firma">Firma del receptor</span>
+          <canvas aria-labelledby="etiqueta-firma" id="firma-canvas" class="signature-pad" width="560" height="170"></canvas>
           <input type="hidden" name="firma_receptor" id="firma-receptor">
           <button type="button" class="btn btn-secondary btn-sm" onclick="limpiarFirma()"><i class="fa-solid fa-eraser"></i> Limpiar firma</button>
         </div>
         <div class="form-group">
-          <label class="form-label">Foto del remito</label>
-          <input type="file" name="foto_remito" class="form-control" accept="image/jpeg,image/png,image/webp" capture="environment">
+          <label for="foto-remito" class="form-label">Foto del remito</label>
+          <input type="file" name="foto_remito" id="foto-remito" class="form-control" accept="image/jpeg,image/png,image/webp" capture="environment">
         </div>
       </div>
       <div id="fallo-fields" hidden>
         <div class="form-group">
-          <label class="form-label">Motivo del fallo</label>
-          <select name="motivo_fallo" class="form-control">
+          <label for="motivo-fallo" class="form-label">Motivo del fallo</label>
+          <select name="motivo_fallo" id="motivo-fallo" class="form-control">
             <option value="destinatario_ausente">Destinatario ausente</option>
             <option value="domicilio_incorrecto">Domicilio incorrecto</option>
             <option value="rechazo">Rechazo del envío</option>
@@ -147,13 +148,30 @@ const DB_NAME = 'formopack-offline';
 const STORE_NAME = 'entregas-pendientes';
 let dbPromise;
 
+function nuevaClaveVisita() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
 function abrirBase() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 2);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+        request.result.createObjectStore(STORE_NAME, {keyPath: 'id', autoIncrement: true});
+        return;
+      }
+      const lectura = request.transaction.objectStore(STORE_NAME).openCursor();
+      lectura.onsuccess = () => {
+        const cursor = lectura.result;
+        if (!cursor) return;
+        const item = cursor.value;
+        if (!item.key) cursor.update({...item, key: nuevaClaveVisita()});
+        cursor.continue();
+      };
+    };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => { dbPromise = null; reject(request.error); };
   });
   return dbPromise;
 }
@@ -201,15 +219,22 @@ function actualizarContador() {
   leerPendientes().then(items => {
     const banner = document.getElementById('queue-banner');
     banner.hidden = items.length === 0;
-    const fallidas = items.filter(item => (item.attempts || 0) >= 3).length;
-    document.getElementById('queue-message').innerHTML = `<i class="fa-solid fa-clock"></i> ${items.length} entrega(s) pendiente(s)${fallidas ? `; ${fallidas} requiere(n) revisión` : ''}`;
+    const revision = items.find(item => item.revision);
+    const acceso = items.some(item => item.renovar);
+    document.getElementById('renovar-panel').hidden = !acceso;
+    let mensaje = `${items.length} visita(s) pendiente(s) de confirmación.`;
+    if (revision) mensaje += ' Revisá con mostrador ' + (revision.guia || 'la visita') + ': ' + revision.revision;
+    if (acceso) mensaje += ' Reabrí tu panel con la misma cuenta para continuar.';
+    document.getElementById('queue-message').textContent = mensaje;
   }).catch(() => {});
 }
 
 function actualizarPendiente(item) {
   return abrirBase().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(item);
+    const store = tx.objectStore(STORE_NAME);
+    const lectura = store.get(item.id);
+    lectura.onsuccess = () => { if (lectura.result) store.put(item); };
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
   }));
@@ -229,11 +254,24 @@ window.addEventListener('pageshow', verificarPanelVisible);
 window.addEventListener('focus', verificarPanelVisible);
 document.addEventListener('visibilitychange', verificarPanelVisible);
 
-async function sincronizarPendientes() {
+let sincronizando = false;
+async function sincronizarPendientes(manual = false) {
+  if (sincronizando) return;
+  sincronizando = true;
+  try {
+    await transmitirPendientes(manual);
+  } finally {
+    sincronizando = false;
+    actualizarContador();
+  }
+}
+
+async function transmitirPendientes(manual) {
   if (!sesionDelPanelVigente()) return;
   if (!navigator.onLine) return;
   const items = await leerPendientes();
   for (const item of items) {
+    if (item.revision && manual !== true) continue;
     const form = new FormData();
     Object.entries(item.fields).forEach(([key, value]) => form.append(key, value || ''));
     form.set('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
@@ -243,17 +281,17 @@ async function sincronizarPendientes() {
       const payload = await response.json().catch(() => null);
       if (response.ok && payload && payload.ok === true) await borrarPendiente(item.id);
       else {
-        item.attempts = (item.attempts || 0) + 1;
+        item.renovar = response.status === 401 || payload?.code === 'CSRF_ERROR';
+        const rechazo = [400, 403, 404, 409, 413, 422].includes(response.status);
+        item.revision = rechazo && !item.renovar
+          ? payload?.error || 'El servidor rechazó los datos de la visita.' : '';
         await actualizarPendiente(item);
-        if (item.attempts >= 3) break;
+        if (item.renovar || !rechazo) break;
       }
     } catch (error) {
-      item.attempts = (item.attempts || 0) + 1;
-      await actualizarPendiente(item);
       break;
     }
   }
-  actualizarContador();
 }
 
 async function enviarEntrega(form) {
@@ -267,7 +305,7 @@ async function enviarEntrega(form) {
     if (key !== 'foto_remito') fields[key] = value;
   }
   const photo = data.get('foto_remito');
-  const item = { chofer: choferActual, action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString(), attempts: 0, key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
+  const item = { chofer: choferActual, guia: form.dataset.guia, action: form.action, fields, photo: photo && photo.size ? photo : null, photoName: photo && photo.name ? photo.name : null, createdAt: new Date().toISOString(), key: nuevaClaveVisita() };
   const mensaje = document.getElementById('modal-error');
   let respuesta;
   try {
@@ -284,9 +322,12 @@ async function enviarEntrega(form) {
       window.location.reload();
       return;
     }
-    mensaje.textContent = resultado?.error || 'El servidor no confirmó la entrega. Revisá el estado antes de reintentar.';
-    mensaje.hidden = false;
-    return;
+    item.renovar = respuesta.status === 401 || resultado?.code === 'CSRF_ERROR';
+    if (!item.renovar && respuesta.status < 500 && respuesta.status !== 429) {
+      mensaje.textContent = resultado?.error || 'El servidor no confirmó la entrega. Revisá el estado antes de reintentar.';
+      mensaje.hidden = false;
+      return;
+    }
   }
   try {
     await guardarPendiente(item);
@@ -304,7 +345,9 @@ async function enviarEntrega(form) {
 }
 
 let visitaAbierta = 0;
+let botonDeResultado;
 function abrirEntrega(hoja, envio, guia) {
+  botonDeResultado = document.activeElement;
   visitaAbierta++;
   document.getElementById("entrega-form").reset();
   document.getElementById("coordenadas-gps").value = "";
@@ -312,7 +355,9 @@ function abrirEntrega(hoja, envio, guia) {
   alternarCampos();
   document.getElementById('entrega-title').textContent = `Resultado · ${guia}`; 
   document.getElementById('entrega-form').action = `/chofer/hojas/${hoja}/envios/${envio}/entrega`; 
+  document.getElementById('entrega-form').dataset.guia = guia;
   modal.hidden = false; 
+  document.getElementById("tipo-intento").focus();
   obtenerUbicacion(); 
 }
 
@@ -378,7 +423,8 @@ document.querySelectorAll('[data-gps-toggle]').forEach(button => {
 });
 
 function cerrarEntrega() { 
-  modal.hidden = true; 
+  modal.hidden = true;
+  botonDeResultado?.focus();
   document.getElementById('modal-error').hidden = true;
 }
 
@@ -442,7 +488,7 @@ canvas.addEventListener('pointermove', dibujar);
 canvas.addEventListener('pointerup', terminar); 
 canvas.addEventListener('pointerleave', terminar);
 
-document.getElementById('entrega-form').addEventListener('submit', event => { 
+document.getElementById('entrega-form').addEventListener('submit', async event => {
   event.preventDefault(); 
   const errorDiv = document.getElementById('modal-error');
   errorDiv.hidden = true;
@@ -469,12 +515,20 @@ document.getElementById('entrega-form').addEventListener('submit', event => {
     }
   }
 
-  enviarEntrega(event.currentTarget); 
+  const form = event.currentTarget;
+  const guardar = form.querySelector('button[type="submit"]');
+  if (guardar.disabled) return;
+  guardar.disabled = true;
+  try {
+    await enviarEntrega(form);
+  } finally {
+    guardar.disabled = false;
+  }
 });
 
 window.addEventListener('online', sincronizarPendientes);
 window.addEventListener('offline', actualizarEstadoConexion);
-document.getElementById('sync-now').addEventListener('click', sincronizarPendientes);
+document.getElementById('sync-now').addEventListener('click', () => sincronizarPendientes(true));
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', event => {
     if (event.data && event.data.type === 'sync-deliveries') sincronizarPendientes();

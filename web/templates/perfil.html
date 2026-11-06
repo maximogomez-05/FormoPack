@@ -58,15 +58,15 @@
   <section class="perfil-seccion">
     <div>
       <h2>Cambiar contraseña</h2>
-      <p>Usá al menos 8 caracteres, con letras y números. Al guardar tendrás que ingresar nuevamente.</p>
+      <p>Usá al menos 12 caracteres, con letras y números. Al guardar tendrás que ingresar nuevamente.</p>
       <form action="{{ url_for('perfil.password') }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="actual">Contraseña actual</label>
         <input class="form-control" id="actual" name="password_actual" type="password" autocomplete="current-password" required>
         <label for="nueva">Contraseña nueva</label>
-        <input class="form-control" id="nueva" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <input class="form-control" id="nueva" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="72" required>
         <label for="confirmacion">Repetir contraseña nueva</label>
-        <input class="form-control" id="confirmacion" name="confirmacion" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <input class="form-control" id="confirmacion" name="confirmacion" type="password" autocomplete="new-password" minlength="12" maxlength="72" required>
         <button class="btn btn-primary" type="submit">Actualizar contraseña</button>
       </form>
     </div>

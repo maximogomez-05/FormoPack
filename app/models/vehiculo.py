@@ -19,12 +19,13 @@ class Vehiculo:
         estado: str = "disponible",
         validar: bool = True,
     ) -> None:
+        if validar:
+            self.validar_datos(patente, capacidad_kg)
         self._id_vehiculo = id_vehiculo
         self._patente = (patente or "").strip()
         self._capacidad_kg = float(capacidad_kg)
         self._estado = (estado or "disponible").lower()
         if validar:
-            self.validar_datos(self._patente, self._capacidad_kg)
             if self._estado not in self.ESTADOS_VALIDOS:
                 raise ValidationError(field="estado", reason=f"Estado de vehículo no válido: '{estado}'")
 

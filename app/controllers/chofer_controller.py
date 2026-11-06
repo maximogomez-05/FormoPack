@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.database import DatabaseManager
 from app.services.operaciones_logisticas import OperacionesLogisticas
+from app.services.validacion_entrada import ValidacionEntrada as V
 from app.utils.exceptions import DatabaseQueryError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,12 @@ class ChoferController:
         precision_m: float | None,
     ) -> None:
         """Guarda el último punto GPS de una hoja activa del chofer autenticado."""
-        if not -90 <= latitud <= 90 or not -180 <= longitud <= 180:
-            raise ValidationError(field="ubicacion", reason="Las coordenadas GPS están fuera de rango")
+        id_chofer = V.entero(id_chofer, "chofer")
+        id_hoja_ruta = V.entero(id_hoja_ruta, "hoja_ruta")
+        latitud = V.medicion(latitud, "latitud", -90, 90, 7)
+        longitud = V.medicion(longitud, "longitud", -180, 180, 7)
+        if precision_m is not None:
+            precision_m = V.medicion(precision_m, "precision_m", 0, 999999.99, 2)
 
         conn = None
         cursor = None

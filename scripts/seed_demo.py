@@ -25,6 +25,7 @@ FIRMA_DEMO_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5v
 def limpiar_tablas(cur):
     """Limpia las tablas operativas preservando las tablas maestras."""
     tablas = [
+        "solicitudes_mostrador",
         "revisiones_pago_mp",
         "mensajes_soporte",
         "chats_soporte",

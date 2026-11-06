@@ -1,12 +1,12 @@
-"""Perfil personal y corrección administrativa de datos del personal."""
+"""Edición exclusiva del perfil personal."""
 
 import io
 from mysql.connector import Error as MySQLError
 
-from flask import Blueprint, Response, flash, redirect, render_template, request, send_file, session, url_for
+from flask import abort, Blueprint, Response, flash, redirect, render_template, request, send_file, session, url_for
 
 from app.services.perfil_usuario import PerfilUsuario
-from app.utils.exceptions import AuthenticationError, DuplicateError, ValidationError
+from app.utils.exceptions import AuthenticationError, ValidationError
 from web.extensions import limiter
 from web.routes.auth import login_required, rol_requerido
 
@@ -93,19 +93,8 @@ def foto():
 def cuenta(identificador):
     if identificador == session["usuario_id"]:
         return redirect(url_for("perfil.editar"))
-    servicio = PerfilUsuario()
-    error = None
-    if request.method == "POST":
-        try:
-            servicio.editar_cuenta(session["usuario_id"], session["version_sesion"], identificador,
-                                  request.form.get("nombre", ""), request.form.get("email", ""),
-                                  request.form.get("nro_licencia", ""))
-            flash("Cuenta actualizada. La persona deberá ingresar nuevamente.", "success")
-            return redirect(url_for("admin.usuarios"))
-        except (ValidationError, DuplicateError) as exc:
-            error = exc.message
-    return render_template("perfil.html", perfil=servicio.obtener(identificador),
-                           administrando=True, error=error), 400 if error else 200
+    abort(403)
+
 
 
 @perfil_bp.errorhandler(AuthenticationError)

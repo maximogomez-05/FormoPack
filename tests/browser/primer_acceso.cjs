@@ -41,7 +41,7 @@ const path = require('node:path');
     await modal.locator('[name=email]').fill('nueva@example.com');
     await modal.locator('[name=tipo_usuario]').selectOption('recepcionista');
     await modal.locator('[name=password]').fill('Provisoria123');
-    await modal.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await modal.getByRole('button', { name: 'Registrar Usuario', exact: true }).click();
     await admin.waitForLoadState('load');
     const persona = await nuevaPagina();
     await login(persona, 'nueva@example.com', 'Provisoria123');

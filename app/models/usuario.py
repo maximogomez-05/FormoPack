@@ -140,6 +140,12 @@ class Usuario:
             raise ValidationError(field="password", reason="La contraseña debe contener al menos un número.")
 
     @staticmethod
+    def validar_password_personal(password: str) -> None:
+        Usuario.validar_complejidad_password(password)
+        if len(password) < 12:
+            raise ValidationError(field="password", reason="La contraseña personal debe tener al menos 12 caracteres.")
+
+    @staticmethod
     def hashear_password(password_plano: str) -> str:
         """Genera hash Bcrypt para almacenar."""
         Usuario.validar_complejidad_password(password_plano)

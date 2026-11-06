@@ -146,11 +146,12 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
     elementos.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#dddddd")))
     elementos.append(Spacer(1, 0.3 * cm))
 
+    estilo_nombre = ParagraphStyle("nombre_cliente", parent=styles["Normal"], alignment=TA_CENTER)
     datos_partes = [
         ["REMITENTE", "DESTINATARIO"],
         [
-            envio.get("remitente", "N/A"),
-            envio.get("destinatario", "N/A"),
+            Paragraph(escape(str(envio.get("remitente") or "N/A")), estilo_nombre),
+            Paragraph(escape(str(envio.get("destinatario") or "N/A")), estilo_nombre),
         ],
         [
             f"DNI: {envio.get('rem_dni', 'N/A')}",
@@ -178,7 +179,7 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
 
     # ── DESTINO ──
     elementos.append(Paragraph(
-        f"<b>Destino:</b> {envio.get('localidad_destino', 'N/A')} — {envio.get('direccion_destino', 'N/A')}",
+        f"<b>Destino:</b> {escape(str(envio.get('localidad_destino') or 'N/A'))} — {escape(str(envio.get('direccion_destino') or 'N/A'))}",
         styles["Normal"],
     ))
     elementos.append(Spacer(1, 0.4 * cm))
@@ -199,7 +200,7 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
             filas_bultos.append([str(i), f"{peso_real:.2f}", f"{peso_vol:.2f}", f"{aforo:.2f}", fragil])
 
         tabla_bultos = Table(
-            encabezado_bultos + filas_bultos,
+            encabezado_bultos + filas_bultos, repeatRows=1,
             colWidths=[1.5 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm, 2 * cm],
         )
         tabla_bultos.setStyle(TableStyle([
@@ -300,7 +301,7 @@ def _elementos_remito(envio: dict, detalle: dict, copia: int) -> list:
         real = float(bulto.get("peso_real", 0))
         volumetrico = float(bulto.get("peso_volumetrico", 0))
         filas.append([str(index), f"{real:.2f} kg", f"{max(real, volumetrico):.2f} kg", "Si" if bulto.get("es_fragil") else "No"])
-    tabla = Table(filas, colWidths=[3 * cm, 4 * cm, 4 * cm, 3 * cm])
+    tabla = Table(filas, repeatRows=1, colWidths=[3 * cm, 4 * cm, 4 * cm, 3 * cm])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#004481")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

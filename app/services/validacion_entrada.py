@@ -30,18 +30,39 @@ class ValidacionEntrada:
         return numero
 
     @staticmethod
-    def decimal(valor, campo, minimo=0, maximo=MAX_IMPORTE):
+    def _numero(valor, campo, minimo, maximo):
         if isinstance(valor, bool) or not isinstance(valor, (str, int, float, Decimal)) or len(str(valor)) > 64:
             raise ValidationError(campo, "Ingresá un número válido")
+        texto = str(valor).strip(" ")
+        if not re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", texto):
+            raise ValidationError(campo, "Ingresá un número válido, con punto decimal y sin separadores de miles")
         try:
-            numero = Decimal(str(valor))
+            numero = Decimal(texto)
         except InvalidOperation:
             raise ValidationError(campo, "Ingresá un número válido") from None
         if not numero.is_finite() or not Decimal(str(minimo)) <= numero <= maximo:
             raise ValidationError(campo, f"Debe estar entre {minimo} y {maximo}")
+        return numero
+
+    @classmethod
+    def decimal(cls, valor, campo, minimo=0, maximo=MAX_IMPORTE):
+        numero = cls._numero(valor, campo, minimo, maximo)
         if numero != numero.quantize(Decimal("0.01")):
             raise ValidationError(campo, "Se admiten como máximo dos decimales")
         return float(numero)
+
+    @classmethod
+    def medicion(cls, valor, campo, minimo, maximo, decimales):
+        """Los sensores admiten más precisión; se limita antes de redondear para SQL."""
+        numero = cls._numero(valor, campo, minimo, Decimal(str(maximo)))
+        return float(numero.quantize(Decimal(1).scaleb(-decimales)))
+
+    @staticmethod
+    def campos_unicos(formulario, listas=()):
+        """No elegir silenciosamente uno de dos valores para un campo escalar."""
+        for campo in formulario:
+            if campo not in listas and len(formulario.getlist(campo)) != 1:
+                raise ValidationError(campo, "El campo está repetido. Volvé a abrir el formulario")
 
     @classmethod
     def documento(cls, valor):
