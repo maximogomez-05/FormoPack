@@ -433,6 +433,68 @@ def tracking_publico():
     ), estado_http
 
 
+@admin_bp.route("/tracking/estado", methods=["GET"])
+def tracking_estado():
+    """Devuelve solo estado y GPS reciente para actualizar el seguimiento público."""
+    nro_guia = request.args.get("guia", "").strip().upper()
+    if (
+        not nro_guia
+        or len(nro_guia) > 25
+        or not nro_guia.isascii()
+        or not nro_guia.replace("-", "").isalnum()
+    ):
+        return jsonify({"ok": False, "error": "Número de guía inválido."}), 400
+
+    conn = None
+    cursor = None
+    try:
+        conn = DatabaseManager.get_instance().get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT estado_actual, id_hoja_ruta FROM envios WHERE nro_guia = %s",
+            (nro_guia,),
+        )
+        envio = cursor.fetchone()
+        if not envio:
+            return jsonify({"ok": False, "error": "No se encontró el envío."}), 404
+
+        gps = None
+        if envio["estado_actual"] == "en_ruta" and envio.get("id_hoja_ruta"):
+            try:
+                cursor.execute(
+                    """SELECT latitud, longitud, precision_m, fecha_actualizacion
+                       FROM ubicaciones_hojas_ruta
+                       WHERE id_hoja_ruta = %s
+                         AND fecha_actualizacion >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)""",
+                    (envio["id_hoja_ruta"],),
+                )
+                ubicacion = cursor.fetchone()
+            except Exception as exc:
+                if getattr(exc, "errno", None) != 1146:
+                    raise
+                logger.warning("Falta aplicar la migración de ubicaciones GPS en vivo")
+                ubicacion = None
+
+            if ubicacion:
+                fecha = ubicacion["fecha_actualizacion"]
+                gps = {
+                    "latitud": float(ubicacion["latitud"]),
+                    "longitud": float(ubicacion["longitud"]),
+                    "precision_m": float(ubicacion["precision_m"]) if ubicacion.get("precision_m") is not None else None,
+                    "fecha_actualizacion": fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha),
+                }
+
+        return jsonify({"ok": True, "estado": envio["estado_actual"], "ubicacion_gps": gps})
+    except Exception:
+        logger.exception("No se pudo actualizar el seguimiento público")
+        return jsonify({"ok": False, "error": "No se pudo consultar el seguimiento."}), 503
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 @admin_bp.route("/tracking/descargar-comprobante")
 def descargar_comprobante_tracking():
     """Genera y descarga un comprobante PDF simplificado desde el tracking público."""

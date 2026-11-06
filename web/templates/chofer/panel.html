@@ -343,7 +343,7 @@ document.querySelectorAll('[data-gps-toggle]').forEach(button => {
     status.textContent = 'Esperando permiso y señal GPS…';
     let ultimaActualizacion = 0;
     const watchId = navigator.geolocation.watchPosition(async position => {
-      if (Date.now() - ultimaActualizacion < 20000) return;
+      if (Date.now() - ultimaActualizacion < 12000) return;
       ultimaActualizacion = Date.now();
       status.textContent = 'Enviando ubicación…';
       try {
