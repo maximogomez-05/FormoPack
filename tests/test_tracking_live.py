@@ -1,0 +1,86 @@
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+from web.app import create_app
+
+
+def test_tracking_estado_publico_devuelve_solo_estado_y_gps():
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [
+        {"estado_actual": "en_ruta", "id_hoja_ruta": 7},
+        {
+            "latitud": -26.18,
+            "longitud": -58.17,
+            "precision_m": 8.5,
+            "fecha_actualizacion": datetime(2026, 11, 5, 12, 0),
+        },
+    ]
+    conexion = MagicMock()
+    conexion.cursor.return_value = cursor
+    base_datos = MagicMock()
+    base_datos.get_connection.return_value = conexion
+
+    with patch("web.routes.admin.DatabaseManager.get_instance", return_value=base_datos):
+        respuesta = create_app().test_client().get("/admin/tracking/estado?guia=FP-123")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json == {
+        "ok": True,
+        "estado": "en_ruta",
+        "ubicacion_gps": {
+            "latitud": -26.18,
+            "longitud": -58.17,
+            "precision_m": 8.5,
+            "fecha_actualizacion": "2026-11-05T12:00:00",
+        },
+    }
+    assert cursor.execute.call_count == 2
+    assert "destinatario" not in respuesta.json
+    cursor.close.assert_called_once()
+    conexion.close.assert_called_once()
+
+
+def test_tracking_estado_entregado_no_consulta_ni_expone_gps():
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {"estado_actual": "entregado", "id_hoja_ruta": 7}
+    conexion = MagicMock()
+    conexion.cursor.return_value = cursor
+    base_datos = MagicMock()
+    base_datos.get_connection.return_value = conexion
+
+    with patch("web.routes.admin.DatabaseManager.get_instance", return_value=base_datos):
+        respuesta = create_app().test_client().get("/admin/tracking/estado?guia=FP-123")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json == {"ok": True, "estado": "entregado", "ubicacion_gps": None}
+    assert cursor.execute.call_count == 1
+
+
+def test_tracking_estado_rechaza_guia_invalida_sin_consultar_bd():
+    with patch("web.routes.admin.DatabaseManager.get_instance") as get_database:
+        respuesta = create_app().test_client().get("/admin/tracking/estado?guia=../privado")
+
+    assert respuesta.status_code == 400
+    assert respuesta.json["ok"] is False
+    get_database.assert_not_called()
+
+
+def test_vista_tracking_renderiza_mapa_osrm_y_endpoint_de_actualizacion():
+    envio = {
+        "nro_guia": "FP-123",
+        "estado_actual": "en_ruta",
+        "fecha_creacion": datetime(2026, 11, 5, 12, 0),
+        "cantidad_intentos": 0,
+        "localidad_destino": "Clorinda",
+        "remitente": "Remitente Demo",
+        "destinatario": "Destinatario Demo",
+    }
+
+    with patch("web.routes.admin._obtener_timeline", return_value=(envio, [])):
+        respuesta = create_app().test_client().get("/admin/tracking?guia=FP-123")
+
+    pagina = respuesta.get_data(as_text=True)
+    assert respuesta.status_code == 200
+    assert "/route/v1/driving/" in pagina
+    assert "/admin/tracking/estado?guia=FP-123" in pagina
+    assert "setInterval(actualizarSeguimiento, 10000)" in pagina

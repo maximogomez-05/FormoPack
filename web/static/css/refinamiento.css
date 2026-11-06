@@ -14,16 +14,16 @@ body, button, input, select, textarea, .form-control {
 }
 /* Acabado de la interfaz: conservar estructura y usar el color como señal. */
 :root {
-  --text-main: #202d3e;
-  --text-muted: #536276;
-  --border: #dce2e9;
-  --bg-main: #f3f5f7;
-  --success: #28624d;
-  --warning: #8c5b1f;
-  --danger: #a03542;
-  --info: #355f85;
-  --shadow-sm: 0 1px 3px rgba(22, 35, 50, .045);
-  --shadow-md: 0 5px 18px rgba(22, 35, 50, .065);
+  --text-main: #172b4d;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --bg-main: #f8fafc;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc4c54;
+  --info: #2563eb;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, .06), 0 1px 2px rgba(15, 23, 42, .03);
+  --shadow-md: 0 8px 20px rgba(15, 23, 42, .08);
 }
 .card { border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
 .card:hover { box-shadow: var(--shadow-sm); transform: none; }
@@ -94,6 +94,128 @@ body, button, input, select, textarea, .form-control {
 }
 
 .badge-reservado { background: #edf2f7; color: #284d70; border-color: #d9e3ed; }
+
+/* Shared component finish for operational pages */
+.card {
+  border-radius: 12px;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.card-header {
+  background: #f8fafc;
+  border-bottom-color: #e2e8f0;
+}
+
+.card-title { color: #183b5b; }
+
+.badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.badge-recibido, .badge-en_ruta, .badge-digital, .badge-mercadopago,
+.badge-reservado, .badge-recepcionista {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.badge-entregado, .badge-disponible, .badge-pagado, .badge-chofer,
+.badge-abierto, .badge-activo {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.badge-en_planta, .badge-mantenimiento, .badge-cuenta_corriente,
+.badge-pendiente, .badge-cerrado, .badge-cerrada {
+  background: #fffbeb;
+  color: #a16207;
+  border-color: #fde68a;
+}
+
+.badge-fallido, .badge-devolucion, .badge-devuelto_remitente,
+.badge-fuera_de_servicio, .badge-administrador {
+  background: #fef2f2;
+  color: #b42332;
+  border-color: #fecaca;
+}
+
+.btn {
+  min-height: 40px;
+  border-radius: 9px;
+}
+
+.btn-primary { background: #2563eb; border-color: #2563eb; }
+.btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
+.form-control,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select,
+textarea {
+  border-radius: 9px;
+  border-color: #cbd5e1;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.form-control:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+select:focus,
+textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .14);
+}
+
+.table-responsive {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f5f9;
+  color: #334e68;
+}
+
+tbody tr { transition: background-color .16s ease; }
+tbody tr:hover { background: #f8fbff; }
+
+.logistica-map-shell,
+.tracking-map-wrap,
+#mapa-rutas,
+#tracking-map,
+.leaflet-container {
+  border-radius: 12px;
+}
+
+.logistica-map-shell,
+.tracking-map-wrap {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.logistica-map-disclaimer,
+.tracking-map-note {
+  background: rgba(255, 255, 255, .94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (max-width: 768px) {
+  .delivery-actions > .btn,
+  .driver-route-head .btn,
+  .modal-actions .btn {
+    min-height: 52px;
+    font-size: 15px;
+  }
+}
 
 
 /* ============================================================

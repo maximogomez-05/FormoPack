@@ -1,6 +1,6 @@
-const CACHE_NAME = "formopack-chofer-v4";
+const CACHE_NAME = "formopack-chofer-v5";
 const APP_SHELL = [
-  "/static/css/style.css?v=7",
+  "/static/css/style.css?v=8",
   "/static/manifest.json",
 ];
 

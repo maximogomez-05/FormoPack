@@ -6,8 +6,8 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="theme-color" content="#102a43">
   <title>Seguimiento de Envíos — FormoPack</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=6) }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=2) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=8) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/refinamiento.css', v=3) }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -571,7 +571,7 @@
             · {{ resumen_tracking.ubicacion_actual }}
           </div>
         </div>
-        <span class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}tracking-status--issue{% endif %}">
+        <span id="tracking-status-badge" class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}tracking-status--issue{% endif %}">
           <i class="fa-solid {% if estado == 'entregado' %}fa-circle-check{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}fa-triangle-exclamation{% else %}fa-truck-fast{% endif %}" aria-hidden="true"></i>
           {% if resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% else %}{{ estado_nombres.get(estado, estado|replace('_', ' ')|title) }}{% endif %}
         </span>
@@ -603,12 +603,14 @@
           <div class="tracking-map-wrap">
             <div id="tracking-map" role="img" aria-label="Mapa referencial desde Formosa Capital hasta {{ envio.localidad_destino }}"></div>
             <div id="tracking-map-note" class="tracking-map-note">
-              {% if envio.ubicacion_gps and envio.ubicacion_gps.en_vivo %}
+              {% if estado == 'entregado' %}
+                <i class="fa-solid fa-circle-check" aria-hidden="true"></i> Entrega confirmada. El seguimiento en vivo finalizó.
+              {% elif envio.ubicacion_gps and envio.ubicacion_gps.en_vivo %}
                 <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> GPS del chofer actualizado {{ envio.ubicacion_gps.fecha_actualizacion }}{% if envio.ubicacion_gps.precision_m %} · precisión ±{{ envio.ubicacion_gps.precision_m|round|int }} m{% endif %}.
               {% elif envio.ubicacion_gps %}
                 <i class="fa-solid fa-location-dot" aria-hidden="true"></i> Último GPS registrado al completar el intento de entrega: {{ envio.ubicacion_gps.fecha_actualizacion }}. No es ubicación en vivo.
               {% else %}
-                <i class="fa-solid fa-circle-info" aria-hidden="true"></i> Mapa referencial entre planta y localidad de destino. No representa la posición GPS del vehículo ni calles recorridas.
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i> OSRM trazará el recorrido hasta la localidad de destino. La dirección exacta no tiene coordenadas registradas.
               {% endif %}
             </div>
           </div>
@@ -698,12 +700,13 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const destinationName = {{ envio.localidad_destino|tojson }};
-    const destinationAddress = destinationName;
     const guideNumber = {{ envio.nro_guia|tojson }};
     const currentStatus = {{ estado|tojson }};
     const gpsPosition = {{ (envio.ubicacion_gps or none)|tojson }};
+    const trackingStatusUrl = {{ url_for('admin.tracking_estado', guia=envio.nro_guia)|tojson }};
     const knownLocations = {
       'Formosa': [-26.1848, -58.1731],
+      'Formosa Capital': [-26.1848, -58.1731],
       'Clorinda': [-25.2848, -57.7185],
       'Pirané': [-25.7324, -59.1088],
       'El Colorado': [-26.3050, -59.3729],
@@ -724,8 +727,11 @@
     const destination = knownLocations[destinationName];
     const hasDestinationCoordinates = Boolean(destination);
     const hasGpsPosition = Boolean(gpsPosition && Number.isFinite(Number(gpsPosition.latitud)) && Number.isFinite(Number(gpsPosition.longitud)));
-    const gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
+    let gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
     const map = L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8);
+    const trackingNote = document.getElementById('tracking-map-note');
+    let driverMarker = null;
+    let routeLayer = null;
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       // Identificar el sitio ante OSM sin revelar la guía consultada.
@@ -734,30 +740,114 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    L.marker(plant).addTo(map).bindPopup('<strong>Planta FormoPack</strong><br>Formosa Capital');
-    if (hasDestinationCoordinates && destinationName !== 'Formosa') {
-      L.marker(destination).addTo(map).bindPopup(`<strong>Destino</strong><br>${destinationName}`);
-      L.polyline([plant, destination], { color: '#176b87', weight: 4, opacity: 0.8, dashArray: '8 8' }).addTo(map);
+    L.marker(plant).addTo(map).bindPopup('<strong>Inicio</strong><br>Planta FormoPack · Formosa Capital');
+    if (hasDestinationCoordinates) {
+      const destinoLabel = currentStatus === 'entregado' ? 'Entrega confirmada' : 'Destino aproximado';
+      const destinoPopup = document.createElement('div');
+      const destinoTitulo = document.createElement('strong');
+      destinoTitulo.textContent = destinoLabel;
+      destinoPopup.append(destinoTitulo, document.createElement('br'), document.createTextNode(destinationName));
+      L.marker(destination).addTo(map).bindPopup(destinoPopup);
     }
-    if (hasGpsPosition) {
-      const puntoGps = L.circleMarker(gpsCoordinates, {
-        radius: 10,
-        color: '#ffffff',
-        weight: 3,
-        fillColor: '#d25a38',
-        fillOpacity: 1
-      }).addTo(map);
-      puntoGps.bindPopup(`<strong>${gpsPosition.en_vivo ? 'Ubicación actual del chofer' : 'Última ubicación registrada'}</strong><br>${new Date(gpsPosition.fecha_actualizacion).toLocaleString()}`);
+
+    function actualizarMarcadorGps(posicion) {
+      const lat = Number(posicion && posicion.latitud);
+      const lng = Number(posicion && posicion.longitud);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+      gpsCoordinates = [lat, lng];
+      if (!driverMarker) {
+        driverMarker = L.circleMarker(gpsCoordinates, {
+          radius: 10,
+          color: '#ffffff',
+          weight: 3,
+          fillColor: '#d25a38',
+          fillOpacity: 1
+        }).addTo(map);
+        driverMarker.bindPopup('<strong>Ubicación actual del chofer</strong>');
+      } else {
+        driverMarker.setLatLng(gpsCoordinates);
+      }
+    }
+
+    async function trazarRutaOSRM() {
+      if (!hasDestinationCoordinates) {
+        trackingNote.textContent = 'No hay coordenadas de referencia para esta localidad; no se puede solicitar la ruta a OSRM.';
+        return;
+      }
+      const coordenadas = `${plant[1]},${plant[0]};${destination[1]},${destination[0]}`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${coordenadas}?overview=full&geometries=geojson&steps=false`;
+      try {
+        const respuesta = await fetch(url, { mode: 'cors' });
+        if (!respuesta.ok) throw new Error(`OSRM respondió HTTP ${respuesta.status}`);
+        const datos = await respuesta.json();
+        const geometria = datos.routes && datos.routes[0] && datos.routes[0].geometry;
+        if (datos.code !== 'Ok' || !geometria || geometria.type !== 'LineString') {
+          throw new Error('OSRM no devolvió una ruta válida');
+        }
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.geoJSON(geometria, {
+          style: { color: '#176b87', weight: 5, opacity: 0.9 }
+        }).addTo(map);
+        map.fitBounds(routeLayer.getBounds().extend(plant).extend(destination).pad(0.18));
+        trackingNote.textContent = `Ruta por calles calculada con OSRM hasta el centro de referencia de ${destinationName}; el sistema no tiene coordenadas del domicilio exacto.`;
+      } catch (error) {
+        console.error('No se pudo calcular la ruta OSRM:', error);
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.polyline([plant, destination], {
+          color: '#176b87', weight: 4, opacity: 0.75, dashArray: '8 8'
+        }).addTo(map);
+        trackingNote.textContent = 'No se pudo calcular la ruta por calles con OSRM. Se muestra una referencia directa a la localidad, no el recorrido real.';
+      }
+    }
+
+    if (gpsCoordinates) {
+      actualizarMarcadorGps(gpsPosition);
       const puntosVisibles = [plant, gpsCoordinates];
       if (hasDestinationCoordinates) puntosVisibles.push(destination);
       map.fitBounds(L.latLngBounds(puntosVisibles).pad(0.22));
-    } else if (hasDestinationCoordinates && destinationName !== 'Formosa') {
+    } else if (hasDestinationCoordinates) {
       map.fitBounds(L.latLngBounds([plant, destination]).pad(0.22));
     } else {
       map.setView(plant, 9);
-      if (!hasDestinationCoordinates) {
-        document.getElementById('tracking-map-note').textContent = 'Sin GPS registrado ni coordenadas referenciales para esta localidad. Se muestra únicamente la planta.';
+    }
+    trazarRutaOSRM();
+
+    /*
+     * La ubicación que almacena FormoPack corresponde a la hoja de ruta. No se
+     * asume que el centro de una localidad sea el domicilio de entrega.
+     */
+    async function actualizarSeguimiento() {
+      try {
+        const respuesta = await fetch(trackingStatusUrl, {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
+        const datos = await respuesta.json();
+        if (!respuesta.ok || !datos.ok) {
+          throw new Error(datos.error || `El servidor respondió HTTP ${respuesta.status}`);
+        }
+        if (datos.estado !== currentStatus) {
+          window.location.reload();
+          return;
+        }
+        if (datos.ubicacion_gps) {
+          actualizarMarcadorGps(datos.ubicacion_gps);
+          const precision = datos.ubicacion_gps.precision_m;
+          const hora = new Date(datos.ubicacion_gps.fecha_actualizacion).toLocaleString();
+          trackingNote.textContent = `GPS del chofer actualizado ${hora}${precision ? ` · precisión ±${Math.round(precision)} m` : ''}. El destino marcado es el centro de referencia de ${destinationName}, no el domicilio exacto.`;
+        } else if (datos.estado === 'en_ruta') {
+          trackingNote.textContent = 'El envío está en ruta, pero todavía no hay una posición GPS reciente del chofer.';
+        }
+      } catch (error) {
+        console.error('No se pudo actualizar el seguimiento:', error);
+        document.getElementById('tracking-live-note').textContent = 'No se pudo consultar la ubicación en vivo. Se intentará nuevamente en 10 segundos.';
       }
+    }
+    const estadosTerminales = ['entregado', 'devolucion', 'devuelto_remitente', 'retiro_remitente', 'siniestro'];
+    if (!estadosTerminales.includes(currentStatus)) {
+      document.getElementById('tracking-live-note').textContent = 'Actualización automática del estado y del GPS cada 10 segundos.';
+      actualizarSeguimiento();
+      window.setInterval(actualizarSeguimiento, 10000);
     }
     window.addEventListener('load', () => setTimeout(() => map.invalidateSize(), 100));
 
@@ -794,11 +884,6 @@
       refreshBtn.addEventListener('click', () => window.location.reload());
     }
 
-    const activeStatuses = ['recibido', 'en_planta', 'en_ruta'];
-    if (activeStatuses.includes(currentStatus)) {
-      document.getElementById('tracking-live-note').textContent = 'Consulta automática cada 60 segundos. Se mostrarán cambios cuando se registren en el sistema.';
-      window.setTimeout(() => window.location.reload(), 60000);
-    }
   </script>
   {% endif %}
 
