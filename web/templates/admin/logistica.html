@@ -461,6 +461,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/mapas-seguimiento.js') }}"></script>
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <!-- Leaflet JS -->
@@ -469,7 +470,6 @@
 <script>
   const mapaEnviosUrl = {{ mapa_envios_url|tojson }};
   let mapaDatos = {{ mapa_envios|tojson|safe }};
-  let mapaEnActualizacion = false;
   const coordenadasLocalidades = {
     'Formosa': [-26.1848, -58.1731],
     'Formosa Capital': [-26.1848, -58.1731],
@@ -577,15 +577,15 @@
   function obtenerPosicion(envio) {
     if (envio.gps_latitud !== null && envio.gps_latitud !== undefined
       && envio.gps_longitud !== null && envio.gps_longitud !== undefined
-      && Number.isFinite(Number(envio.gps_latitud)) && Number.isFinite(Number(envio.gps_longitud))) {
+      && FormoPackMapas.coordenadas(envio.gps_latitud, envio.gps_longitud)) {
       return [Number(envio.gps_latitud), Number(envio.gps_longitud)];
     }
     return obtenerDestino(envio);
   }
 
   function etiquetaUbicacion(envio) {
-    if (envio.gps_en_vivo) return `GPS del vehículo · ${envio.gps_fecha || 'actualizado recientemente'}`;
-    if (envio.gps_latitud !== null && envio.gps_latitud !== undefined) return `Último GPS de entrega · ${envio.gps_fecha || 'fecha no disponible'}`;
+    if (envio.gps_en_vivo && FormoPackMapas.reciente(envio.gps_fecha)) return `GPS del vehículo · ${envio.gps_fecha || 'actualizado recientemente'}`;
+    if (envio.gps_latitud !== null && envio.gps_latitud !== undefined) return `Última ubicación conocida (sin señal en vivo) · ${envio.gps_fecha || 'fecha no disponible'}`;
     if (obtenerDestino(envio)) return 'Localidad destino aproximada · sin GPS actual';
     return 'Sin coordenadas disponibles';
   }
@@ -650,7 +650,7 @@
       const posicion = obtenerPosicion(envio);
       if (!posicion) return;
       const seleccionado = String(envio.id_envio) === seleccionadoId;
-      const esGps = envio.gps_latitud !== null && envio.gps_latitud !== undefined;
+      const esGps = Boolean(envio.gps_en_vivo && FormoPackMapas.reciente(envio.gps_fecha));
       const estado = String(envio.estado_actual || '').toLowerCase();
       const color = esGps ? '#d94841' : (estadoColor[estado] || estadoColor.default);
       const iconoClase = estado === 'fallido' ? 'fa-triangle-exclamation' : (estado === 'entregado' ? 'fa-check' : 'fa-truck-fast');
@@ -703,25 +703,26 @@
     if (mapaDatos.some(envio => String(envio.id_envio) === valorActual)) envioSeleccionado.value = valorActual;
   }
 
-  async function refrescarEnvios(forzarVista = false) {
-    if (mapaEnActualizacion) return;
-    mapaEnActualizacion = true;
-    try {
-      const respuesta = await fetch(mapaEnviosUrl, { credentials: 'same-origin', cache: 'no-store' });
-      if (!respuesta.ok) throw new Error('No se pudieron consultar los envíos');
-      const datos = await respuesta.json();
-      mapaDatos = Array.isArray(datos.envios) ? datos.envios : [];
-      actualizarConteosFiltros();
-      actualizarOpciones();
-      actualizarMarcadores(forzarVista);
-      const envios = enviosVisibles();
-      const gpsActivos = envios.filter(envio => envio.gps_en_vivo).length;
-      estadoMapa.textContent = `${envios.length}/${mapaDatos.length} envío(s) visibles · ${gpsActivos} GPS activo(s) · actualizado ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } catch (error) {
-      estadoMapa.textContent = 'No se pudo actualizar; se mantienen los últimos datos cargados.';
-    } finally {
-      mapaEnActualizacion = false;
-    }
+  let forzarProximaVista = false;
+  const consultaMapa = new FormoPackMapas.ConsultaPeriodica(mapaEnviosUrl, datos => {
+    if (!datos || !Array.isArray(datos.envios) || !datos.envios.every(e => e && e.id_envio
+      && typeof e.nro_guia === 'string' && typeof e.estado_actual === 'string'
+      && (e.gps_latitud == null && e.gps_longitud == null || FormoPackMapas.coordenadas(e.gps_latitud, e.gps_longitud)))) throw new Error('Respuesta inválida');
+    mapaDatos = datos.envios;
+    actualizarConteosFiltros();
+    actualizarOpciones();
+    actualizarMarcadores(forzarProximaVista);
+    forzarProximaVista = false;
+    const envios = enviosVisibles();
+    const activos = envios.filter(e => e.gps_en_vivo && FormoPackMapas.reciente(e.gps_fecha)).length;
+    estadoMapa.textContent = `${envios.length}/${mapaDatos.length} envío(s) visibles · ${activos} GPS reciente(s) · actualizado ${new Date().toLocaleTimeString()}`;
+  }, () => {
+    actualizarMarcadores(false);
+    estadoMapa.textContent = 'Conexión interrumpida. Se muestran los últimos datos conocidos; se reintentará automáticamente.';
+  }, 30000);
+  function refrescarEnvios(forzarVista = false) {
+    forzarProximaVista = forzarProximaVista || forzarVista;
+    return consultaMapa.iniciar();
   }
 
   actualizarConteosFiltros();
@@ -734,7 +735,14 @@
     estadoMapa.textContent = `${enviosVisibles().length}/${mapaDatos.length} envío(s) visibles por estado`;
   }));
   document.getElementById('mapa-refresh').addEventListener('click', () => refrescarEnvios(true));
-  window.setInterval(() => refrescarEnvios(false), 30000);
+  consultaMapa.iniciar();
+  window.setInterval(() => {
+    if (mapaDatos.some(e => e.gps_en_vivo && !FormoPackMapas.reciente(e.gps_fecha))) {
+      mapaDatos.forEach(e => { if (!FormoPackMapas.reciente(e.gps_fecha)) e.gps_en_vivo = false; });
+      actualizarMarcadores(false);
+      estadoMapa.textContent = 'La última señal GPS venció. Se muestran ubicaciones conocidas, sin señal en vivo.';
+    }
+  }, 5000);
   })();
 
   function toggleAll(source) {

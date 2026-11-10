@@ -207,6 +207,9 @@ class EnvioController:
             id_envio, EstadosEnvio.RECIBIDO, "Sucursal Origen", "Envio recibido en mostrador.",
         ))
 
+        from app.services.cola_notificaciones import ColaNotificaciones
+        ColaNotificaciones.encolar_historial(cursor, cursor.lastrowid)
+
         # Generar comprobante interno de recepcion (RF 2.7)
         nro_comprobante = ComprobanteInterno.generar_nro_comprobante(id_envio, "recepcion")
         sql_comprobante = """

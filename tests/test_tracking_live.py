@@ -83,4 +83,5 @@ def test_vista_tracking_renderiza_mapa_osrm_y_endpoint_de_actualizacion():
     assert respuesta.status_code == 200
     assert "/route/v1/driving/" in pagina
     assert "/admin/tracking/estado?guia=FP-123" in pagina
-    assert "setInterval(actualizarSeguimiento, 10000)" in pagina
+    assert "mapas-seguimiento.js" in pagina
+    assert "new FormoPackMapas.ConsultaPeriodica(trackingStatusUrl" in pagina

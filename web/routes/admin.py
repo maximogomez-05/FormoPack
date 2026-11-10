@@ -8,7 +8,6 @@ import csv
 import io
 import smtplib
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from flask import Blueprint, Response, render_template, session, request, jsonify, redirect, url_for, flash
 from web.routes.auth import login_required, rol_requerido
 from app.core.database import DatabaseManager
@@ -262,7 +261,7 @@ def enviar_alertas_email():
         return redirect(url_for("admin.dashboard"))
     try:
         _enviar_alertas_gmail(alertas)
-        flash("Las alertas fueron enviadas por Gmail correctamente.", "success")
+        flash("Las alertas quedaron programadas para envío por correo.", "success")
     except ValueError as e:
         flash(str(e), "warning")
     except (OSError, smtplib.SMTPException) as e:
@@ -1255,21 +1254,24 @@ def _obtener_destinatarios_alertas() -> list[str]:
 
 def _enviar_alertas_gmail(alertas: list[dict]) -> None:
     """Envía un resumen de alertas mediante una cuenta Gmail con contraseña de aplicación."""
-    destinatarios = _obtener_destinatarios_alertas()
+    try:
+        destinatarios = [V.email(correo) for correo in _obtener_destinatarios_alertas()]
+    except ValidationError as exc:
+        raise ValueError("Revisá las direcciones configuradas en ALERTAS_EMAIL.") from exc
     if not EmailConfig.USER or not EmailConfig.PASSWORD or not destinatarios:
         raise ValueError("Completá GMAIL_USER, GMAIL_APP_PASSWORD y ALERTAS_EMAIL en el archivo .env. GMAIL_APP_PASSWORD debe ser una contraseña de aplicación de Google.")
 
-    mensaje = EmailMessage()
-    mensaje["Subject"] = f"FormoPack: {len(alertas)} alerta(s) operativa(s)"
-    mensaje["From"] = EmailConfig.USER
-    mensaje["To"] = ", ".join(destinatarios)
-    cuerpo = ["Se detectaron las siguientes alertas en FormoPack:", ""]
-    cuerpo.extend(f"- {alerta['guia']}: {alerta['mensaje']}" for alerta in alertas)
-    mensaje.set_content("\n".join(cuerpo))
-
-    with smtplib.SMTP_SSL(EmailConfig.HOST, EmailConfig.PORT, timeout=15) as smtp:
-        smtp.login(EmailConfig.USER, EmailConfig.PASSWORD)
-        smtp.send_message(mensaje)
+    from app.services.cola_notificaciones import ColaNotificaciones
+    import hashlib
+    import json
+    # La misma selección de alertas del día se encola una sola vez por destinatario.
+    cuerpo = "Se detectaron las siguientes alertas en FormoPack:\n\n" + "\n".join(
+        f"- {alerta['guia']}: {alerta['mensaje']}" for alerta in alertas)
+    clave = hashlib.sha256(json.dumps(alertas, sort_keys=True, default=str).encode()).hexdigest()
+    with DatabaseManager.get_instance().cursor() as cur:
+        for correo in destinatarios:
+            ColaNotificaciones.encolar(cur, f"alertas:{datetime.now().date()}:{clave}", correo,
+                f"FormoPack: {len(alertas)} alerta(s) operativa(s)", cuerpo)
 
 
 def _obtener_historico_metricas() -> list:

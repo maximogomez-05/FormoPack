@@ -1,0 +1,17 @@
+[Unit]
+Description=Avisos operativos de FormoPack
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=formopack
+Group=formopack
+WorkingDirectory=/home/formopack/formopack-app
+ExecStart=/home/formopack/formopack-app/.venv/bin/python scripts/procesar_notificaciones.py --limite 10
+TimeoutStartSec=240
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

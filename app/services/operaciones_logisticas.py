@@ -71,6 +71,8 @@ class OperacionesLogisticas:
     def _historial(cur, envio, estado, actor, ubicacion, observacion):
         cur.execute("""INSERT INTO historial_estados (id_envio,estado,id_usuario_actor,ubicacion,observacion)
             VALUES (%s,%s,%s,%s,%s)""", (envio, estado, actor, ubicacion, observacion))
+        from app.services.cola_notificaciones import ColaNotificaciones
+        ColaNotificaciones.encolar_historial(cur, cur.lastrowid)
 
     @staticmethod
     def _avisar(eventos):

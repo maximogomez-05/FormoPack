@@ -1,6 +1,7 @@
 """Servicio de Notificación (RF 5.4)."""
 
 import smtplib
+import ssl
 import logging
 import threading
 from email.message import EmailMessage
@@ -225,12 +226,8 @@ class ServicioNotificacion:
         codigo: str,
     ) -> None:
         """Envía el código de 6 dígitos para recuperación de contraseña."""
-        logger.info("==================================================")
-        logger.info("🔑 CÓDIGO DE RECUPERACIÓN PARA %s: %s (Válido por 15 min)", email_to, codigo)
-        logger.info("==================================================")
-
         if not EmailConfig.USER or not EmailConfig.PASSWORD:
-            logger.warning("Credenciales SMTP no configuradas. Código disponible en logs.")
+            logger.warning("Credenciales SMTP no configuradas. Recuperación no enviada.")
             return
 
         asunto = f"🔑 Código de recuperación de contraseña: {codigo} — FormoPack"
@@ -280,16 +277,16 @@ class ServicioNotificacion:
 
         try:
             if EmailConfig.PORT == 465:
-                server = smtplib.SMTP_SSL(EmailConfig.HOST, EmailConfig.PORT)
+                server = smtplib.SMTP_SSL(EmailConfig.HOST, EmailConfig.PORT, timeout=15, context=ssl.create_default_context())
             else:
-                server = smtplib.SMTP(EmailConfig.HOST, EmailConfig.PORT)
-                server.starttls()
+                server = smtplib.SMTP(EmailConfig.HOST, EmailConfig.PORT, timeout=15)
+                server.starttls(context=ssl.create_default_context())
             server.login(EmailConfig.USER, EmailConfig.PASSWORD)
             server.send_message(msg)
             server.quit()
-            logger.info("Email con código de recuperación enviado a %s", email_to)
+            logger.info("Correo de recuperación enviado")
         except Exception as e:
-            logger.warning("Error al enviar código de recuperación por email a %s: %s", email_to, e)
+            logger.warning("Fallo al enviar recuperación: %s", type(e).__name__)
 
 
 def enviar_codigo_recuperacion_async(
@@ -303,10 +300,10 @@ def enviar_codigo_recuperacion_async(
         try:
             ServicioNotificacion().enviar_codigo_recuperacion(email, nombre, codigo)
         except Exception as exc:
-            logger.warning("Error asíncrono al enviar código de recuperación a %s: %s", email, exc)
+            logger.warning("Fallo al enviar recuperación: %s", type(exc).__name__)
 
     if async_mode:
-        t = threading.Thread(target=_tarea, daemon=True, name=f"RecupWorker-{email}")
+        t = threading.Thread(target=_tarea, daemon=True, name="RecupWorker")
         t.start()
     else:
         _tarea()
@@ -318,56 +315,19 @@ def notificar_cambio_estado_async(
     observacion: Optional[str] = None,
     async_mode: bool = True,
 ) -> None:
-    """Helper reutilizable (RF 5.4 / RF 6.2) para notificar cambios de estado.
+    """Compatibilidad: reencola el evento ya persistido, sin SMTP ni hilo efímero.
 
-    Ejecuta el envío de manera desacoplada en un hilo daemon en segundo plano
-    para evitar bloquear el ciclo de request/response HTTP y blindar el sistema
-    ante latencias o caídas del servidor SMTP.
+    Los productores nuevos encolan dentro de su transacción. Esta segunda llamada
+    es idempotente y permite mantener consumidores anteriores del helper.
     """
-    def _tarea_notificacion() -> None:
-        conn = None
-        cur = None
-        try:
-            from app.core.database import DatabaseManager
-            db = DatabaseManager.get_instance()
-            conn = db.get_connection()
-            cur = conn.cursor(dictionary=True)
-
-            cur.execute("SELECT * FROM envios WHERE id_envio = %s", (id_envio,))
-            e_row = cur.fetchone()
-            if not e_row:
-                return
-
-            envio_obj = Envio.from_db_row(e_row)
-            cli_obj = None
-            if e_row.get("id_remitente"):
-                cur.execute("SELECT * FROM clientes WHERE id_cliente = %s", (e_row["id_remitente"],))
-                c_row = cur.fetchone()
-                if c_row:
-                    cli_obj = Cliente.from_db_row(c_row)
-
-            notificador = ServicioNotificacion()
-            notificador.enviar_alerta_cambio_estado(
-                envio=envio_obj,
-                cliente=cli_obj,
-                nuevo_estado=nuevo_estado,
-                observacion=observacion,
-            )
-        except Exception as exc:
-            logger.warning("Error asíncrono al enviar notificación para envío #%s: %s", id_envio, exc)
-        finally:
-            if cur:
-                try: cur.close()
-                except Exception: pass
-            if conn:
-                try: conn.close()
-                except Exception: pass
-
-    if async_mode:
-        t = threading.Thread(target=_tarea_notificacion, daemon=True, name=f"NotifWorker-{id_envio}")
-        t.start()
-    else:
-        _tarea_notificacion()
+    from app.core.database import DatabaseManager
+    from app.services.cola_notificaciones import ColaNotificaciones
+    with DatabaseManager.get_instance().cursor() as cur:
+        cur.execute("SELECT id_historial FROM historial_estados WHERE id_envio=%s AND (estado=%s OR %s IS NULL) ORDER BY id_historial DESC LIMIT 1",
+                    (id_envio, nuevo_estado, nuevo_estado))
+        fila = cur.fetchone()
+        if fila:
+            ColaNotificaciones.encolar_historial(cur, fila["id_historial"])
 
 
 def notificar_cambio_estado(

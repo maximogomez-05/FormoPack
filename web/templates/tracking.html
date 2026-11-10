@@ -698,6 +698,7 @@
   </section>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='js/mapas-seguimiento.js') }}"></script>
   <script>
     const destinationName = {{ envio.localidad_destino|tojson }};
     const guideNumber = {{ envio.nro_guia|tojson }};
@@ -726,12 +727,15 @@
     const plant = [-26.18489, -58.17313];
     const destination = knownLocations[destinationName];
     const hasDestinationCoordinates = Boolean(destination);
-    const hasGpsPosition = Boolean(gpsPosition && Number.isFinite(Number(gpsPosition.latitud)) && Number.isFinite(Number(gpsPosition.longitud)));
+    const hasGpsPosition = Boolean(currentStatus === 'en_ruta' && gpsPosition && FormoPackMapas.coordenadas(gpsPosition.latitud, gpsPosition.longitud) && FormoPackMapas.reciente(gpsPosition.fecha_actualizacion));
     let gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
     const map = L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8);
     const trackingNote = document.getElementById('tracking-map-note');
     let driverMarker = null;
     let routeLayer = null;
+    let notaRuta = 'Trazado referencial a la localidad, no el recorrido real del vehículo.';
+    let ultimaPosicion = hasGpsPosition ? gpsPosition : null;
+    let conexionFallida = false;
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       // Identificar el sitio ante OSM sin revelar la guía consultada.
@@ -753,7 +757,7 @@
     function actualizarMarcadorGps(posicion) {
       const lat = Number(posicion && posicion.latitud);
       const lng = Number(posicion && posicion.longitud);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+      if (!posicion || !FormoPackMapas.coordenadas(posicion.latitud, posicion.longitud) || !FormoPackMapas.reciente(posicion.fecha_actualizacion)) return;
       gpsCoordinates = [lat, lng];
       if (!driverMarker) {
         driverMarker = L.circleMarker(gpsCoordinates, {
@@ -769,19 +773,28 @@
       }
     }
 
+    function mostrarGps() {
+      const reciente = currentStatus === 'en_ruta' && ultimaPosicion && FormoPackMapas.reciente(ultimaPosicion.fecha_actualizacion);
+      if (!reciente && driverMarker) { map.removeLayer(driverMarker); driverMarker = null; gpsCoordinates = null; }
+      const hora = ultimaPosicion ? new Date(FormoPackMapas.fechaGps(ultimaPosicion.fecha_actualizacion)).toLocaleString() : '';
+      const gps = reciente ? `GPS reciente del chofer · ${hora}.` : ultimaPosicion ? `Última señal GPS: ${hora}; ya no se muestra como actual.` : currentStatus === 'en_ruta' ? 'Sin una señal GPS reciente del chofer.' : 'Sin GPS de reparto activo para este estado.';
+      trackingNote.textContent = `${conexionFallida ? 'Conexión interrumpida; última consulta no confirmada. ' : ''}${gps} ${notaRuta}`;
+    }
+
     async function trazarRutaOSRM() {
       if (!hasDestinationCoordinates) {
-        trackingNote.textContent = 'No hay coordenadas de referencia para esta localidad; no se puede solicitar la ruta a OSRM.';
+        notaRuta = 'No hay coordenadas de referencia para esta localidad; no se puede solicitar la ruta a OSRM.';
+        mostrarGps();
         return;
       }
       const coordenadas = `${plant[1]},${plant[0]};${destination[1]},${destination[0]}`;
       const url = `https://router.project-osrm.org/route/v1/driving/${coordenadas}?overview=full&geometries=geojson&steps=false`;
       try {
-        const respuesta = await fetch(url, { mode: 'cors' });
+        const respuesta = await fetch(url, { mode: 'cors', signal: AbortSignal.timeout(8000) });
         if (!respuesta.ok) throw new Error(`OSRM respondió HTTP ${respuesta.status}`);
         const datos = await respuesta.json();
         const geometria = datos.routes && datos.routes[0] && datos.routes[0].geometry;
-        if (datos.code !== 'Ok' || !geometria || geometria.type !== 'LineString') {
+        if (datos.code !== 'Ok' || !geometria || geometria.type !== 'LineString' || !Array.isArray(geometria.coordinates) || geometria.coordinates.length < 2 || !geometria.coordinates.every(p => Array.isArray(p) && FormoPackMapas.coordenadas(p[1], p[0]))) {
           throw new Error('OSRM no devolvió una ruta válida');
         }
         if (routeLayer) map.removeLayer(routeLayer);
@@ -789,15 +802,16 @@
           style: { color: '#176b87', weight: 5, opacity: 0.9 }
         }).addTo(map);
         map.fitBounds(routeLayer.getBounds().extend(plant).extend(destination).pad(0.18));
-        trackingNote.textContent = `Ruta por calles calculada con OSRM hasta el centro de referencia de ${destinationName}; el sistema no tiene coordenadas del domicilio exacto.`;
+        notaRuta = `Ruta por calles calculada con OSRM hasta el centro de referencia de ${destinationName}; el sistema no tiene coordenadas del domicilio exacto.`;
       } catch (error) {
         console.error('No se pudo calcular la ruta OSRM:', error);
         if (routeLayer) map.removeLayer(routeLayer);
         routeLayer = L.polyline([plant, destination], {
           color: '#176b87', weight: 4, opacity: 0.75, dashArray: '8 8'
         }).addTo(map);
-        trackingNote.textContent = 'No se pudo calcular la ruta por calles con OSRM. Se muestra una referencia directa a la localidad, no el recorrido real.';
+        notaRuta = 'No se pudo calcular la ruta por calles con OSRM. Se muestra una referencia directa a la localidad, no el recorrido real.';
       }
+      mostrarGps();
     }
 
     if (gpsCoordinates) {
@@ -816,39 +830,27 @@
      * La ubicación que almacena FormoPack corresponde a la hoja de ruta. No se
      * asume que el centro de una localidad sea el domicilio de entrega.
      */
-    async function actualizarSeguimiento() {
-      try {
-        const respuesta = await fetch(trackingStatusUrl, {
-          cache: 'no-store',
-          credentials: 'same-origin'
-        });
-        const datos = await respuesta.json();
-        if (!respuesta.ok || !datos.ok) {
-          throw new Error(datos.error || `El servidor respondió HTTP ${respuesta.status}`);
-        }
-        if (datos.estado !== currentStatus) {
-          window.location.reload();
-          return;
-        }
-        if (datos.ubicacion_gps) {
-          actualizarMarcadorGps(datos.ubicacion_gps);
-          const precision = datos.ubicacion_gps.precision_m;
-          const hora = new Date(datos.ubicacion_gps.fecha_actualizacion).toLocaleString();
-          trackingNote.textContent = `GPS del chofer actualizado ${hora}${precision ? ` · precisión ±${Math.round(precision)} m` : ''}. El destino marcado es el centro de referencia de ${destinationName}, no el domicilio exacto.`;
-        } else if (datos.estado === 'en_ruta') {
-          trackingNote.textContent = 'El envío está en ruta, pero todavía no hay una posición GPS reciente del chofer.';
-        }
-      } catch (error) {
-        console.error('No se pudo actualizar el seguimiento:', error);
-        document.getElementById('tracking-live-note').textContent = 'No se pudo consultar la ubicación en vivo. Se intentará nuevamente en 10 segundos.';
-      }
-    }
     const estadosTerminales = ['entregado', 'devolucion', 'devuelto_remitente', 'retiro_remitente', 'siniestro'];
-    if (!estadosTerminales.includes(currentStatus)) {
-      document.getElementById('tracking-live-note').textContent = 'Actualización automática del estado y del GPS cada 10 segundos.';
-      actualizarSeguimiento();
-      window.setInterval(actualizarSeguimiento, 10000);
-    }
+    const liveNote = document.getElementById('tracking-live-note');
+    const consultaGps = new FormoPackMapas.ConsultaPeriodica(trackingStatusUrl, datos => {
+      if (!datos || datos.ok !== true || !['recibido', 'en_planta', 'en_ruta', 'fallido', ...estadosTerminales].includes(datos.estado)) throw new Error('Respuesta inválida');
+      if (datos.estado !== currentStatus) { consultaGps.pausar(); window.location.reload(); return; }
+      if (datos.ubicacion_gps && (!FormoPackMapas.coordenadas(datos.ubicacion_gps.latitud, datos.ubicacion_gps.longitud)
+        || !Number.isFinite(FormoPackMapas.fechaGps(datos.ubicacion_gps.fecha_actualizacion)))) throw new Error('GPS inválido');
+      conexionFallida = false;
+      ultimaPosicion = datos.ubicacion_gps || null;
+      if (ultimaPosicion && datos.estado === 'en_ruta') actualizarMarcadorGps(ultimaPosicion);
+      liveNote.textContent = 'Consulta correcta · actualización automática cada 10 segundos.';
+      mostrarGps();
+    }, () => {
+      conexionFallida = true;
+      liveNote.textContent = 'No se pudo consultar la ubicación. Se reintentará automáticamente.';
+      mostrarGps();
+    });
+    mostrarGps();
+    window.setInterval(mostrarGps, 5000);
+    if (!estadosTerminales.includes(currentStatus)) consultaGps.iniciar();
+    else liveNote.textContent = 'Envío finalizado para reparto; no se consulta GPS en vivo.';
     window.addEventListener('load', () => setTimeout(() => map.invalidateSize(), 100));
 
     const currentUrl = window.location.href;

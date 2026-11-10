@@ -1,7 +1,10 @@
-const CACHE_NAME = "formopack-chofer-v5";
+const CACHE_NAME = "formopack-chofer-v6";
 const APP_SHELL = [
   "/static/css/style.css?v=8",
   "/static/manifest.json",
+  "/static/icons/formopack-192.png",
+  "/static/icons/formopack-512.png",
+  "/static/icons/formopack-512-maskable.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -57,7 +60,7 @@ async function networkFirst(request) {
   } catch (error) {
     const cached = await cache.match(request);
     if (cached) return cached;
-    return new Response("Sin conexión y sin una pantalla guardada.", {
+    return new Response("Sin conexiÃ³n y sin una pantalla guardada.", {
       status: 503,
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });

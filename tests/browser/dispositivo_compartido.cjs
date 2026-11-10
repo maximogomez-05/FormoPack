@@ -22,6 +22,9 @@ const assert = require('node:assert/strict');
     const a='chofer@formopack.com', b='otro-chofer@example.com';
     // Una instalación anterior ya tiene el almacén y puede contener evidencia pendiente.
     await page.goto(base);
+    await page.evaluate(async () => {
+      await (await caches.open('formopack-chofer-v5')).put('/static/manifest.json',new Response('{}'));
+    });
     await page.evaluate(() => new Promise((resolve,reject) => {
       const abrir = indexedDB.open('formopack-offline',1);
       abrir.onupgradeneeded = () => {
@@ -32,6 +35,8 @@ const assert = require('node:assert/strict');
       abrir.onerror = () => reject(abrir.error);
     }));
     await login(a);
+    assert.equal(await page.evaluate(async ()=>(await caches.keys()).includes('formopack-chofer-v5')),false);
+    assert(await page.evaluate(async ()=>(await caches.keys()).includes('formopack-chofer-v6')));
     assert.equal(await page.evaluate(async () => {
       const db = await abrirBase();
       const lectura = db.transaction('entregas-pendientes').objectStore('entregas-pendientes').get(1);

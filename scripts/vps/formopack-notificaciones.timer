@@ -1,0 +1,11 @@
+[Unit]
+Description=Procesar avisos pendientes de FormoPack cada minuto
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+RandomizedDelaySec=5
+Unit=formopack-notificaciones.service
+
+[Install]
+WantedBy=timers.target
