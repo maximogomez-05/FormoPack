@@ -8,7 +8,8 @@ Mercado Pago queda pendiente y no forma parte de este incremento.
 | Recurso | Público | Chofer | Recepción / Administración |
 | --- | --- | --- | --- |
 | Seguimiento por guía | Estado, fechas, localidad e iniciales | Vista pública | Vista pública |
-| GPS del reparto activo | Se conserva durante `en_ruta` | Se conserva durante `en_ruta` | Se conserva durante `en_ruta` |
+| GPS e historial del reparto activo | Solo se consulta durante `en_ruta` | Se registra para los envíos `en_ruta` de la hoja activa | Se registra para los envíos `en_ruta` de la hoja activa |
+| Coordenadas exactas de entrega | Sin acceso | Solo para pedidos de su hoja | Recepción / Administración |
 | Constancia pública de entrega | Estado y localidad, sin firma, nombres completos, domicilio ni importe | Igual | Igual |
 | Credencial pública de retiro | Guía e instrucciones cuando ingresó físicamente a central | Igual | Igual |
 | Comprobante interno, PDF, remitos y etiqueta | Sin acceso | Sin acceso | Permitido |
@@ -25,6 +26,19 @@ partes en su contexto de plantilla. Las ubicaciones y observaciones libres del
 historial se convierten en ubicaciones generales y motivos tipificados. No se
 publican las coordenadas del domicilio tomadas al finalizar un intento. El
 mapa referencial conserva la localidad y el GPS activo previsto por RF 5.1.
+Cada punto GPS se conserva en `historial_gps` mientras exista el envío (con
+borrado en cascada al eliminarlo). El endpoint público devuelve el rastro solo
+mientras el estado sea `en_ruta`; la posición actual además debe tener menos de
+cinco minutos.
+Las coordenadas exactas de entrega se usan para planificar despachos y no se
+incluyen en la respuesta pública de seguimiento. El optimizador usa una
+instancia OSRM privada si está configurada; en su ausencia, utiliza una
+estimación geográfica aproximada y la identifica como tal.
+El autocompletado envía el texto de dirección escrito y la localidad seleccionada
+a Photon (OpenStreetMap) para resolver coincidencias; no envía nombre, DNI,
+teléfono ni número de guía. `FORMOPACK_GEOCODER_URL` permite configurar una
+instancia propia. No se usa el servidor público de Nominatim para autocompletar,
+porque su política de uso no permite ese patrón de consultas.
 El formulario de soporte solicita el nombre a quien consulta, sin autocompletar
 el nombre del destinatario a partir de una guía pública.
 

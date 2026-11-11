@@ -8,7 +8,9 @@ from app.core.database import DatabaseManager
 from app.models.vehiculo import Vehiculo
 from app.models.hoja_ruta import HojaRuta
 from app.services.ruteo import ServicioRuteo
+from app.services.optimizador_rutas import OptimizadorRutas
 from app.services.operaciones_logisticas import OperacionesLogisticas
+from app.services.validacion_entrada import ValidacionEntrada as V
 from app.services.servicio_notificacion import notificar_cambio_estado_async
 from app.utils.exceptions import (
     DatabaseConnectionError,
@@ -121,11 +123,12 @@ class LogisticaController:
             # Envíos asignados
             cursor.execute(
                 """SELECT e.id_envio, e.nro_guia, COALESCE(a.resolucion,e.estado_actual) AS estado_actual,
+                          a.orden_parada,
                           l.distancia_km, l.nombre as localidad_destino
                    FROM hojas_ruta_envios a JOIN envios e ON e.id_envio=a.id_envio
                    JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                    WHERE a.id_hoja_ruta = %s
-                   ORDER BY l.distancia_km ASC""",
+                   ORDER BY COALESCE(a.orden_parada, 2147483647), l.distancia_km ASC""",
                 (id_hoja_ruta,)
             )
             envios = cursor.fetchall()
@@ -314,6 +317,11 @@ class LogisticaController:
                     l.id_localidad,
                     l.nombre as localidad_destino,
                     l.distancia_km,
+                    e.destino_latitud,
+                    e.destino_longitud,
+                    e.ventana_desde,
+                    e.ventana_hasta,
+                    e.prioridad,
                     SUM(b.peso_real) as peso_total_kg
                 FROM envios e
                 JOIN localidades l ON e.id_localidad_destino = l.id_localidad
@@ -341,6 +349,23 @@ class LogisticaController:
     def sugerir_ruta_optima(self, entregas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Ordena entregas por distancia para la ruta más eficiente."""
         return ServicioRuteo.ordenar_envios_por_distancia(entregas)
+
+    def optimizar_flota(self, envios_ids: list, max_rutas: int | None = None) -> dict:
+        """Planifica pedidos seleccionados entre los vehículos actualmente disponibles."""
+        if not isinstance(envios_ids, list) or not 1 <= len(envios_ids) <= OptimizadorRutas.MAX_ENTREGAS:
+            raise ValidationError("envios", "Seleccioná entre 1 y 100 envíos para optimizar")
+        ids = [V.entero(identificador, "envio") for identificador in envios_ids]
+        if len(set(ids)) != len(ids):
+            raise ValidationError("envios", "No repitas un envío dentro de la optimización")
+        pendientes = self.obtener_entregas_pendientes(limite=500)
+        por_id = {int(envio["id_envio"]): envio for envio in pendientes}
+        if any(identificador not in por_id for identificador in ids):
+            raise ValidationError("envios", "Actualizá la pantalla; uno de los pedidos ya no está disponible")
+        envios = [por_id[identificador] for identificador in ids]
+        vehiculos = [vehiculo for vehiculo in self.listar_vehiculos() if vehiculo["disponible"]]
+        if max_rutas is not None:
+            vehiculos = vehiculos[:max(0, max_rutas)]
+        return OptimizadorRutas.planificar(envios, vehiculos)
 
     def calcular_carga_total(self, envios_ids: List[int]) -> float:
         """Calcula el peso total de un grupo de envíos."""

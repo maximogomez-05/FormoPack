@@ -10,6 +10,59 @@
 </div>
 {% endif %}
 
+{% if plan_vrp %}
+<section class="card" style="margin-bottom:22px;" aria-labelledby="vrp-title">
+  <div class="card-header">
+    <span id="vrp-title" class="card-title"><i class="fa-solid fa-route"></i> Propuesta de optimización de flota</span>
+    <small style="color:var(--text-muted);font-weight:normal;">{{ plan_vrp.fuente_distancias }}</small>
+  </div>
+  <div style="padding:16px;">
+    <p style="margin-top:0;color:var(--text-muted);">Las propuestas no crean despachos hasta que confirmes cada ruta.</p>
+    {% if plan_vrp.rutas %}
+      {% for ruta in plan_vrp.rutas %}
+      <article style="padding:14px 0;border-top:1px solid var(--border-color,#d7e0e8);">
+        <h3 style="margin:0 0 8px;">{{ ruta.vehiculo.patente }} · {{ ruta.carga_kg }} / {{ ruta.vehiculo.capacidad_kg }} kg · {{ ruta.distancia_km }} km</h3>
+        <ol style="margin:0 0 12px;padding-left:22px;">
+          {% for parada in ruta.paradas %}
+          <li>{{ parada.nro_guia }} · {{ parada.localidad_destino }} · {{ '%02d:%02d'|format(parada.hora_estimada_minuto // 60, parada.hora_estimada_minuto % 60) }} · {{ parada.prioridad|capitalize }}</li>
+          {% endfor %}
+        </ol>
+        <form method="POST" action="{{ url_for('admin.crear_hoja_ruta') }}" style="display:flex;flex-wrap:wrap;align-items:end;gap:10px;">
+          <input type="hidden" name="accion" value="crear">
+          <input type="hidden" name="id_vehiculo" value="{{ ruta.vehiculo.id_vehiculo }}">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">N° de despacho</label>
+            <input name="nro_despacho" class="form-control" maxlength="20" value="VRP-{{ loop.index }}" pattern="[A-Za-z0-9][A-Za-z0-9_\-]*" required>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Chofer</label>
+            <select name="id_chofer" class="form-control" required data-vrp-driver>
+              <option value="">Seleccionar...</option>
+              {% for chofer in choferes %}<option value="{{ chofer.id_usuario }}">{{ chofer.nombre }}</option>{% endfor %}
+            </select>
+          </div>
+          {% for parada in ruta.paradas %}<input type="hidden" name="envios_ids" value="{{ parada.id_envio }}">{% endfor %}
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Confirmar esta ruta</button>
+        </form>
+      </article>
+      {% endfor %}
+    {% else %}
+      <p>No hay rutas factibles con la capacidad y las ventanas horarias seleccionadas.</p>
+    {% endif %}
+    {% if plan_vrp.sin_asignar %}
+    <div role="status" style="margin-top:12px;padding:12px;background:#fff7e6;border-left:3px solid #d97706;">
+      <strong>Pedidos sin asignar</strong>
+      <ul style="margin-bottom:0;">
+        {% for pendiente in plan_vrp.sin_asignar %}
+        <li>{{ pendiente.envio.nro_guia }}: {{ pendiente.motivo }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 <div class="page-grid-2col">
   <div class="card">
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus"></i> Registrar vehículo</span></div>
@@ -58,7 +111,10 @@
         <label style="display:block;margin:6px 0;"><input type="checkbox" name="envios_ids" value="{{ envio.id_envio }}"> {{ envio.nro_guia }} - {{ envio.localidad_destino }} ({{ envio.peso_total_kg|round(2) }} kg)</label>
         {% endfor %}
       </div>
-      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-route"></i> Crear despacho</button>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button type="submit" name="accion" value="crear" class="btn btn-primary"><i class="fa-solid fa-truck-fast"></i> Crear despacho manual</button>
+        <button type="submit" name="accion" value="optimizar" class="btn btn-secondary" formnovalidate><i class="fa-solid fa-wand-magic-sparkles"></i> Optimizar selección con toda la flota</button>
+      </div>
     </form>
     {% else %}
     <div style="color:var(--text-muted);">Registrá un vehículo y asegurate de tener un chofer y envíos pendientes.</div>
@@ -75,7 +131,7 @@
     <div class="metric-card blue">
       <i class="fa-solid fa-route metric-icon"></i>
       <div class="metric-value">{{ total_km|round(1) }} km</div>
-      <div class="metric-label">Recorrido total estimado</div>
+      <div class="metric-label">Km de destino acumulados (referencia)</div>
     </div>
     <div class="metric-card green">
       <i class="fa-solid fa-boxes-stacked metric-icon"></i>
@@ -193,8 +249,8 @@
 
 <div class="card" style="margin-top: 22px;">
   <div class="card-header">
-    <span class="card-title"><i class="fa-solid fa-route"></i> Entregas ordenadas por distancia</span>
-    <small style="color: var(--text-muted); font-weight: normal;">Ruteo óptimo desde la más cercana a la más lejana</small>
+    <span class="card-title"><i class="fa-solid fa-route"></i> Pedidos pendientes para planificar</span>
+    <small style="color: var(--text-muted); font-weight: normal;">La lista está ordenada por distancia de localidad; marcá pedidos y solicita el plan de flota</small>
   </div>
   {% if entregas %}
   <div class="table-responsive">
@@ -214,7 +270,7 @@
         <tr>
           <td><strong style="color: var(--primary);">{{ loop.index }}</strong></td>
           <td>{{ envio.nro_guia }}</td>
-          <td>{{ envio.localidad_destino }}</td>
+          <td>{{ envio.localidad_destino }}{% if not envio.destino_latitud or not envio.destino_longitud %}<small style="display:block;color:#a16207;">Falta marcar pin</small>{% endif %}</td>
           <td>{{ envio.distancia_km|round(1) }} km</td>
           <td>{{ envio.peso_total_kg|round(2) }} kg</td>
           <td><span class="badge badge-{{ envio.estado_actual }}">{{ envio.estado_actual }}</span></td>
@@ -230,6 +286,22 @@
   </div>
   {% endif %}
 </div>
+
+{% if plan_vrp %}
+<script>
+document.querySelectorAll('[data-vrp-driver]').forEach(select => {
+  select.addEventListener('change', () => {
+    const elegidos = new Set([...document.querySelectorAll('[data-vrp-driver]')]
+      .map(otro => otro.value).filter(Boolean));
+    document.querySelectorAll('[data-vrp-driver]').forEach(otro => {
+      [...otro.options].forEach(opcion => {
+        opcion.disabled = Boolean(opcion.value && elegidos.has(opcion.value) && opcion.value !== otro.value);
+      });
+    });
+  });
+});
+</script>
+{% endif %}
 
 <!-- Flota disponible -->
 <div class="card" style="margin-top: 22px;">

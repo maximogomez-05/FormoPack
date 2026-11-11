@@ -376,6 +376,40 @@
             border-color: var(--blue-corp);
         }
 
+        .password-input-wrap {
+            position: relative;
+        }
+
+        .password-input-wrap .form-control {
+            padding-right: 3rem;
+        }
+
+        .password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0.75rem;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem;
+            border: 0;
+            background: transparent;
+            color: #666;
+            cursor: pointer;
+        }
+
+        .password-toggle:focus-visible {
+            outline: 2px solid var(--blue-corp);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear {
+            display: none;
+        }
+
         .btn-block {
             width: 100%;
             display: block;
@@ -572,7 +606,12 @@
                 </div>
                 <div class="form-group">
                     <label for="password">Contraseña</label>
-                    <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password">
+                    <div class="password-input-wrap">
+                        <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password">
+                        <button type="button" class="password-toggle" data-password-toggle aria-controls="password" aria-label="Mostrar contraseña" aria-pressed="false">
+                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </div>
                 <div style="text-align: right; margin-top: -12px; margin-bottom: 16px;">
                     <a href="{{ url_for('auth.recuperar_password') }}" style="color: var(--blue-corp); font-size: 0.85rem; text-decoration: none; font-weight: 500;">
@@ -586,6 +625,7 @@
 
     <!-- Scripts -->
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='js/password-toggle.js') }}"></script>
     <script>
         // Init AOS
         if (window.AOS) window.AOS.init({ duration: 700, once: true });

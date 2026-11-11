@@ -15,6 +15,7 @@ from app.models.comprobante_interno import ComprobanteInterno
 from app.models.historial_estado import HistorialEstado
 from app.services.cotizador import Cotizador
 from app.services.generador_guia import GeneradorGuia
+from app.services.geografia_destino import punto_en_localidad
 from app.services.servicio_notificacion import notificar_cambio_estado_async
 from config.settings import EstadosEnvio
 from app.utils.exceptions import (
@@ -87,6 +88,11 @@ class EnvioController:
         modalidad_pago: str = "efectivo",
         valor_declarado: float = 0.0,
         id_seguro: Optional[int] = None,
+        destino_latitud=None,
+        destino_longitud=None,
+        ventana_desde=None,
+        ventana_hasta=None,
+        prioridad="normal",
     ) -> dict:
         """Crea un envío completo: genera guía, registra bultos, cotiza y persiste.
 
@@ -104,6 +110,9 @@ class EnvioController:
             Diccionario con datos del envío creado y cotización.
         """
         direccion_destino = SolicitudRecepcion.validar_envio(direccion_destino, modalidad_pago)
+        planificacion = SolicitudRecepcion.validar_datos_planificacion(
+            destino_latitud, destino_longitud, ventana_desde, ventana_hasta, prioridad,
+        )
         id_remitente = V.entero(id_remitente, "id_remitente")
         id_destinatario = V.entero(id_destinatario, "id_destinatario")
         bultos_data, id_localidad_destino, valor_declarado, id_seguro = SolicitudRecepcion.validar_cotizacion(
@@ -116,7 +125,8 @@ class EnvioController:
         try:
             with self._db.cursor(dictionary=False) as cursor:
                 resultado = self._insertar_envio(cursor, id_remitente, id_destinatario, id_localidad_destino,
-                    direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion)
+                    direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion,
+                    *planificacion)
         except (ValidationError, DatabaseQueryError):
             raise
         except Exception as exc:
@@ -140,6 +150,13 @@ class EnvioController:
             if anterior:
                 return {"nro_guia": anterior[0], "repetida": True}
 
+            cursor.execute("SELECT nombre FROM localidades WHERE id_localidad=%s", (solicitud.localidad,))
+            localidad = cursor.fetchone()
+            if not localidad or not punto_en_localidad(
+                localidad["nombre"], solicitud.destino_latitud, solicitud.destino_longitud,
+            ):
+                raise ValidationError("destino", "El punto de entrega no corresponde a la localidad seleccionada")
+
             # Dos formularios pueden invertir remitente y destinatario. Tomar los
             # bloqueos por DNI siempre en el mismo orden evita esperas circulares.
             clientes = {}
@@ -152,7 +169,9 @@ class EnvioController:
                      datos["telefono"].strip(), V.email(datos["email"])))
                 clientes[rol] = cursor.lastrowid
             resultado = self._insertar_envio(cursor, clientes["rem"], clientes["dest"], solicitud.localidad, solicitud.direccion,
-                solicitud.bultos, solicitud.modalidad, solicitud.declarado, solicitud.seguro, cotizacion)
+                solicitud.bultos, solicitud.modalidad, solicitud.declarado, solicitud.seguro, cotizacion,
+                solicitud.destino_latitud, solicitud.destino_longitud, solicitud.ventana_desde,
+                solicitud.ventana_hasta, solicitud.prioridad)
             cursor.execute("""UPDATE solicitudes_mostrador SET id_envio=%s
                 WHERE id_usuario=%s AND solicitud_id=%s""", (resultado["id_envio"], usuario, solicitud_id))
         self._notificar_recepcion(resultado["id_envio"])
@@ -167,7 +186,9 @@ class EnvioController:
             logger.exception("Envío %s confirmado, no se pudo iniciar su notificación", id_envio)
 
     def _insertar_envio(self, cursor, id_remitente, id_destinatario, id_localidad_destino,
-                        direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion):
+                        direccion_destino, bultos_data, modalidad_pago, valor_declarado, id_seguro, cotizacion,
+                        destino_latitud=None, destino_longitud=None, ventana_desde=None, ventana_hasta=None,
+                        prioridad="normal"):
         nro_guia = GeneradorGuia.reservar(cursor)
 
         # Insertar envío
@@ -175,13 +196,15 @@ class EnvioController:
             INSERT INTO envios
                 (nro_guia, id_remitente, id_destinatario, id_localidad_destino,
                  id_seguro, direccion_destino, valor_declarado, modalidad_pago,
-                 costo_total, estado_actual, es_devolucion)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                  costo_total, estado_actual, es_devolucion, destino_latitud, destino_longitud,
+                  ventana_desde, ventana_hasta, prioridad)
+              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         cursor.execute(sql_envio, (
             nro_guia, id_remitente, id_destinatario, id_localidad_destino,
             id_seguro, direccion_destino.strip(), valor_declarado, modalidad_pago,
             cotizacion["costo_total"], EstadosEnvio.RECIBIDO, False,
+            destino_latitud, destino_longitud, ventana_desde, ventana_hasta, prioridad,
         ))
         id_envio = cursor.lastrowid
 
@@ -277,12 +300,14 @@ class EnvioController:
             conn = self._db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                "SELECT id_envio, costo_total FROM envios WHERE id_envio = %s FOR UPDATE",
+                "SELECT id_envio, costo_total, estado_actual FROM envios WHERE id_envio = %s FOR UPDATE",
                 (id_envio,),
             )
             envio = cursor.fetchone()
             if not envio:
                 raise ValidationError(field="envio", reason="El envío no existe")
+            if envio["estado_actual"] == "cancelado":
+                raise ValidationError("envio", "No se puede cobrar un envío cancelado")
             if monto != float(envio["costo_total"]):
                 raise ValidationError("monto", "El cobro debe coincidir con el total del envío; el efectivo recibido se indica por separado")
             if id_turno is not None:

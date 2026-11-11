@@ -387,9 +387,12 @@ document.querySelectorAll('[data-gps-toggle]').forEach(button => {
 
     status.textContent = 'Esperando permiso y señal GPS…';
     let ultimaActualizacion = 0;
+    let envioPendiente = false;
     const watchId = navigator.geolocation.watchPosition(async position => {
-      if (Date.now() - ultimaActualizacion < 12000) return;
-      ultimaActualizacion = Date.now();
+      const ahora = Date.now();
+      if (envioPendiente || ahora - ultimaActualizacion < 10000) return;
+      ultimaActualizacion = ahora;
+      envioPendiente = true;
       status.textContent = 'Enviando ubicación…';
       try {
         const response = await fetch(button.dataset.gpsUrl, {
@@ -407,6 +410,8 @@ document.querySelectorAll('[data-gps-toggle]').forEach(button => {
         status.textContent = `Ubicación actualizada ${hora} · precisión ±${Math.round(position.coords.accuracy)} m`;
       } catch (error) {
         status.textContent = 'Sin conexión con el servidor. Se reintentará al recibir otro punto GPS.';
+      } finally {
+        envioPendiente = false;
       }
     }, error => {
       const mensajes = {
@@ -415,7 +420,7 @@ document.querySelectorAll('[data-gps-toggle]').forEach(button => {
         3: 'Se agotó el tiempo para obtener GPS; se volverá a intentar.'
       };
       status.textContent = mensajes[error.code] || 'No se pudo obtener la ubicación.';
-    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
 
     gpsWatches.set(routeId, { watchId });
     button.innerHTML = '<i class="fa-solid fa-location-dot" aria-hidden="true"></i> Detener ubicación';

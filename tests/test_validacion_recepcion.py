@@ -77,6 +77,7 @@ def test_cliente_existente_no_evade_validacion():
 def formulario():
     datos = MultiDict(dict(rem_dni="12345678", rem_nombre="Juan Pérez", rem_telefono="3704123456",
         dest_dni="23456789", dest_nombre="María Gómez", dest_telefono="3704654321",
+        destino_latitud="-26.1848", destino_longitud="-58.1731",
         id_localidad_destino="1", direccion_destino="Av. San Martín 123", modalidad_pago="efectivo", valor_declarado="0"))
     datos.setlist("peso_real[]", ["2", "3", "4"])
     datos.setlist("peso_volumetrico[]", ["0", "0", "0"])
@@ -88,5 +89,45 @@ def test_fragilidad_del_segundo_bulto_y_listas_desparejas():
     datos = formulario()
     assert [b["es_fragil"] for b in SolicitudRecepcion(datos).bultos] == [False, True, False]
     datos.setlist("peso_volumetrico[]", ["0"])
+    with pytest.raises(ValidationError):
+        SolicitudRecepcion(datos)
+
+
+def test_solicitud_recepcion_acepta_pin_ventana_y_prioridad_validos():
+    datos = formulario()
+    for campo, valor in {"destino_latitud": "-26.1834567", "destino_longitud": "-58.1734567",
+        "ventana_desde": "09:00", "ventana_hasta": "12:30", "prioridad": "urgente"}.items():
+        datos.setlist(campo, [valor])
+
+    solicitud = SolicitudRecepcion(datos)
+
+    assert solicitud.destino_latitud == -26.1834567
+    assert solicitud.destino_longitud == -58.1734567
+    assert solicitud.ventana_desde == "09:00:00"
+    assert solicitud.ventana_hasta == "12:30:00"
+    assert solicitud.prioridad == "urgente"
+
+
+def test_solicitud_recepcion_rechaza_direccion_libre_sin_pin():
+    datos = formulario()
+    datos.setlist("destino_latitud", [""])
+    datos.setlist("destino_longitud", [""])
+
+    with pytest.raises(ValidationError, match="Seleccioná una dirección sugerida"):
+        SolicitudRecepcion(datos)
+
+
+@pytest.mark.parametrize("datos_nuevos", [
+    {"destino_latitud": "-26.1", "destino_longitud": ""},
+    {"destino_latitud": "91", "destino_longitud": "-58"},
+    {"ventana_desde": "15:00", "ventana_hasta": "09:00"},
+    {"ventana_desde": "09:00"},
+    {"prioridad": "critica"},
+])
+def test_solicitud_recepcion_rechaza_datos_de_planificacion_invalidos(datos_nuevos):
+    datos = formulario()
+    for campo, valor in datos_nuevos.items():
+        datos.setlist(campo, [valor])
+
     with pytest.raises(ValidationError):
         SolicitudRecepcion(datos)

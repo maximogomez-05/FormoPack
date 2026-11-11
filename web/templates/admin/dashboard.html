@@ -297,6 +297,17 @@
                 <i class="fa-solid fa-cash-register"></i> Cobrar
               </a>
               {% endif %}
+              {% if e.estado_actual in ['recibido', 'en_planta'] and e.id_hoja_ruta is none and not e.esta_pagado and not e.tiene_orden_mp %}
+              <details style="display:inline-block;text-align:left;white-space:normal;">
+                <summary class="btn btn-sm" style="background:#fff1f0;color:#a61b1b;padding:4px 8px;font-size:12px;cursor:pointer;">Cancelar envío</summary>
+                <form method="POST" action="{{ url_for('admin.cancelar_envio', id_envio=e.id_envio) }}" style="position:absolute;z-index:5;right:24px;width:min(320px,80vw);padding:14px;background:#fff;border:1px solid #e5b3b0;border-radius:6px;box-shadow:0 8px 20px rgba(0,0,0,.12);">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label for="motivo-cancelacion-{{ e.id_envio }}" style="display:block;margin-bottom:6px;font-size:12px;font-weight:700;">Motivo de cancelación</label>
+                  <input id="motivo-cancelacion-{{ e.id_envio }}" name="motivo" class="form-control" minlength="5" maxlength="300" required placeholder="Ej.: solicitud del remitente">
+                  <button type="submit" class="btn btn-sm" style="margin-top:8px;background:#a61b1b;color:#fff;">Confirmar cancelación</button>
+                </form>
+              </details>
+              {% endif %}
             </div>
           </td>
         </tr>

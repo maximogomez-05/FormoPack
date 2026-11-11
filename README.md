@@ -101,6 +101,12 @@ El sistema está construido bajo principios de Programación Orientada a Objetos
      ```bash
      py -m app.core.migrations
      ```
+    - La optimización de flota usa OR-Tools y los nuevos campos de coordenadas, prioridad y ventana horaria. Instalar la dependencia y aplicar la migración correspondiente:
+       ```bash
+       py -m pip install -r requirements.txt
+       py -m app.core.migrations
+       ```
+    - En Logística, seleccioná pedidos y elegí **Optimizar selección con toda la flota**. Los pedidos requieren pin manual para entrar al plan. Sin `FORMOPACK_OSRM_URL` configurada, las distancias son aproximaciones geográficas, no recorridos viales.
 
 5. **Configurar las variables de entorno:**
    - Crear un archivo `.env` en la raíz del proyecto tomando como base `.env.example`:

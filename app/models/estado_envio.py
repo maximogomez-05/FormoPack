@@ -4,7 +4,7 @@ from app.utils.exceptions import ValidationError
 
 
 class EstadoEnvio:
-    TERMINALES = {"entregado", "devolucion", "devuelto_remitente", "siniestro"}
+    TERMINALES = {"entregado", "devolucion", "devuelto_remitente", "siniestro", "cancelado"}
     MAX_FALLOS = 3
 
     @classmethod

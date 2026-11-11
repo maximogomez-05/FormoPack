@@ -353,6 +353,8 @@ body.sidebar-active-body {
   box-shadow: 0 0 0 3px rgba(0,68,129,0.12);
 }
 .form-control::placeholder { color: #adb5bd; }
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear { display: none; }
 
 .form-row {
   display: grid;

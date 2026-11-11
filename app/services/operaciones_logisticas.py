@@ -106,7 +106,8 @@ class OperacionesLogisticas:
         chofer, vehiculo, actor = V.entero(chofer, "chofer"), V.entero(vehiculo, "vehiculo"), V.entero(actor, "usuario")
         if not isinstance(envios, list) or not 1 <= len(envios) <= 100:
             raise ValidationError("envios", "Seleccioná entre 1 y 100 envíos")
-        ids = sorted(V.entero(i, "envio") for i in envios)
+        orden_ids = [V.entero(i, "envio") for i in envios]
+        ids = sorted(orden_ids)
         if len(set(ids)) != len(ids):
             raise ValidationError("envios", "No repitas un envío dentro del despacho")
         eventos = []
@@ -120,7 +121,7 @@ class OperacionesLogisticas:
             cur.execute("SELECT id_hoja_ruta FROM hojas_de_ruta WHERE estado='abierta' AND (id_chofer=%s OR id_vehiculo=%s)", (chofer, vehiculo))
             if cur.fetchall():
                 raise ValidationError("despacho", "El chofer o vehículo ya tiene una hoja abierta")
-            seleccion = []
+            seleccion_por_id = {}
             for id_envio in ids:
                 cur.execute("SELECT * FROM envios WHERE id_envio=%s FOR UPDATE", (id_envio,))
                 envio = cur.fetchone()
@@ -138,15 +139,17 @@ class OperacionesLogisticas:
                 envio["peso"] = sum(b["peso_real"] for b in bultos)
                 cur.execute("SELECT nombre AS localidad_destino,distancia_km FROM localidades WHERE id_localidad=%s", (envio["id_localidad_destino"],))
                 envio.update(cur.fetchone())
-                seleccion.append(envio)
+                seleccion_por_id[id_envio] = envio
+            seleccion = [seleccion_por_id[id_envio] for id_envio in orden_ids]
             if sum(e["peso"] for e in seleccion) > movil["capacidad_kg"]:
                 raise ValidationError("capacidad", "La carga supera la capacidad del vehículo")
             cur.execute("INSERT INTO hojas_de_ruta (nro_despacho,id_chofer,id_vehiculo) VALUES (%s,%s,%s)", (despacho, chofer, vehiculo))
             id_ruta = cur.lastrowid
             cur.execute("SELECT fecha_emision FROM hojas_de_ruta WHERE id_hoja_ruta=%s", (id_ruta,))
             fecha = cur.fetchone()["fecha_emision"]
-            for envio in seleccion:
-                cur.execute("INSERT INTO hojas_ruta_envios (id_hoja_ruta,id_envio) VALUES (%s,%s)", (id_ruta, envio["id_envio"]))
+            for orden_parada, envio in enumerate(seleccion, start=1):
+                cur.execute("INSERT INTO hojas_ruta_envios (id_hoja_ruta,id_envio,orden_parada) VALUES (%s,%s,%s)",
+                            (id_ruta, envio["id_envio"], orden_parada))
                 cur.execute("UPDATE envios SET id_hoja_ruta=%s,estado_actual='en_planta' WHERE id_envio=%s", (id_ruta, envio["id_envio"]))
                 self._historial(cur, envio["id_envio"], "en_planta", actor, "Depósito", "Asignado a hoja de ruta")
                 eventos.append((envio["id_envio"], "en_planta", "Asignado a hoja de ruta"))
@@ -266,6 +269,33 @@ class OperacionesLogisticas:
                 cur.execute("UPDATE hojas_ruta_envios SET resolucion=%s,fecha_resolucion=NOW() WHERE id_hoja_ruta=%s AND id_envio=%s AND resolucion IS NULL", (nuevo, ruta["id_hoja_ruta"], envio_id))
                 self._cerrar_si_resuelta(cur, ruta)
         self._avisar([(envio_id, nuevo, observacion)])
+
+    def cancelar_envio(self, envio_id, actor_id, motivo):
+        envio_id, actor_id = V.entero(envio_id, "envio"), V.entero(actor_id, "usuario")
+        motivo = V.texto(motivo, "motivo_cancelacion", 5, 300)
+        observacion = f"Envío cancelado: {motivo}"
+        with self._transaccion() as cur:
+            self._actor(cur, actor_id, {"administrador", "recepcionista"})
+            cur.execute("SELECT id_envio,estado_actual,id_hoja_ruta,nro_guia FROM envios WHERE id_envio=%s FOR UPDATE", (envio_id,))
+            envio = cur.fetchone()
+            if not envio:
+                raise ValidationError("envio", "El envío no existe")
+            if envio["estado_actual"] not in {"recibido", "en_planta"} or envio["id_hoja_ruta"] is not None:
+                raise ValidationError("envio", "Solo se pueden cancelar envíos pendientes y sin hoja de ruta")
+            cur.execute("SELECT id_pago FROM pagos WHERE id_envio=%s FOR UPDATE", (envio_id,))
+            if cur.fetchone():
+                raise ValidationError("envio", "No se puede cancelar: el envío ya tiene un pago registrado")
+            cur.execute("SELECT id_orden FROM ordenes_pago_mp WHERE id_envio=%s FOR UPDATE", (envio_id,))
+            if cur.fetchone():
+                raise ValidationError("envio", "No se puede cancelar: el envío tiene una orden de Mercado Pago iniciada")
+            cur.execute("""SELECT h.id_hoja_ruta FROM hojas_ruta_envios a
+                JOIN hojas_de_ruta h ON h.id_hoja_ruta=a.id_hoja_ruta
+                WHERE a.id_envio=%s AND h.estado='abierta' FOR UPDATE""", (envio_id,))
+            if cur.fetchone():
+                raise ValidationError("envio", "No se puede cancelar: el envío pertenece a una hoja de ruta abierta")
+            cur.execute("UPDATE envios SET estado_actual='cancelado' WHERE id_envio=%s", (envio_id,))
+            self._historial(cur, envio_id, "cancelado", actor_id, "Administración", observacion)
+        self._avisar([(envio_id, "cancelado", observacion)])
 
     def listar_retornos(self):
         with self.db.cursor() as cur:

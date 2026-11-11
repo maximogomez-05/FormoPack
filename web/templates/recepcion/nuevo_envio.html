@@ -87,7 +87,40 @@
       </div>
       <div class="form-group">
         <label for="direccion_destino" class="form-label">Dirección Exacta de Entrega (*)</label>
-        <input type="text" name="direccion_destino" id="direccion_destino" class="form-control" required maxlength="200" minlength="3" placeholder="Ej: Av. San Martín 1234, Barrio Centro" title="Ingrese la dirección completa de entrega">
+        <input type="text" name="direccion_destino" id="direccion_destino" class="form-control" required maxlength="200" minlength="3" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="direccion-sugerencias" placeholder="Escribí una calle para buscarla en la localidad" title="Seleccioná una dirección sugerida o marcá el punto en el mapa">
+        <div id="direccion-sugerencias" role="listbox" aria-label="Direcciones sugeridas" hidden style="position:relative;z-index:20;max-height:220px;overflow:auto;background:#fff;border:1px solid #d7e0e8;border-radius:6px;box-shadow:0 6px 16px rgba(0,0,0,.12);"></div>
+        <p id="direccion-validacion" role="status" aria-live="polite" hidden style="margin:6px 0 0;color:#526777;font-size:12px;"></p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="destino-mapa">Punto exacto de entrega</label>
+        <p style="margin:0 0 8px;color:var(--text-muted);font-size:13px;">Marcá el domicilio en el mapa para incluir este envío en la optimización automática.</p>
+        <div id="destino-mapa" style="height:260px;border:1px solid var(--border-color,#d7e0e8);border-radius:8px;overflow:hidden;"></div>
+        <input type="hidden" name="destino_latitud" id="destino_latitud">
+        <input type="hidden" name="destino_longitud" id="destino_longitud">
+        <input type="hidden" name="direccion_token" id="direccion_token">
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+          <span id="destino-coordenadas" class="form-text">Sin punto marcado</span>
+          <button type="button" class="btn btn-secondary" id="limpiar-destino">Quitar punto</button>
+        </div>
+        <p id="destino-error" role="alert" hidden style="margin:8px 0 0;color:#b42318;font-size:13px;"></p>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ventana_desde" class="form-label">Entregar desde (opcional)</label>
+          <input type="time" name="ventana_desde" id="ventana_desde" class="form-control">
+        </div>
+        <div class="form-group">
+          <label for="ventana_hasta" class="form-label">Entregar hasta (opcional)</label>
+          <input type="time" name="ventana_hasta" id="ventana_hasta" class="form-control">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="prioridad" class="form-label">Prioridad de entrega</label>
+        <select name="prioridad" id="prioridad" class="form-control">
+          <option value="normal" selected>Normal</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -172,7 +205,253 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+function normalizarLocalidad(texto) {
+  return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+const centrosLocalidad = Object.fromEntries(Object.entries({{ centros_localidad|tojson }}).map(([nombre, centro]) => [normalizarLocalidad(nombre), centro]));
+const sugerenciasUrl = {{ sugerencias_direccion_url|tojson }};
+const direccionInversaUrl = {{ direccion_inversa_url|tojson }};
+const radioGeofenceMetros = 25000;
+const selectorLocalidad = document.getElementById('id_localidad_destino');
+const campoLatitud = document.getElementById('destino_latitud');
+const campoLongitud = document.getElementById('destino_longitud');
+const campoTokenDireccion = document.getElementById('direccion_token');
+const etiquetaCoordenadas = document.getElementById('destino-coordenadas');
+const mensajeDestino = document.getElementById('destino-error');
+const campoDireccion = document.getElementById('direccion_destino');
+const listaSugerencias = document.getElementById('direccion-sugerencias');
+const mensajeDireccion = document.getElementById('direccion-validacion');
+const destinoMapa = L.map('destino-mapa').setView([-26.18489, -58.17313], 8);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  referrerPolicy: 'strict-origin-when-cross-origin',
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(destinoMapa);
+let marcadorDestino = null;
+let direccionConfirmada = '';
+let temporizadorSugerencias = null;
+let controladorGeocodificacion = null;
+let secuenciaGeocodificacion = 0;
+function claveLocalidadSeleccionada() {
+  const texto = selectorLocalidad.selectedOptions[0]?.textContent.split(' (')[0] || '';
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+function centroLocalidadSeleccionada() {
+  const clave = claveLocalidadSeleccionada();
+  return centrosLocalidad[clave] || (clave === 'formosa' ? centrosLocalidad['formosa capital'] : null);
+}
+
+function distanciaMetros(origen, destino) {
+  const radianes = valor => valor * Math.PI / 180;
+  const dLat = radianes(destino[0] - origen[0]);
+  const dLng = radianes(destino[1] - origen[1]);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(radianes(origen[0])) * Math.cos(radianes(destino[0])) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function limpiarPinDestino() {
+  campoLatitud.value = '';
+  campoLongitud.value = '';
+  etiquetaCoordenadas.textContent = 'Sin punto marcado';
+  if (marcadorDestino) destinoMapa.removeLayer(marcadorDestino);
+  marcadorDestino = null;
+}
+
+function invalidarDireccion() {
+  direccionConfirmada = '';
+  campoTokenDireccion.value = '';
+  limpiarPinDestino();
+}
+
+function mostrarErrorDestino(texto) {
+  mensajeDestino.textContent = texto;
+  mensajeDestino.hidden = !texto;
+}
+
+function mostrarMensajeDireccion(texto, esError = false) {
+  mensajeDireccion.textContent = texto;
+  mensajeDireccion.style.color = esError ? '#b42318' : '#526777';
+  mensajeDireccion.hidden = !texto;
+}
+
+function estaDentroDeLocalidad(latitud, longitud, centro = centroLocalidadSeleccionada()) {
+  if (!centro) return false;
+  const radianes = valor => valor * Math.PI / 180;
+  const dLat = radianes(latitud - centro[0]);
+  const dLng = radianes(longitud - centro[1]);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(radianes(centro[0])) * Math.cos(radianes(latitud)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) <= radioGeofenceMetros;
+}
+
+function ocultarSugerencias() {
+  listaSugerencias.replaceChildren();
+  listaSugerencias.hidden = true;
+  campoDireccion.setAttribute('aria-expanded', 'false');
+}
+
+function fijarDireccion(direccion, latitud, longitud, verificacion) {
+  if (!direccion || !verificacion || !estaDentroDeLocalidad(latitud, longitud)) {
+    throw new Error('El punto seleccionado no corresponde a la localidad de destino.');
+  }
+  campoDireccion.value = direccion;
+  direccionConfirmada = direccion;
+  campoTokenDireccion.value = verificacion;
+  campoLatitud.value = Number(latitud).toFixed(7);
+  campoLongitud.value = Number(longitud).toFixed(7);
+  etiquetaCoordenadas.textContent = `${Number(latitud).toFixed(6)}, ${Number(longitud).toFixed(6)}`;
+  const punto = [Number(latitud), Number(longitud)];
+  if (marcadorDestino) marcadorDestino.setLatLng(punto);
+  else marcadorDestino = L.marker(punto).addTo(destinoMapa);
+  destinoMapa.flyTo(punto, 17);
+  mostrarErrorDestino('');
+  mostrarMensajeDireccion('Dirección validada con OpenStreetMap.');
+  ocultarSugerencias();
+}
+
+function agregarSugerencia(sugerencia) {
+  const opcion = document.createElement('button');
+  opcion.type = 'button';
+  opcion.setAttribute('role', 'option');
+  opcion.setAttribute('aria-selected', 'false');
+  opcion.className = 'form-control';
+  opcion.style.cssText = 'display:block;width:100%;padding:10px 12px;text-align:left;border:0;border-bottom:1px solid #e5e7eb;border-radius:0;background:#fff;white-space:normal;';
+  opcion.textContent = sugerencia.direccion;
+  opcion.addEventListener('pointerdown', evento => evento.preventDefault());
+  opcion.addEventListener('click', () => {
+    try {
+      fijarDireccion(sugerencia.direccion, sugerencia.latitud, sugerencia.longitud, sugerencia.verificacion);
+    } catch (error) {
+      invalidarDireccion();
+      mostrarMensajeDireccion(error.message, true);
+    }
+  });
+  listaSugerencias.append(opcion);
+}
+
+async function consultarSugerencias(consulta, secuencia) {
+  if (!selectorLocalidad.value) {
+    mostrarMensajeDireccion('Seleccioná primero la localidad de destino.', true);
+    return;
+  }
+  controladorGeocodificacion = new AbortController();
+  const parametros = new URLSearchParams({ q: consulta, id_localidad: selectorLocalidad.value });
+  try {
+    const respuesta = await fetch(`${sugerenciasUrl}?${parametros}`, {
+      signal: controladorGeocodificacion.signal, credentials: 'same-origin', cache: 'no-store'
+    });
+    const datos = await respuesta.json();
+    if (secuencia !== secuenciaGeocodificacion) return;
+    if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron buscar direcciones.');
+    ocultarSugerencias();
+    (datos.sugerencias || []).forEach(agregarSugerencia);
+    if (listaSugerencias.childElementCount) {
+      listaSugerencias.hidden = false;
+      campoDireccion.setAttribute('aria-expanded', 'true');
+      mostrarMensajeDireccion('Resultados de OpenStreetMap.');
+    } else {
+      mostrarMensajeDireccion('No se encontraron direcciones en la localidad seleccionada.');
+    }
+  } catch (error) {
+    if (error.name === 'AbortError' || secuencia !== secuenciaGeocodificacion) return;
+    ocultarSugerencias();
+    mostrarMensajeDireccion(error.message || 'No se pudo consultar el servicio de direcciones.', true);
+  }
+}
+
+campoDireccion.addEventListener('input', () => {
+  const consulta = campoDireccion.value.trim();
+  if (consulta !== direccionConfirmada) invalidarDireccion();
+  mostrarErrorDestino('');
+  ocultarSugerencias();
+  mostrarMensajeDireccion('');
+  clearTimeout(temporizadorSugerencias);
+  if (controladorGeocodificacion) controladorGeocodificacion.abort();
+  const secuencia = ++secuenciaGeocodificacion;
+  if (consulta.length < 3) return;
+  temporizadorSugerencias = setTimeout(() => consultarSugerencias(consulta, secuencia), 1000);
+});
+
+campoDireccion.addEventListener('keydown', evento => {
+  if (evento.key === 'Escape') ocultarSugerencias();
+  if (evento.key === 'ArrowDown' && !listaSugerencias.hidden) {
+    evento.preventDefault();
+    listaSugerencias.querySelector('button')?.focus();
+  }
+});
+
+function centrarEnLocalidad(limpiarPin = false) {
+  if (limpiarPin) limpiarPinDestino();
+  campoDireccion.value = '';
+  direccionConfirmada = '';
+  ocultarSugerencias();
+  mostrarMensajeDireccion('');
+  if (controladorGeocodificacion) controladorGeocodificacion.abort();
+  clearTimeout(temporizadorSugerencias);
+  const centro = centroLocalidadSeleccionada();
+  if (!centro) {
+    mostrarErrorDestino('No hay coordenadas configuradas para esta localidad; no se puede validar el pin.');
+    return;
+  }
+  mostrarErrorDestino('');
+  destinoMapa.flyTo(centro, 13);
+}
+
+destinoMapa.on('click', async evento => {
+  const centro = centroLocalidadSeleccionada();
+  if (!centro || distanciaMetros(centro, [evento.latlng.lat, evento.latlng.lng]) > radioGeofenceMetros) {
+    limpiarPinDestino();
+    campoDireccion.value = '';
+    direccionConfirmada = '';
+    mostrarMensajeDireccion('', true);
+    mostrarErrorDestino(centro
+      ? 'El punto seleccionado no corresponde a la localidad de destino (radio máximo 25 km).'
+      : 'Seleccioná una localidad reconocida antes de marcar el punto de entrega.');
+    if (centro) destinoMapa.flyTo(centro, 13);
+    return;
+  }
+  if (controladorGeocodificacion) controladorGeocodificacion.abort();
+  const secuencia = ++secuenciaGeocodificacion;
+  controladorGeocodificacion = new AbortController();
+  const { lat, lng } = evento.latlng;
+  invalidarDireccion();
+  campoDireccion.value = '';
+  mostrarErrorDestino('');
+  mostrarMensajeDireccion('Buscando la dirección del punto…');
+  try {
+    const parametros = new URLSearchParams({
+      id_localidad: selectorLocalidad.value, lat: lat.toFixed(7), lng: lng.toFixed(7)
+    });
+    const respuesta = await fetch(`${direccionInversaUrl}?${parametros}`, {
+      signal: controladorGeocodificacion.signal, credentials: 'same-origin', cache: 'no-store'
+    });
+    const datos = await respuesta.json();
+    if (secuencia !== secuenciaGeocodificacion) return;
+    if (!respuesta.ok) throw new Error(datos.error || 'No se encontró una dirección para ese punto.');
+    fijarDireccion(datos.sugerencia.direccion, lat, lng, datos.sugerencia.verificacion);
+  } catch (error) {
+    if (error.name === 'AbortError' || secuencia !== secuenciaGeocodificacion) return;
+    invalidarDireccion();
+    mostrarMensajeDireccion(error.message || 'No se pudo validar la dirección del punto.', true);
+  }
+});
+selectorLocalidad.addEventListener('change', () => centrarEnLocalidad(true));
+document.getElementById('limpiar-destino').addEventListener('click', () => {
+  limpiarPinDestino();
+  campoDireccion.value = '';
+  direccionConfirmada = '';
+  campoTokenDireccion.value = '';
+  mostrarErrorDestino('');
+  mostrarMensajeDireccion('');
+});
+if (selectorLocalidad.value) centrarEnLocalidad();
+window.addEventListener('load', () => destinoMapa.invalidateSize());
+
 let nb = 1;
 function agregarBulto() {
   nb++;
@@ -470,6 +749,31 @@ if (Object.keys(datosRechazados).length) {
   actualizarSeguroInfo();
   recalcularCotizacionEnVivo();
 }
+const textoLatitudRestaurada = document.getElementById('destino_latitud').value;
+const textoLongitudRestaurada = document.getElementById('destino_longitud').value;
+const latitudRestaurada = Number(textoLatitudRestaurada);
+const longitudRestaurada = Number(textoLongitudRestaurada);
+if (textoLatitudRestaurada && textoLongitudRestaurada
+  && Number.isFinite(latitudRestaurada) && Number.isFinite(longitudRestaurada)
+    && Math.abs(latitudRestaurada) <= 90 && Math.abs(longitudRestaurada) <= 180) {
+  const puntoRestaurado = [latitudRestaurada, longitudRestaurada];
+  const centro = centroLocalidadSeleccionada();
+  if (centro && distanciaMetros(centro, puntoRestaurado) <= radioGeofenceMetros) {
+    marcadorDestino = L.marker(puntoRestaurado).addTo(destinoMapa);
+    destinoMapa.setView(puntoRestaurado, 16);
+    etiquetaCoordenadas.textContent = `${latitudRestaurada.toFixed(6)}, ${longitudRestaurada.toFixed(6)}`;
+    direccionConfirmada = campoDireccion.value.trim();
+    if (!direccionConfirmada || !campoTokenDireccion.value) {
+      invalidarDireccion();
+      mostrarMensajeDireccion('Seleccioná una dirección sugerida o marcá el mapa para verificarla.', true);
+    }
+  } else {
+    limpiarPinDestino();
+    mostrarErrorDestino('El punto seleccionado no corresponde a la localidad de destino. Volvé a marcarlo dentro del radio permitido.');
+  }
+} else if (campoDireccion.value.trim()) {
+  mostrarMensajeDireccion('Seleccioná una dirección sugerida o marcá el mapa para verificarla.', true);
+}
 
 // Consultar después de restaurar los valores enviados, también tras un rechazo.
 for (const prefix of ['rem', 'dest']) {
@@ -489,7 +793,14 @@ if (formEnvio) {
   });
 
   // Al enviar el formulario, quitar la advertencia
-  formEnvio.addEventListener('submit', () => {
+  formEnvio.addEventListener('submit', evento => {
+    if (!direccionConfirmada || campoDireccion.value.trim() !== direccionConfirmada || !campoTokenDireccion.value
+        || !campoLatitud.value || !campoLongitud.value) {
+      evento.preventDefault();
+      mostrarMensajeDireccion('No se puede registrar una dirección escrita libremente. Elegí una sugerencia o marcá un punto para validar la dirección.', true);
+      campoDireccion.focus();
+      return;
+    }
     document.querySelectorAll('.bulto-item .es-fragil').forEach((input, indice) => { input.value = String(indice); });
     formChanged = false;
   });

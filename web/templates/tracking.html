@@ -256,6 +256,11 @@
     .tracking-map-wrap { overflow:hidden; border:1px solid var(--track-line); border-radius:8px; background:#e7eff0; }
     #tracking-map { height:340px; width:100%; }
     .tracking-map-note { padding:10px 12px; color:#526777; background:#f5f8f8; font-size:11px; line-height:1.5; }
+    .tracking-map-legend { display:flex; flex-wrap:wrap; gap:8px 18px; padding:9px 12px; color:#526777; background:#fff; font-size:11px; }
+    .tracking-map-legend span { display:inline-flex; align-items:center; gap:7px; }
+    .tracking-map-legend i { width:20px; border-top:3px solid; }
+    .tracking-map-legend .planned { border-color:#176b87; border-top-style:dashed; }
+    .tracking-map-legend .driven { border-color:#e67e22; }
     .tracking-destination { display:flex; align-items:flex-start; gap:10px; margin-top:14px; }
     .tracking-destination i { margin-top:3px; color:var(--track-blue); }
     .tracking-destination strong { display:block; font-size:13px; }
@@ -553,7 +558,7 @@
 
   {% if envio %}
   {% set estado = resumen_tracking.estado %}
-  {% set estado_nombres = {'recibido': 'Envío registrado', 'en_planta': 'En centro de distribución', 'en_ruta': 'En ruta de entrega', 'entregado': 'Entregado', 'fallido': 'Intento de entrega fallido', 'devolucion': 'Retorno pendiente a central', 'retiro_remitente': 'Disponible para el remitente', 'devuelto_remitente': 'Devuelto al remitente', 'siniestro': 'Incidencia reportada'} %}
+  {% set estado_nombres = {'recibido': 'Envío registrado', 'en_planta': 'En centro de distribución', 'en_ruta': 'En ruta de entrega', 'entregado': 'Entregado', 'fallido': 'Intento de entrega fallido', 'devolucion': 'Retorno pendiente a central', 'retiro_remitente': 'Disponible para el remitente', 'devuelto_remitente': 'Devuelto al remitente', 'siniestro': 'Incidencia reportada', 'cancelado': 'Envío cancelado'} %}
   {% set paso_actual = 0 if estado == 'recibido' else (1 if estado == 'en_planta' else (2 if estado == 'en_ruta' else (3 if estado == 'entregado' else -1))) %}
   <section class="tracking-result" aria-label="Resultado del seguimiento">
     <article class="tracking-card">
@@ -571,8 +576,8 @@
             · {{ resumen_tracking.ubicacion_actual }}
           </div>
         </div>
-        <span id="tracking-status-badge" class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}tracking-status--issue{% endif %}">
-          <i class="fa-solid {% if estado == 'entregado' %}fa-circle-check{% elif estado in ['fallido', 'devolucion', 'siniestro'] %}fa-triangle-exclamation{% else %}fa-truck-fast{% endif %}" aria-hidden="true"></i>
+        <span id="tracking-status-badge" class="tracking-status {% if estado == 'entregado' %}tracking-status--delivered{% elif estado in ['fallido', 'devolucion', 'siniestro', 'cancelado'] %}tracking-status--issue{% endif %}">
+          <i class="fa-solid {% if estado == 'entregado' %}fa-circle-check{% elif estado in ['fallido', 'devolucion', 'siniestro', 'cancelado'] %}fa-triangle-exclamation{% else %}fa-truck-fast{% endif %}" aria-hidden="true"></i>
           {% if resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% else %}{{ estado_nombres.get(estado, estado|replace('_', ' ')|title) }}{% endif %}
         </span>
       </header>
@@ -585,6 +590,10 @@
         <a class="btn-custodia" href="{{ url_for('admin.descargar_comprobante_tracking', guia=envio.nro_guia, tipo='custodia') }}">
           <i class="fa-solid fa-download"></i> Descargar Credencial de Retiro
         </a>
+      </div>
+      {% elif estado == 'cancelado' %}
+      <div class="alert alert-warning" role="status" style="margin-top:16px;">
+        <strong>Envío cancelado.</strong> La guía y el historial se conservan; este envío no continúa hacia reparto.
       </div>
       {% elif estado in ['fallido', 'devolucion', 'siniestro'] %}
       <div class="alert alert-danger" role="status" style="margin-top:16px;">
@@ -603,7 +612,9 @@
           <div class="tracking-map-wrap">
             <div id="tracking-map" role="img" aria-label="Mapa referencial desde Formosa Capital hasta {{ envio.localidad_destino }}"></div>
             <div id="tracking-map-note" class="tracking-map-note">
-              {% if estado == 'entregado' %}
+              {% if estado == 'cancelado' %}
+                <i class="fa-solid fa-ban" aria-hidden="true"></i> Envío cancelado. El seguimiento del recorrido no está activo.
+              {% elif estado == 'entregado' %}
                 <i class="fa-solid fa-circle-check" aria-hidden="true"></i> Entrega confirmada. El seguimiento en vivo finalizó.
               {% elif envio.ubicacion_gps and envio.ubicacion_gps.en_vivo %}
                 <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> GPS del chofer actualizado {{ envio.ubicacion_gps.fecha_actualizacion }}{% if envio.ubicacion_gps.precision_m %} · precisión ±{{ envio.ubicacion_gps.precision_m|round|int }} m{% endif %}.
@@ -612,6 +623,10 @@
               {% else %}
                 <i class="fa-solid fa-circle-info" aria-hidden="true"></i> OSRM trazará el recorrido hasta la localidad de destino. La dirección exacta no tiene coordenadas registradas.
               {% endif %}
+            </div>
+            <div class="tracking-map-legend" aria-label="Leyenda del mapa">
+              <span><i class="planned" aria-hidden="true"></i> Ruta planificada OSRM</span>
+              <span><i class="driven" aria-hidden="true"></i> Recorrido GPS registrado</span>
             </div>
           </div>
           <div class="tracking-destination">
@@ -624,7 +639,7 @@
           <h2 id="tracking-status-title" class="tracking-section-title"><i class="fa-solid fa-route" aria-hidden="true"></i> Estado y llegada</h2>
           <div class="tracking-eta">
             <div class="tracking-eta-label"><i class="fa-regular fa-clock" aria-hidden="true"></i> Tiempo estimado</div>
-            <strong>{% if estado == 'entregado' %}Envío entregado{% elif resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% elif estado == 'devuelto_remitente' %}Retirado por el remitente{% elif estado == 'devolucion' %}Pendiente de llegada a central{% elif estado in ['fallido', 'siniestro'] %}Requiere revisión operativa{% elif estado == 'en_ruta' %}En reparto{% else %}Pendiente de despacho{% endif %}</strong>
+            <strong>{% if estado == 'cancelado' %}Cancelado{% elif estado == 'entregado' %}Envío entregado{% elif resumen_tracking.en_custodia %}Disponible para retiro por el remitente{% elif estado == 'devuelto_remitente' %}Retirado por el remitente{% elif estado == 'devolucion' %}Pendiente de llegada a central{% elif estado in ['fallido', 'siniestro'] %}Requiere revisión operativa{% elif estado == 'en_ruta' %}En reparto{% else %}Pendiente de despacho{% endif %}</strong>
             <p>No hay ETA horario disponible: el sistema todavía no recibe ubicación GPS ni duración estimada del recorrido.</p>
           </div>
 
@@ -733,6 +748,7 @@
     const trackingNote = document.getElementById('tracking-map-note');
     let driverMarker = null;
     let routeLayer = null;
+    let trailLayer = null;
     let notaRuta = 'Trazado referencial a la localidad, no el recorrido real del vehículo.';
     let ultimaPosicion = hasGpsPosition ? gpsPosition : null;
     let conexionFallida = false;
@@ -773,6 +789,27 @@
       }
     }
 
+    function actualizarRastro(puntos) {
+      if (!Array.isArray(puntos) || puntos.some(punto => !punto || !FormoPackMapas.coordenadas(punto.lat, punto.lng))) {
+        throw new Error('Historial GPS inválido');
+      }
+      const coordenadas = puntos.map(punto => [Number(punto.lat), Number(punto.lng)]);
+      if (coordenadas.length < 2) {
+        if (trailLayer) map.removeLayer(trailLayer);
+        trailLayer = null;
+        return;
+      }
+      if (!trailLayer) {
+        trailLayer = L.polyline(coordenadas, {
+          color: '#e67e22', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round'
+        }).addTo(map);
+      } else {
+        trailLayer.setLatLngs(coordenadas);
+      }
+      trailLayer.bringToFront();
+      if (driverMarker) driverMarker.bringToFront();
+    }
+
     function mostrarGps() {
       const reciente = currentStatus === 'en_ruta' && ultimaPosicion && FormoPackMapas.reciente(ultimaPosicion.fecha_actualizacion);
       if (!reciente && driverMarker) { map.removeLayer(driverMarker); driverMarker = null; gpsCoordinates = null; }
@@ -782,6 +819,11 @@
     }
 
     async function trazarRutaOSRM() {
+      if (currentStatus === 'cancelado') {
+        notaRuta = 'El envío está cancelado; no hay una ruta de reparto activa.';
+        mostrarGps();
+        return;
+      }
       if (!hasDestinationCoordinates) {
         notaRuta = 'No hay coordenadas de referencia para esta localidad; no se puede solicitar la ruta a OSRM.';
         mostrarGps();
@@ -799,7 +841,7 @@
         }
         if (routeLayer) map.removeLayer(routeLayer);
         routeLayer = L.geoJSON(geometria, {
-          style: { color: '#176b87', weight: 5, opacity: 0.9 }
+          style: { color: '#176b87', weight: 5, opacity: 0.9, dashArray: '8 8' }
         }).addTo(map);
         map.fitBounds(routeLayer.getBounds().extend(plant).extend(destination).pad(0.18));
         notaRuta = `Ruta por calles calculada con OSRM hasta el centro de referencia de ${destinationName}; el sistema no tiene coordenadas del domicilio exacto.`;
@@ -830,15 +872,17 @@
      * La ubicación que almacena FormoPack corresponde a la hoja de ruta. No se
      * asume que el centro de una localidad sea el domicilio de entrega.
      */
-    const estadosTerminales = ['entregado', 'devolucion', 'devuelto_remitente', 'retiro_remitente', 'siniestro'];
+    const estadosTerminales = ['entregado', 'devolucion', 'devuelto_remitente', 'retiro_remitente', 'siniestro', 'cancelado'];
     const liveNote = document.getElementById('tracking-live-note');
     const consultaGps = new FormoPackMapas.ConsultaPeriodica(trackingStatusUrl, datos => {
       if (!datos || datos.ok !== true || !['recibido', 'en_planta', 'en_ruta', 'fallido', ...estadosTerminales].includes(datos.estado)) throw new Error('Respuesta inválida');
       if (datos.estado !== currentStatus) { consultaGps.pausar(); window.location.reload(); return; }
       if (datos.ubicacion_gps && (!FormoPackMapas.coordenadas(datos.ubicacion_gps.latitud, datos.ubicacion_gps.longitud)
         || !Number.isFinite(FormoPackMapas.fechaGps(datos.ubicacion_gps.fecha_actualizacion)))) throw new Error('GPS inválido');
+      if (!Array.isArray(datos.historial_gps)) throw new Error('Historial GPS inválido');
       conexionFallida = false;
       ultimaPosicion = datos.ubicacion_gps || null;
+      actualizarRastro(datos.historial_gps);
       if (ultimaPosicion && datos.estado === 'en_ruta') actualizarMarcadorGps(ultimaPosicion);
       liveNote.textContent = 'Consulta correcta · actualización automática cada 10 segundos.';
       mostrarGps();

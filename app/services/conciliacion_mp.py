@@ -130,10 +130,12 @@ class ConciliacionMP:
             usuario = cur.fetchone()
             if not usuario or not usuario["activo"] or usuario["tipo_usuario"] not in {"administrador", "recepcionista"}:
                 raise PagoExternoError("La cuenta no puede iniciar cobros.", 403)
-            cur.execute("SELECT id_envio,costo_total,nro_guia FROM envios WHERE nro_guia=%s FOR UPDATE", (guia,))
+            cur.execute("SELECT id_envio,costo_total,nro_guia,estado_actual FROM envios WHERE nro_guia=%s FOR UPDATE", (guia,))
             envio = cur.fetchone()
             if not envio:
                 raise PagoExternoError("No se encontró el envío.", 404)
+            if envio["estado_actual"] == "cancelado":
+                raise PagoExternoError("No se puede iniciar el pago de un envío cancelado.")
             cur.execute("SELECT id_pago FROM pagos WHERE id_envio=%s", (envio["id_envio"],))
             if cur.fetchall():
                 raise PagoExternoError("El envío ya tiene un cobro registrado.")
@@ -202,10 +204,12 @@ class ConciliacionMP:
 
     @staticmethod
     def _registrar(cur, pago, orden, guia_esperada=None, revision_legacy=False, solo_existente=False):
-        cur.execute("SELECT nro_guia,costo_total FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
+        cur.execute("SELECT nro_guia,costo_total,estado_actual FROM envios WHERE id_envio=%s FOR UPDATE", (orden["id_envio"],))
         envio = cur.fetchone()
         if not envio or (guia_esperada is not None and envio["nro_guia"] != guia_esperada):
             raise PagoExternoError("El pago pertenece a otro envío.")
+        if envio["estado_actual"] == "cancelado":
+            raise PagoExternoError("No se puede confirmar un pago de un envío cancelado.")
         monto = pago.validar(orden, envio["nro_guia"], revision_legacy)
         if monto != float(envio["costo_total"]):
             raise PagoExternoError("El total del envío cambió. El cobro requiere revisión.")

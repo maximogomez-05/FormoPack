@@ -129,6 +129,11 @@ CREATE TABLE IF NOT EXISTS envios (
     id_seguro           INT(11)         DEFAULT NULL,
     id_hoja_ruta        INT(11)         DEFAULT NULL,
     direccion_destino   VARCHAR(200)    NOT NULL,
+    destino_latitud     DECIMAL(10,7)   DEFAULT NULL,
+    destino_longitud    DECIMAL(10,7)   DEFAULT NULL,
+    ventana_desde       TIME            DEFAULT NULL,
+    ventana_hasta       TIME            DEFAULT NULL,
+    prioridad           VARCHAR(10)     NOT NULL DEFAULT 'normal',
     valor_declarado     DECIMAL(12,2)   NOT NULL DEFAULT 0.00,
     modalidad_pago      ENUM('efectivo', 'digital', 'cuenta_corriente') NOT NULL DEFAULT 'efectivo',
     costo_total         DECIMAL(12,2)   NOT NULL DEFAULT 0.00,
@@ -174,6 +179,18 @@ CREATE TABLE IF NOT EXISTS historial_estados (
     INDEX idx_historial_envio (id_envio),
     INDEX idx_historial_fecha (fecha_hora),
     CONSTRAINT fk_historial_envio FOREIGN KEY (id_envio) REFERENCES envios(id_envio) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS historial_gps (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    envio_id        INT(11)         NOT NULL,
+    lat             DECIMAL(10,7)   NOT NULL,
+    lng             DECIMAL(10,7)   NOT NULL,
+    fecha_hora      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_historial_gps_envio_fecha (envio_id, fecha_hora, id),
+    CONSTRAINT fk_historial_gps_envio FOREIGN KEY (envio_id)
+        REFERENCES envios(id_envio) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -479,6 +496,7 @@ DEALLOCATE PREPARE primer_acceso_stmt;
 CREATE TABLE IF NOT EXISTS hojas_ruta_envios (
     id_hoja_ruta INT NOT NULL,
     id_envio INT NOT NULL,
+    orden_parada INT DEFAULT NULL,
     resolucion VARCHAR(30) DEFAULT NULL,
     fecha_resolucion DATETIME DEFAULT NULL,
     PRIMARY KEY (id_hoja_ruta,id_envio),

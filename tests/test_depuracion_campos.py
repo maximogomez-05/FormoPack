@@ -100,6 +100,8 @@ def test_gps_http_limites_y_preservacion_del_ultimo_punto(aplicacion, db):
         original = cur.fetchone()
         assert float(original["precision_m"]) == 4.12
         assert float(original["latitud"]) == -26.1834568
+        cur.execute("SELECT COUNT(*) AS total FROM historial_gps WHERE envio_id = %s", (ids[0],))
+        assert cur.fetchone()["total"] == 1
     invalidos = [[], [1], True, "texto", {},
         {**valido, "latitud": True}, {**valido, "longitud": 180.00001},
         {**valido, "precision_m": -1}, {**valido, "precision_m": "Infinity"},

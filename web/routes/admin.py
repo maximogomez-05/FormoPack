@@ -178,6 +178,7 @@ def dashboard():
         {"codigo": "retiro_remitente", "nombre": "Disponible para el remitente"},
         {"codigo": "devuelto_remitente", "nombre": "Devuelto al remitente"},
         {"codigo": "siniestro", "nombre": "Siniestro"},
+        {"codigo": "cancelado", "nombre": "Cancelado"},
     ]
 
     return render_template(
@@ -213,6 +214,24 @@ def actualizar_estado_envio(id_envio: int):
     except DatabaseQueryError:
         flash("No se pudo confirmar el cambio. Actualizá el panel antes de reintentar.", "danger")
     return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.route("/envios/<int:id_envio>/cancelar", methods=["POST"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+def cancelar_envio(id_envio: int):
+    """Cancela lógicamente un envío pendiente, sin eliminar su historial ni documentos."""
+    try:
+        V.campos_unicos(request.form)
+        OperacionesLogisticas().cancelar_envio(
+            id_envio, session["usuario_id"], request.form.get("motivo", ""),
+        )
+        flash("Envío cancelado. Se conservaron la guía, el comprobante y el historial.", "success")
+    except ValidationError as error:
+        flash(_mensaje_usuario_error(error), "warning")
+    except DatabaseQueryError:
+        flash("No se pudo cancelar el envío. Actualizá el panel antes de reintentar.", "danger")
+    return redirect(url_for("admin.dashboard", _anchor="envios"))
 
 
 @admin_bp.route("/reportes/envios.csv", methods=["GET"])
@@ -275,6 +294,10 @@ def enviar_alertas_email():
 @rol_requerido("administrador")
 def logistica():
     """Pantalla de logística con flota, despacho y ruteo (RF 3.0 a RF 3.3)."""
+    return render_template("admin/logistica.html", **_contexto_logistica())
+
+
+def _contexto_logistica(plan_vrp=None):
     logistica_ctrl = LogisticaController()
     entregas_pendientes = []
     vehiculos = []
@@ -307,17 +330,17 @@ def logistica():
         error = str(e)
         logger.error("Error en logística: %s", e)
 
-    return render_template(
-        "admin/logistica.html",
-        entregas=entregas_pendientes,
-        vehiculos=vehiculos,
-        hojas_activas=hojas_activas,
-        mapa_envios=mapa_envios,
-        mapa_envios_url=url_for("admin.datos_mapa_logistica"),
-        choferes=_obtener_choferes_disponibles(),
-        total_km=total_km,
-        error=error,
-    )
+    return {
+        "entregas": entregas_pendientes,
+        "vehiculos": vehiculos,
+        "hojas_activas": hojas_activas,
+        "mapa_envios": mapa_envios,
+        "mapa_envios_url": url_for("admin.datos_mapa_logistica"),
+        "choferes": _obtener_choferes_disponibles(),
+        "total_km": total_km,
+        "error": error,
+        "plan_vrp": plan_vrp,
+    }
 
 
 @admin_bp.route("/logistica/mapa/envios", methods=["GET"])
@@ -361,6 +384,22 @@ def registrar_vehiculo():
 def crear_hoja_ruta():
     """Crea una hoja de ruta con envíos recibidos."""
     envios_ids = request.form.getlist('envios_ids')
+    if request.form.get("accion") == "optimizar":
+        if not envios_ids:
+            flash("Seleccioná al menos un pedido para optimizar.", "warning")
+            return redirect(url_for("admin.logistica"))
+        try:
+            V.campos_unicos(request.form, ("envios_ids",))
+            choferes_disponibles = _obtener_choferes_disponibles()
+            plan = LogisticaController().optimizar_flota(envios_ids, max_rutas=len(choferes_disponibles))
+            return render_template("admin/logistica.html", **_contexto_logistica(plan))
+        except (ValidationError, DatabaseQueryError, DatabaseConnectionError) as exc:
+            flash(_mensaje_usuario_error(exc, "No se pudo optimizar la selección."), "danger")
+            return redirect(url_for("admin.logistica"))
+        except Exception as exc:
+            logger.exception("Error al optimizar rutas de reparto: %s", exc)
+            flash("No se pudo calcular el plan de rutas. Intentá nuevamente.", "danger")
+            return redirect(url_for("admin.logistica"))
     if not envios_ids:
         flash('Debe seleccionar al menos un envío para crear la hoja de ruta.', 'warning')
         return redirect(url_for('admin.logistica'))
@@ -460,7 +499,7 @@ def tracking_estado():
         conn = DatabaseManager.get_instance().get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT estado_actual, id_hoja_ruta FROM envios WHERE nro_guia = %s",
+            "SELECT id_envio, estado_actual, id_hoja_ruta FROM envios WHERE nro_guia = %s",
             (nro_guia,),
         )
         envio = cursor.fetchone()
@@ -468,6 +507,7 @@ def tracking_estado():
             return jsonify({"ok": False, "error": "No se encontró el envío."}), 404
 
         gps = None
+        historial_gps = []
         if envio["estado_actual"] == "en_ruta" and envio.get("id_hoja_ruta"):
             try:
                 cursor.execute(
@@ -493,7 +533,32 @@ def tracking_estado():
                     "fecha_actualizacion": fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha),
                 }
 
-        return jsonify({"ok": True, "estado": envio["estado_actual"], "ubicacion_gps": gps})
+            try:
+                cursor.execute(
+                    """SELECT id, lat, lng, fecha_hora
+                       FROM historial_gps
+                       WHERE envio_id = %s
+                       ORDER BY fecha_hora ASC, id ASC""",
+                    (envio["id_envio"],),
+                )
+                for punto in cursor.fetchall():
+                    fecha = punto["fecha_hora"]
+                    historial_gps.append({
+                        "lat": float(punto["lat"]),
+                        "lng": float(punto["lng"]),
+                        "fecha_hora": fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha),
+                    })
+            except Exception as exc:
+                if getattr(exc, "errno", None) != 1146:
+                    raise
+                logger.warning("Falta aplicar la migración de historial GPS")
+
+        return jsonify({
+            "ok": True,
+            "estado": envio["estado_actual"],
+            "ubicacion_gps": gps,
+            "historial_gps": historial_gps,
+        })
     except Exception:
         logger.exception("No se pudo actualizar el seguimiento público")
         return jsonify({"ok": False, "error": "No se pudo consultar el seguimiento."}), 503
@@ -745,6 +810,7 @@ def comprobantes():
         {"codigo": "retiro_remitente", "nombre": "Disponible para el remitente"},
         {"codigo": "devuelto_remitente", "nombre": "Devuelto al remitente"},
         {"codigo": "siniestro", "nombre": "Siniestro"},
+        {"codigo": "cancelado", "nombre": "Cancelado"},
     ]
 
     modalidades_disponibles = [
@@ -1104,10 +1170,12 @@ def _obtener_ultimos_envios(filtros: dict | None = None, limite: int = 25) -> li
                 e.modalidad_pago,
                 e.fecha_creacion,
                 e.direccion_destino,
+                e.id_hoja_ruta,
                 cr.nombre_completo AS remitente,
                 cd.nombre_completo AS destinatario,
                 l.nombre AS localidad_destino,
                 EXISTS (SELECT 1 FROM pagos p WHERE p.id_envio = e.id_envio) AS esta_pagado,
+                EXISTS (SELECT 1 FROM ordenes_pago_mp o WHERE o.id_envio = e.id_envio) AS tiene_orden_mp,
                 r.vence AS fecha_vence_retiro,
                 (r.vence < CURDATE() AND r.retiro IS NULL) AS retiro_vencido
             FROM envios e
@@ -1457,6 +1525,8 @@ def construir_resumen_tracking(envio: dict | None, historial: list[dict]) -> dic
 
     if estado_actual == "entregado":
         progreso = "entregado"
+    elif estado_actual == "cancelado":
+        progreso = "cancelado"
     elif estado_actual in {"devolucion", "retiro_remitente", "devuelto_remitente"}:
         progreso = estado_actual
     elif estado_actual == "fallido":

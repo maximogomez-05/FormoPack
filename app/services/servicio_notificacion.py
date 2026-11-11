@@ -128,6 +128,7 @@ class ServicioNotificacion:
             "entregado": f"✅ Tu paquete {nro_guia} fue entregado — FormoPack",
             "fallido": f"⚠️ Intento de entrega fallido — {nro_guia} — FormoPack",
             "devolucion": f"📦 Devolución iniciada — {nro_guia} — FormoPack",
+            "cancelado": f"Envío cancelado — {nro_guia} — FormoPack",
         }
         return asuntos.get(estado, f"Actualización de tu envío {nro_guia} — FormoPack")
 
@@ -147,6 +148,7 @@ class ServicioNotificacion:
             "recibido": "#1565c0", "en_planta": "#f57f17", "en_ruta": "#2e7d32",
             "entregado": "#1b5e20", "fallido": "#c62828", "devolucion": "#c62828",
             "siniestro": "#000000",
+            "cancelado": "#a61b1b",
         }
         color_estado = colores.get(estado.lower(), "#004481")
 

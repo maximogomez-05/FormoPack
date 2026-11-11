@@ -36,6 +36,8 @@ from app.models.comprobante_interno import ComprobanteInterno
 from app.services.mercadopago_service import MercadoPagoService
 from app.services.conciliacion_mp import ConciliacionMP
 from app.services.firma_mercadopago import FirmaMercadoPago
+from app.services.geocodificador_direcciones import ErrorGeocodificacion, GeocodificadorDirecciones
+from app.services.geografia_destino import CENTROS_LOCALIDAD, centro_localidad, punto_en_localidad
 from app.utils.exceptions import PagoExternoError
 from web.extensions import csrf, limiter
 from config.settings import MercadoPagoConfig
@@ -204,6 +206,9 @@ def nuevo_envio():
     solicitud_id = request.form.get("solicitud_id", "")
     identificador_valido = bool(re.fullmatch(r"[0-9a-f]{32}", solicitud_id))
     contexto = dict(localidades=localidades, seguros=seguros,
+                    centros_localidad=CENTROS_LOCALIDAD,
+                    sugerencias_direccion_url=url_for("recepcion.sugerencias_direccion"),
+                    direccion_inversa_url=url_for("recepcion.direccion_inversa"),
                     solicitud_id=solicitud_id if identificador_valido else uuid4().hex)
 
     if request.method == "POST":
@@ -211,6 +216,10 @@ def nuevo_envio():
             if not identificador_valido:
                 raise ValidationError("formulario", "Revisá los datos y volvé a confirmar el envío")
             solicitud = SolicitudRecepcion(request.form)
+            GeocodificadorDirecciones.validar_sugerencia(
+                request.form.get("direccion_token", ""), solicitud.direccion, solicitud.localidad,
+                solicitud.destino_latitud, solicitud.destino_longitud,
+            )
             resultado = EnvioController().registrar_en_mostrador(solicitud, session["usuario_id"], solicitud_id)
             if resultado.get("repetida"):
                 flash(f"Este formulario ya registró la guía {resultado['nro_guia']}.", "info")
@@ -237,6 +246,53 @@ def nuevo_envio():
         "recepcion/nuevo_envio.html",
         **contexto,
     )
+
+
+@recepcion_bp.route("/direcciones/sugerencias", methods=["GET"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+@limiter.limit("30 per minute")
+def sugerencias_direccion():
+    try:
+        id_localidad = V.entero(request.args.get("id_localidad", ""), "id_localidad_destino")
+        localidad = _obtener_nombre_localidad(id_localidad)
+        sugerencias = GeocodificadorDirecciones.sugerir(request.args.get("q", ""), localidad)
+        for sugerencia in sugerencias:
+            sugerencia["verificacion"] = GeocodificadorDirecciones.firmar_sugerencia(sugerencia, id_localidad)
+        return jsonify({"sugerencias": sugerencias})
+    except ValidationError as error:
+        return jsonify({"error": error.message}), 400
+    except ErrorGeocodificacion:
+        return jsonify({"error": "El servicio de direcciones no está disponible. Probá marcar el punto en el mapa."}), 503
+    except DatabaseQueryError:
+        return jsonify({"error": "No se pudo validar la localidad seleccionada."}), 503
+
+
+@recepcion_bp.route("/direcciones/reversa", methods=["GET"])
+@login_required
+@rol_requerido("administrador", "recepcionista")
+@limiter.limit("30 per minute")
+def direccion_inversa():
+    try:
+        id_localidad = V.entero(request.args.get("id_localidad", ""), "id_localidad_destino")
+        localidad = _obtener_nombre_localidad(id_localidad)
+        latitud = V.medicion(request.args.get("lat", ""), "latitud", -90, 90, 7)
+        longitud = V.medicion(request.args.get("lng", ""), "longitud", -180, 180, 7)
+        if not punto_en_localidad(localidad, latitud, longitud):
+            return jsonify({"error": "El punto está fuera de la localidad seleccionada."}), 400
+        resultado = GeocodificadorDirecciones.inversa(latitud, longitud, localidad)
+        if not resultado:
+            return jsonify({"error": "No se encontró una dirección para este punto."}), 404
+        resultado["latitud"] = latitud
+        resultado["longitud"] = longitud
+        resultado["verificacion"] = GeocodificadorDirecciones.firmar_sugerencia(resultado, id_localidad)
+        return jsonify({"sugerencia": resultado})
+    except ValidationError as error:
+        return jsonify({"error": error.message}), 400
+    except ErrorGeocodificacion:
+        return jsonify({"error": "El servicio de direcciones no está disponible. Probá elegir una sugerencia."}), 503
+    except DatabaseQueryError:
+        return jsonify({"error": "No se pudo validar la localidad seleccionada."}), 503
 
 
 # ──────────────────────────────────────────
@@ -499,6 +555,28 @@ def _obtener_localidades() -> list:
         return cursor.fetchall()
     except Exception as exc:
         raise DatabaseQueryError("No se pudieron consultar las localidades") from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+def _obtener_nombre_localidad(id_localidad) -> str:
+    identificador = V.entero(id_localidad, "id_localidad_destino")
+    conn = None
+    try:
+        conn = DatabaseManager.get_instance().get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nombre FROM localidades WHERE id_localidad=%s", (identificador,))
+        localidad = cursor.fetchone()
+        if not localidad:
+            raise ValidationError("id_localidad_destino", "Seleccioná una localidad válida")
+        if centro_localidad(localidad["nombre"]) is None:
+            raise ValidationError("id_localidad_destino", "La localidad no tiene centro geográfico configurado")
+        return localidad["nombre"]
+    except ValidationError:
+        raise
+    except Exception as exc:
+        raise DatabaseQueryError("No se pudo consultar la localidad") from exc
     finally:
         if conn:
             conn.close()

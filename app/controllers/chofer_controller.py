@@ -18,7 +18,7 @@ class ChoferController:
     """Consulta rutas propias y registra evidencias de entrega."""
 
     ESTADOS_ENTREGA = {"en_ruta", "fallido"}
-    ESTADOS_FINALES = {"entregado", "devolucion", "siniestro"}
+    ESTADOS_FINALES = {"entregado", "devolucion", "siniestro", "cancelado"}
 
     @staticmethod
     def calcular_estado_post_intento(tipo_intento: str) -> str:
@@ -53,12 +53,12 @@ class ChoferController:
             for hoja in hojas:
                 cursor.execute("""SELECT e.id_envio,e.nro_guia,COALESCE(a.resolucion,e.estado_actual) AS estado_actual,
                     e.direccion_destino,l.nombre AS localidad_destino,l.distancia_km,a.resolucion,
-                    i.tipo_intento,i.fecha_hora AS intento_fecha,i.motivo_fallo AS ultimo_motivo_fallo,
+                    a.orden_parada,i.tipo_intento,i.fecha_hora AS intento_fecha,i.motivo_fallo AS ultimo_motivo_fallo,
                     (SELECT COUNT(*) FROM intentos_entrega j WHERE j.id_envio=e.id_envio) AS cantidad_intentos
                     FROM hojas_ruta_envios a JOIN envios e ON e.id_envio=a.id_envio
                     JOIN localidades l ON l.id_localidad=e.id_localidad_destino
                     LEFT JOIN intentos_entrega i ON i.id_intento=(SELECT MAX(j.id_intento) FROM intentos_entrega j WHERE j.id_envio=e.id_envio AND j.id_hoja_ruta=a.id_hoja_ruta)
-                    WHERE a.id_hoja_ruta=%s ORDER BY l.distancia_km,e.nro_guia""", (hoja["id_hoja_ruta"],))
+                    WHERE a.id_hoja_ruta=%s ORDER BY COALESCE(a.orden_parada,2147483647),l.distancia_km,e.nro_guia""", (hoja["id_hoja_ruta"],))
                 hoja["envios"] = cursor.fetchall()
             return {"hojas": hojas}
         except Exception as exc:
@@ -117,6 +117,13 @@ class ChoferController:
                     id_hoja_ruta, id_chofer, latitud, longitud, precision_m,
                     id_chofer, latitud, longitud, precision_m,
                 ),
+            )
+            cursor.execute(
+                """INSERT INTO historial_gps (envio_id, lat, lng, fecha_hora)
+                   SELECT id_envio, %s, %s, CURRENT_TIMESTAMP
+                   FROM envios
+                   WHERE id_hoja_ruta = %s AND estado_actual = 'en_ruta'""",
+                (latitud, longitud, id_hoja_ruta),
             )
             conn.commit()
         except ValidationError:
