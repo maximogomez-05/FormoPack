@@ -153,7 +153,7 @@ class EnvioController:
             cursor.execute("SELECT nombre FROM localidades WHERE id_localidad=%s", (solicitud.localidad,))
             localidad = cursor.fetchone()
             if not localidad or not punto_en_localidad(
-                localidad["nombre"], solicitud.destino_latitud, solicitud.destino_longitud,
+                localidad[0], solicitud.destino_latitud, solicitud.destino_longitud,
             ):
                 raise ValidationError("destino", "El punto de entrega no corresponde a la localidad seleccionada")
 

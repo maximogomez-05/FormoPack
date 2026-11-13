@@ -20,7 +20,9 @@ def test_recepcion_en_chromium(aplicacion, db):
     hilo = Thread(target=servidor.serve_forever, daemon=True)
     hilo.start()
     try:
-        with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        with patch("app.controllers.envio_controller.notificar_cambio_estado_async"), patch(
+                "app.services.geocodificador_direcciones.GeocodificadorDirecciones.sugerir",
+                return_value=[{"direccion": "Av. San Martín 123", "latitud": -26.18, "longitud": -58.17}]):
             resultado = subprocess.run(
                 [os.environ["FORMOPACK_TEST_NODE"], str(Path(__file__).parent / "browser/recepcion.cjs")],
                 env={**os.environ, "FORMOPACK_TEST_URL": f"http://127.0.0.1:{servidor.server_port}"},

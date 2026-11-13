@@ -32,6 +32,12 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     datos = formulario()
     datos["csrf_token"] = token
     datos["solicitud_id"] = "a" * 32
+    from app.services.geocodificador_direcciones import GeocodificadorDirecciones
+    datos["direccion_token"] = GeocodificadorDirecciones.firmar_sugerencia({
+        "direccion": datos["direccion_destino"],
+        "latitud": float(datos["destino_latitud"]),
+        "longitud": float(datos["destino_longitud"]),
+    }, int(datos["id_localidad_destino"]))
     with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
         respuesta = client.post("/recepcion/nuevo-envio", data=datos)
         repetida = client.post("/recepcion/nuevo-envio", data=datos)

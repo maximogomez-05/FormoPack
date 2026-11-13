@@ -21,7 +21,7 @@ const leaflet = process.env.FORMOPACK_TEST_LEAFLET;
           calls++;
           if (status === 'error') return r.fulfill({status:503,body:'no disponible'});
           if (status === 'invalido') return r.fulfill({json:{ok:true}});
-          return r.fulfill({json:{ok:true, estado:terminal ? 'entregado' : 'en_ruta', ubicacion_gps:terminal ? null : gps}});
+          return r.fulfill({json:{ok:true, estado:terminal ? 'entregado' : 'en_ruta', ubicacion_gps:terminal ? null : gps, historial_gps:[]}});
         }
         if (url.includes('/admin/tracking?')) return r.fulfill({contentType:'text/html', body:fs.readFileSync(path.join(process.env.FORMOPACK_HTML_TEST,terminal ? 'tracking_terminal.html' : 'tracking.html'))});
         if (url.includes('leaflet.js')) return r.fulfill({contentType:'text/javascript', body:fs.readFileSync(leaflet)});
@@ -67,6 +67,30 @@ const leaflet = process.env.FORMOPACK_TEST_LEAFLET;
       assert.deepEqual(errors,[]);
       await page.close();
     }
+    // Si el CDN no carga, el seguimiento textual debe seguir consultándose.
+    const sinMapa = await browser.newPage({serviceWorkers:'block'});
+    const erroresSinMapa = [];
+    let consultasSinMapa = 0;
+    sinMapa.on('pageerror', e => erroresSinMapa.push(e.message));
+    await sinMapa.route('**/*', async r => {
+      const url = r.request().url();
+      if (url.includes('/admin/tracking/estado')) {
+        consultasSinMapa++;
+        return r.fulfill({json:{ok:true,estado:'en_ruta',ubicacion_gps:null,historial_gps:[]}});
+      }
+      if (url.includes('/admin/tracking?')) return r.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(process.env.FORMOPACK_HTML_TEST,'tracking.html'))});
+      if (url.includes('/static/')) {
+        const file = path.join(root,'web',new URL(url).pathname);
+        if (fs.existsSync(file)) return r.fulfill({path:file});
+      }
+      return r.fulfill({status:200,body:''});
+    });
+    await sinMapa.goto('https://formopack.example/admin/tracking?guia=FP-TEST');
+    await sinMapa.getByText('El mapa no está disponible. El estado del envío se sigue actualizando.',{exact:true}).waitFor();
+    await sinMapa.waitForFunction(()=>document.querySelector('#tracking-live-note').textContent.includes('Consulta correcta'));
+    assert(consultasSinMapa > 0);
+    assert.deepEqual(erroresSinMapa,[]);
+    await sinMapa.close();
     const operativo = await browser.newPage({serviceWorkers:'block', viewport:{width:390,height:844}});
     await operativo.clock.install();
     let falloOperativo = false;

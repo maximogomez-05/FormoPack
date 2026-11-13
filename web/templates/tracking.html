@@ -744,7 +744,7 @@
     const hasDestinationCoordinates = Boolean(destination);
     const hasGpsPosition = Boolean(currentStatus === 'en_ruta' && gpsPosition && FormoPackMapas.coordenadas(gpsPosition.latitud, gpsPosition.longitud) && FormoPackMapas.reciente(gpsPosition.fecha_actualizacion));
     let gpsCoordinates = hasGpsPosition ? [Number(gpsPosition.latitud), Number(gpsPosition.longitud)] : null;
-    const map = L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8);
+    const map = typeof L !== 'undefined' ? L.map('tracking-map', { scrollWheelZoom: false, zoomControl: true }).setView(plant, 8) : null;
     const trackingNote = document.getElementById('tracking-map-note');
     let driverMarker = null;
     let routeLayer = null;
@@ -753,6 +753,7 @@
     let ultimaPosicion = hasGpsPosition ? gpsPosition : null;
     let conexionFallida = false;
 
+    if (map) {
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       // Identificar el sitio ante OSM sin revelar la guía consultada.
       referrerPolicy: 'strict-origin-when-cross-origin',
@@ -769,8 +770,12 @@
       destinoPopup.append(destinoTitulo, document.createElement('br'), document.createTextNode(destinationName));
       L.marker(destination).addTo(map).bindPopup(destinoPopup);
     }
+    } else {
+      document.getElementById('tracking-map').textContent = 'El mapa no está disponible. El estado del envío se sigue actualizando.';
+    }
 
     function actualizarMarcadorGps(posicion) {
+      if (!map) return;
       const lat = Number(posicion && posicion.latitud);
       const lng = Number(posicion && posicion.longitud);
       if (!posicion || !FormoPackMapas.coordenadas(posicion.latitud, posicion.longitud) || !FormoPackMapas.reciente(posicion.fecha_actualizacion)) return;
@@ -793,6 +798,7 @@
       if (!Array.isArray(puntos) || puntos.some(punto => !punto || !FormoPackMapas.coordenadas(punto.lat, punto.lng))) {
         throw new Error('Historial GPS inválido');
       }
+      if (!map) return;
       const coordenadas = puntos.map(punto => [Number(punto.lat), Number(punto.lng)]);
       if (coordenadas.length < 2) {
         if (trailLayer) map.removeLayer(trailLayer);
@@ -819,6 +825,11 @@
     }
 
     async function trazarRutaOSRM() {
+      if (!map) {
+        notaRuta = 'Mapa no disponible; consultá los estados y horarios del envío.';
+        mostrarGps();
+        return;
+      }
       if (currentStatus === 'cancelado') {
         notaRuta = 'El envío está cancelado; no hay una ruta de reparto activa.';
         mostrarGps();
@@ -856,14 +867,14 @@
       mostrarGps();
     }
 
-    if (gpsCoordinates) {
+    if (map && gpsCoordinates) {
       actualizarMarcadorGps(gpsPosition);
       const puntosVisibles = [plant, gpsCoordinates];
       if (hasDestinationCoordinates) puntosVisibles.push(destination);
       map.fitBounds(L.latLngBounds(puntosVisibles).pad(0.22));
-    } else if (hasDestinationCoordinates) {
+    } else if (map && hasDestinationCoordinates) {
       map.fitBounds(L.latLngBounds([plant, destination]).pad(0.22));
-    } else {
+    } else if (map) {
       map.setView(plant, 9);
     }
     trazarRutaOSRM();
@@ -895,7 +906,7 @@
     window.setInterval(mostrarGps, 5000);
     if (!estadosTerminales.includes(currentStatus)) consultaGps.iniciar();
     else liveNote.textContent = 'Envío finalizado para reparto; no se consulta GPS en vivo.';
-    window.addEventListener('load', () => setTimeout(() => map.invalidateSize(), 100));
+    window.addEventListener('load', () => setTimeout(() => map?.invalidateSize(), 100));
 
     const currentUrl = window.location.href;
     const shareSubject = `Seguimiento de envío ${guideNumber} — FormoPack`;

@@ -224,12 +224,17 @@ const mensajeDestino = document.getElementById('destino-error');
 const campoDireccion = document.getElementById('direccion_destino');
 const listaSugerencias = document.getElementById('direccion-sugerencias');
 const mensajeDireccion = document.getElementById('direccion-validacion');
-const destinoMapa = L.map('destino-mapa').setView([-26.18489, -58.17313], 8);
+const destinoMapa = typeof L !== 'undefined'
+  ? L.map('destino-mapa').setView([-26.18489, -58.17313], 8) : null;
+if (destinoMapa) {
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   referrerPolicy: 'strict-origin-when-cross-origin',
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(destinoMapa);
+} else {
+  document.getElementById('destino-mapa').textContent = 'El mapa no está disponible. Podés validar el domicilio con las sugerencias de dirección.';
+}
 let marcadorDestino = null;
 let direccionConfirmada = '';
 let temporizadorSugerencias = null;
@@ -258,7 +263,7 @@ function limpiarPinDestino() {
   campoLatitud.value = '';
   campoLongitud.value = '';
   etiquetaCoordenadas.textContent = 'Sin punto marcado';
-  if (marcadorDestino) destinoMapa.removeLayer(marcadorDestino);
+  if (marcadorDestino && destinoMapa) destinoMapa.removeLayer(marcadorDestino);
   marcadorDestino = null;
 }
 
@@ -307,8 +312,8 @@ function fijarDireccion(direccion, latitud, longitud, verificacion) {
   etiquetaCoordenadas.textContent = `${Number(latitud).toFixed(6)}, ${Number(longitud).toFixed(6)}`;
   const punto = [Number(latitud), Number(longitud)];
   if (marcadorDestino) marcadorDestino.setLatLng(punto);
-  else marcadorDestino = L.marker(punto).addTo(destinoMapa);
-  destinoMapa.flyTo(punto, 17);
+  else if (destinoMapa) marcadorDestino = L.marker(punto).addTo(destinoMapa);
+  destinoMapa?.flyTo(punto, 17);
   mostrarErrorDestino('');
   mostrarMensajeDireccion('Dirección validada con OpenStreetMap.');
   ocultarSugerencias();
@@ -399,10 +404,10 @@ function centrarEnLocalidad(limpiarPin = false) {
     return;
   }
   mostrarErrorDestino('');
-  destinoMapa.flyTo(centro, 13);
+  destinoMapa?.flyTo(centro, 13);
 }
 
-destinoMapa.on('click', async evento => {
+destinoMapa?.on('click', async evento => {
   const centro = centroLocalidadSeleccionada();
   if (!centro || distanciaMetros(centro, [evento.latlng.lat, evento.latlng.lng]) > radioGeofenceMetros) {
     limpiarPinDestino();
@@ -412,7 +417,7 @@ destinoMapa.on('click', async evento => {
     mostrarErrorDestino(centro
       ? 'El punto seleccionado no corresponde a la localidad de destino (radio máximo 25 km).'
       : 'Seleccioná una localidad reconocida antes de marcar el punto de entrega.');
-    if (centro) destinoMapa.flyTo(centro, 13);
+    if (centro) destinoMapa?.flyTo(centro, 13);
     return;
   }
   if (controladorGeocodificacion) controladorGeocodificacion.abort();
@@ -450,7 +455,7 @@ document.getElementById('limpiar-destino').addEventListener('click', () => {
   mostrarMensajeDireccion('');
 });
 if (selectorLocalidad.value) centrarEnLocalidad();
-window.addEventListener('load', () => destinoMapa.invalidateSize());
+window.addEventListener('load', () => destinoMapa?.invalidateSize());
 
 let nb = 1;
 function agregarBulto() {
@@ -759,8 +764,10 @@ if (textoLatitudRestaurada && textoLongitudRestaurada
   const puntoRestaurado = [latitudRestaurada, longitudRestaurada];
   const centro = centroLocalidadSeleccionada();
   if (centro && distanciaMetros(centro, puntoRestaurado) <= radioGeofenceMetros) {
-    marcadorDestino = L.marker(puntoRestaurado).addTo(destinoMapa);
-    destinoMapa.setView(puntoRestaurado, 16);
+    if (destinoMapa) {
+      marcadorDestino = L.marker(puntoRestaurado).addTo(destinoMapa);
+      destinoMapa.setView(puntoRestaurado, 16);
+    }
     etiquetaCoordenadas.textContent = `${latitudRestaurada.toFixed(6)}, ${longitudRestaurada.toFixed(6)}`;
     direccionConfirmada = campoDireccion.value.trim();
     if (!direccionConfirmada || !campoTokenDireccion.value) {
