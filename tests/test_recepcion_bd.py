@@ -289,7 +289,8 @@ def test_migracion_guia_con_numeracion_previa_y_reaplicacion(db):
         assert cur.fetchone()["ultimo"] == 23
 
 
-def test_dni_existente_conserva_sus_datos(db):
+@pytest.mark.parametrize("correo", ["nuevo@example.com", ""])
+def test_dni_existente_actualiza_contactos_y_conserva_identidad(db, correo):
     from app.models.solicitud_recepcion import SolicitudRecepcion
     datos = formulario()
     servicio = EnvioController(db)
@@ -297,7 +298,35 @@ def test_dni_existente_conserva_sus_datos(db):
         servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "a" * 32)
         datos["rem_nombre"] = "Nombre Modificado"
         datos["rem_telefono"] = "3704999999"
+        datos["rem_email"] = correo
+        datos["dest_telefono"] = "3704888888"
+        datos["dest_email"] = correo
         servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "b" * 32)
+        # Repetir el mismo formulario no debe volver a cambiar el contacto.
+        datos["rem_telefono"] = "3704777777"
+        repetida = servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "b" * 32)
+        assert repetida["repetida"] is True
     with db.cursor() as cur:
-        cur.execute("SELECT nombre_completo,telefono FROM clientes WHERE dni='12345678'")
-        assert cur.fetchone() == {"nombre_completo": "Juan Pérez", "telefono": "3704123456"}
+        cur.execute("SELECT nombre_completo,telefono,email FROM clientes WHERE dni='12345678'")
+        assert cur.fetchone() == {"nombre_completo": "Juan Pérez", "telefono": "3704999999", "email": correo or None}
+        cur.execute("SELECT telefono,email FROM clientes WHERE dni='23456789'")
+        assert cur.fetchone() == {"telefono": "3704888888", "email": correo or None}
+
+
+def test_contactos_existentes_no_cambian_si_falla_el_envio(db):
+    from app.models.solicitud_recepcion import SolicitudRecepcion
+    servicio = EnvioController(db)
+    datos = formulario()
+    with patch("app.controllers.envio_controller.notificar_cambio_estado_async"):
+        servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "a" * 32)
+    with db.cursor() as cur:
+        cur.execute("SELECT dni,telefono,email FROM clientes ORDER BY dni")
+        anterior = cur.fetchall()
+    datos["rem_telefono"] = "3704999999"
+    datos["dest_email"] = "nuevo@example.com"
+    with patch.object(servicio, "_insertar_envio", side_effect=DatabaseQueryError("fallo de prueba")):
+        with pytest.raises(DatabaseQueryError):
+            servicio.registrar_en_mostrador(SolicitudRecepcion(datos), 2, "b" * 32)
+    with db.cursor() as cur:
+        cur.execute("SELECT dni,telefono,email FROM clientes ORDER BY dni")
+        assert cur.fetchall() == anterior

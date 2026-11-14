@@ -164,7 +164,8 @@ class EnvioController:
                 datos = solicitud.clientes[rol]
                 cursor.execute("""INSERT INTO clientes (dni, nombre_completo, telefono, email)
                     VALUES (%s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente)""",
+                    ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente),
+                        telefono=VALUES(telefono), email=VALUES(email)""",
                     (datos["dni"].strip(), datos["nombre_completo"].strip(),
                      datos["telefono"].strip(), V.email(datos["email"])))
                 clientes[rol] = cursor.lastrowid

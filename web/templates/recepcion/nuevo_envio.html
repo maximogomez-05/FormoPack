@@ -3,6 +3,7 @@
 {% block page_title %}<i class="fa-solid fa-file-invoice"></i> Registro de Envío{% endblock %}
 
 {% block content %}
+<p class="text-muted">Si el DNI ya está registrado, podés corregir el teléfono y el correo. Los cambios se guardan en el cliente al confirmar el envío.</p>
 <form method="POST" id="form-envio">
 <input type="hidden" name="solicitud_id" value="{{ solicitud_id }}">
 <div class="page-grid-2col">
@@ -639,7 +640,7 @@ function recalcularCotizacionEnVivo() {
   }, 250);
 }
 
-async function buscarCliente(prefix, automatico = false) {
+async function buscarCliente(prefix, automatico = false, conservarContactos = false) {
   const dni = document.getElementById(`${prefix}_dni`).value.trim();
   if (!dni) return;
   try {
@@ -652,12 +653,12 @@ async function buscarCliente(prefix, automatico = false) {
     }
     if (data.encontrado) {
       for (const campo of ['nombre', 'telefono', 'email']) {
-        document.getElementById(prefix + '_' + campo).readOnly = true;
+        document.getElementById(prefix + '_' + campo).readOnly = campo === 'nombre';
       }
       document.getElementById(prefix + '_dni').dataset.cliente = dni;
       document.getElementById(`${prefix}_nombre`).value = data.cliente.nombre_completo;
-      document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
-      if (document.getElementById(`${prefix}_email`)) {
+      if (!conservarContactos) {
+        document.getElementById(`${prefix}_telefono`).value = data.cliente.telefono;
         document.getElementById(`${prefix}_email`).value = data.cliente.email || '';
       }
     } else {
@@ -785,7 +786,7 @@ if (textoLatitudRestaurada && textoLongitudRestaurada
 // Consultar después de restaurar los valores enviados, también tras un rechazo.
 for (const prefix of ['rem', 'dest']) {
   if (/^[0-9]{7,15}$/.test(document.getElementById(prefix + '_dni').value.trim())) {
-    buscarCliente(prefix, true);
+    buscarCliente(prefix, true, {{ (request.method == 'POST')|tojson }});
   }
 }
 
