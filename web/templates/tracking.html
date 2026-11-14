@@ -1197,7 +1197,7 @@
         }
 
         if (data.agente) {
-          agentText.innerHTML = `<i class="fa-solid fa-user-check me-1"></i> Atendido por <strong>${escapeHtml(data.agente)}</strong>`;
+          agentText.innerHTML = `<i class="fa-solid fa-user-check me-1"></i> Atendido por <strong>Soporte</strong>`;
         } else {
           agentText.innerHTML = `<i class="fa-solid fa-clock me-1"></i> Esperando atención de un operador...`;
         }
@@ -1211,7 +1211,7 @@
               bubble.className = `client-msg-bubble ${isMe ? 'from-me' : 'from-soporte'}`;
               bubble.innerHTML = `
                 <div style="font-size:10px; font-weight:700; margin-bottom:2px; opacity:0.8;">
-                  ${isMe ? 'Tú' : escapeHtml(m.remitente_nombre)}
+                  ${isMe ? 'Tú' : 'Soporte'}
                 </div>
                 <div>${escapeHtml(m.mensaje)}</div>
                 <div class="client-msg-time">${escapeHtml(m.fecha_envio || '')}</div>

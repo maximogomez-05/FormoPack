@@ -171,7 +171,7 @@
     {% for m in mensajes %}
     <div class="msg-bubble {% if m.remitente_tipo == 'cliente' %}from-cliente{% else %}from-soporte{% endif %}" data-id="{{ m.id_mensaje }}">
       <div class="msg-header">
-        <span>{{ m.remitente_nombre }}</span>
+        <span>{{ 'Soporte' if m.remitente_tipo == 'soporte' else m.remitente_nombre }}</span>
         <span>{% if m.remitente_tipo == 'soporte' %}<i class="fa-solid fa-shield me-1"></i> Soporte{% else %}<i class="fa-regular fa-user me-1"></i> Cliente{% endif %}</span>
       </div>
       <div>{{ m.mensaje }}</div>
@@ -275,7 +275,7 @@
 
     bubble.innerHTML = `
       <div class="msg-header">
-        <span>${escapeHtml(m.remitente_nombre)}</span>
+        <span>${m.remitente_tipo === 'soporte' ? 'Soporte' : escapeHtml(m.remitente_nombre)}</span>
         <span>${isSoporte ? '<i class="fa-solid fa-shield me-1"></i> Soporte' : '<i class="fa-regular fa-user me-1"></i> Cliente'}</span>
       </div>
       <div>${escapeHtml(m.mensaje)}</div>

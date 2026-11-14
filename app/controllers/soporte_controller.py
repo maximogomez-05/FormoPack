@@ -12,6 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 class SoporteController:
+    SALUDO_SOPORTE = "¡Hola! Somos Soporte de FormoPack. ¿En qué podemos ayudarte?"
+
+    @classmethod
+    def mensaje_visible(cls, fila):
+        if fila["remitente_tipo"] != "soporte":
+            return dict(fila)
+        mensaje = dict(fila, remitente_nombre="Soporte")
+        # Ocultar también los saludos automáticos guardados antes de este cambio.
+        if re.fullmatch(r"¡Hola! Soy .+ del equipo de soporte FormoPack\. ¿En qué puedo ayudarte\?", fila["mensaje"]):
+            mensaje["mensaje"] = cls.SALUDO_SOPORTE
+        return mensaje
+
     def __init__(self, db_manager=None):
         self._db = db_manager or DatabaseManager.get_instance()
 
@@ -63,7 +75,7 @@ class SoporteController:
             """SELECT id_mensaje, remitente_tipo, remitente_nombre, mensaje, fecha_envio
                FROM mensajes_soporte WHERE id_chat = %s ORDER BY id_mensaje""", (id_chat,),
         )
-        return cursor.fetchall()
+        return [SoporteController.mensaje_visible(fila) for fila in cursor.fetchall()]
 
     @staticmethod
     def _insertar_mensaje(cursor, id_chat, tipo, nombre, texto):
@@ -197,8 +209,7 @@ class SoporteController:
             (operador["id_usuario"], operador["nombre"], chat["id_chat"]),
         )
         chat.update(estado="en_progreso", id_usuario_atendiendo=operador["id_usuario"])
-        self._insertar_mensaje(cur, chat["id_chat"], "soporte", operador["nombre"],
-                               f"¡Hola! Soy {operador['nombre']} del equipo de soporte FormoPack. ¿En qué puedo ayudarte?")
+        self._insertar_mensaje(cur, chat["id_chat"], "soporte", operador["nombre"], self.SALUDO_SOPORTE)
 
     def tomar_chat(self, id_chat, id_usuario):
         with self._transaccion() as cur:
@@ -214,7 +225,7 @@ class SoporteController:
             if chat["estado"] == "sin_atender":
                 self._asignar(cur, chat, operador)
             ChatSoporte(chat).validar_respuesta(id_usuario)
-            return self._insertar_mensaje(cur, id_chat, "soporte", operador["nombre"], mensaje.texto)
+            return self.mensaje_visible(self._insertar_mensaje(cur, id_chat, "soporte", operador["nombre"], mensaje.texto))
 
     @staticmethod
     def _cerrar(cur, chat, id_usuario=None):

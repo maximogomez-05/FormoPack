@@ -7,6 +7,7 @@ import secrets
 from flask import Blueprint, current_app, render_template, request, jsonify, redirect, url_for, session, flash
 
 from app.controllers.soporte_controller import SoporteController
+from app.controllers.soporte_controller import SoporteController as PresentacionMensajeSoporte
 from app.models.chat_soporte import ChatSoporte
 from app.utils.exceptions import SoporteError, DatabaseQueryError, DatabaseConnectionError
 from web.routes.auth import login_required, rol_requerido
@@ -55,6 +56,7 @@ class PresentacionSoporte:
 
     @staticmethod
     def mensaje(fila):
+        fila = PresentacionMensajeSoporte.mensaje_visible(fila)
         return {
             "id_mensaje": fila["id_mensaje"], "remitente_tipo": fila["remitente_tipo"],
             "remitente_nombre": fila["remitente_nombre"], "mensaje": fila["mensaje"],
@@ -62,12 +64,13 @@ class PresentacionSoporte:
         }
 
     @classmethod
-    def conversacion(cls, chat, mensajes):
+    def conversacion(cls, chat, mensajes, publica=False):
         cerrado = not chat or ChatSoporte(chat).cerrado
         return {
             "ok": True, "finalizado": cerrado,
             "estado": chat["estado"] if chat else "cerrado",
-            "agente": chat.get("nombre_usuario_atendiendo") if chat else None,
+            "agente": ("Soporte" if chat and chat["estado"] == "en_progreso" else None) if publica
+                      else (chat.get("nombre_usuario_atendiendo") if chat else None),
             "mensajes": [cls.mensaje(m) for m in mensajes] if not cerrado else [],
         }
 
@@ -164,7 +167,8 @@ def api_cliente_iniciar():
         if error.code != "CHAT_CLOSED":
             raise
         chat = ctrl.iniciar_chat(IdentidadClienteSoporte.renovar(), **argumentos)
-    return jsonify(ok=True, id_chat=chat["id_chat"], estado=chat["estado"], agente=chat["nombre_usuario_atendiendo"])
+    return jsonify(ok=True, id_chat=chat["id_chat"], estado=chat["estado"],
+                   agente="Soporte" if chat["estado"] == "en_progreso" else None)
 
 
 @soporte_bp.route("/api/mensajes")
@@ -173,7 +177,7 @@ def api_cliente_mensajes():
     if request.args:
         raise SoporteError("Revisá los datos de la solicitud.")
     chat, mensajes = SoporteController().consultar_cliente(IdentidadClienteSoporte.token())
-    return jsonify(PresentacionSoporte.conversacion(chat, mensajes))
+    return jsonify(PresentacionSoporte.conversacion(chat, mensajes, publica=True))
 
 
 @soporte_bp.route("/api/enviar", methods=["POST"])
