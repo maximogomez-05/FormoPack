@@ -122,26 +122,16 @@
           <option value="urgente">Urgente</option>
         </select>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="modalidad_pago" class="form-label">Modalidad de Pago</label>
-          <select name="modalidad_pago" id="modalidad_pago" class="form-control">
-            <option value="efectivo">Efectivo (Mostrador)</option>
-            <option value="digital">Digital (Transferencia/QR)</option>
-            <option value="cuenta_corriente">Cuenta Corriente</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="id_seguro" class="form-label">Cobertura (Seguro)</label>
-          <select name="id_seguro" id="id_seguro" class="form-control" onchange="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
-            <option value="" data-base="0" data-pct="0">Sin seguro adicional (cobertura básica)</option>
-            {% for seg in seguros %}
-            <option value="{{ seg.id_seguro }}" data-base="{{ seg.cobertura_estandar }}" data-pct="{{ seg.porcentaje_excedente }}">
-              Base: ${{ "%.0f"|format(seg.cobertura_estandar) }} (Excedente: {{ seg.porcentaje_excedente }}%)
-            </option>
-            {% endfor %}
-          </select>
-        </div>
+      <div class="form-group">
+        <label for="id_seguro" class="form-label">Cobertura (Seguro)</label>
+        <select name="id_seguro" id="id_seguro" class="form-control" onchange="actualizarSeguroInfo(); recalcularCotizacionEnVivo();">
+          <option value="" data-base="0" data-pct="0">Sin seguro adicional (cobertura básica)</option>
+          {% for seg in seguros %}
+          <option value="{{ seg.id_seguro }}" data-base="{{ seg.cobertura_estandar }}" data-pct="{{ seg.porcentaje_excedente }}">
+            Base: ${{ "%.0f"|format(seg.cobertura_estandar) }} (Excedente: {{ seg.porcentaje_excedente }}%)
+          </option>
+          {% endfor %}
+        </select>
       </div>
       <div class="form-group">
         <label for="valor_declarado" class="form-label" id="lbl_valor_declarado">Valor Declarado de la Mercadería ($)</label>

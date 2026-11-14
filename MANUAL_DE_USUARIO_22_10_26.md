@@ -44,7 +44,7 @@
    - 4.5 Alta y Registro Formal de Envíos
    - 4.6 Cobro en Efectivo con Cálculo Automático de Vuelto
    - 4.7 Cobro Digital con QR y Verificación en Vivo de Mercado Pago
-   - 4.8 Modalidad de Cobro en Cuenta Corriente
+   - 4.8 Selección del Medio de Pago al Confirmar
    - 4.9 Cierre de Turno de Caja y Conciliación Económica
 5. **Gestión y Emisión de Documentación Operativa**
    - 5.1 Comprobantes Internos de Recepción y Servicio
@@ -422,8 +422,8 @@ flowchart TD
     Remitente --> Destinatario["Seleccionar/Registrar Destinatario"]
     Destinatario --> Destino["Elegir Localidad y Dirección"]
     Destino --> Bultos["Agregar Bultos (Peso, Medidas, Frágil)"]
-    Bultos --> Modalidad["Definir Modalidad de Pago y Seguro"]
-    Modalidad --> Guardar["Presionar 'Registrar Envío'"]
+    Bultos --> Seguro["Definir Seguro"]
+    Seguro --> Guardar["Presionar 'Registrar Envío'"]
     Guardar --> Guia["Genera Guía FP-XXXXX (Estado: 'recibido')"]
     Guia --> Documentos["Emite Comprobante, Remito y Etiqueta Code128"]
     Documentos --> Cobro["Redirección automática al Cobro"]
@@ -437,11 +437,7 @@ flowchart TD
 4. **Dirección de Destino:** Calle, número, piso, departamento y barrio. Mínimo 5 caracteres, máximo 200.
 5. **Valor Declarado ($):** Monto estimado del contenido del paquete (entre `$0.00` y `$9,999,999.00`).
 6. **Tipo de Seguro:** Póliza a aplicar (Básica, Total, Frágil).
-7. **Modalidad de Pago:**
-   - `Efectivo`: Se cobrará en mostrador al despachar.
-   - `Digital`: Se cobrará mediante billetera virtual o QR de Mercado Pago.
-   - `Cuenta Corriente`: Para clientes corporativos con crédito habilitado.
-8. **Detalle de Bultos Dinámicos:**
+7. **Detalle de Bultos Dinámicos:**
    - Botón **"+ Agregar otro bulto"**: Permite añadir la cantidad deseada de bultos.
    - Cada bulto registra su *Peso Real (kg)*, *Peso Volumétrico (kg)* y tilde de *Frágil*.
 
@@ -453,7 +449,7 @@ Al hacer clic en **"Registrar Envío"**, el sistema genera la guía, cambia el e
 
 **Ruta en Sistema:** `/recepcion/cobrar/<nro_guia>`  
 
-Si el envío fue fijado con pago en mostrador:
+Después de seleccionar **Efectivo** en la pantalla de cobro:
 1. La pantalla exhibe el resumen del envío: número de guía, remitente, destinatario, destino y el **Total a Cobrar**.
 2. Al seleccionar la pestaña **Efectivo**, se ingresa en el campo **"Monto Entregado"** el dinero recibido del cliente.
 3. El sistema calcula en tiempo real e indica en pantalla el **Vuelto exacto a reintegrar**.
@@ -503,12 +499,9 @@ sequenceDiagram
 
 ---
 
-## 4.8 Modalidad de Cobro en Cuenta Corriente
+## 4.8 Selección del Medio de Pago al Confirmar
 
-Cuando un cliente habitual o empresa posee convenio crediticio:
-- Se selecciona modalidad **Cuenta Corriente**.
-- El envío queda registrado y habilitado para despacho sin requerir ingreso de efectivo en el mostrador.
-- El cobro queda identificado para facturación periódica diferida contra el balance general de la cuenta del cliente.
+El medio de pago se elige una sola vez, después de registrar el envío, en la pantalla de cobro. Allí se selecciona efectivo, transferencia manual o Mercado Pago y se completan los datos necesarios para confirmar el pago.
 
 ---
 

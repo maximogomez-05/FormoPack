@@ -29,6 +29,8 @@ def cliente(app, usuario=2):
 
 def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     client, token = cliente(aplicacion)
+    formulario_nuevo = client.get("/recepcion/nuevo-envio").get_data(as_text=True)
+    assert 'name="modalidad_pago"' not in formulario_nuevo
     datos = formulario()
     datos["csrf_token"] = token
     datos["solicitud_id"] = "a" * 32
@@ -42,6 +44,10 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
         assert [bool(b["es_fragil"]) for b in cur.fetchall()] == [False, True, False]
     pagina = client.get(respuesta.location)
     assert pagina.status_code == 200
+    html_cobro = pagina.get_data(as_text=True)
+    assert "Modalidad de Pago" not in html_cobro
+    assert "Transferencia manual" in html_cobro
+    assert "Mercado Pago" in html_cobro
 
 
 def test_alta_concurrente_y_reintento_tras_fallo(db):
@@ -159,6 +165,27 @@ def test_cobro_exacto_vuelto_y_cierre_concilian(db):
     with pytest.raises(ValidationError):
         EnvioController(db).registrar_pago(registro["id_envio"], monto,
             id_turno=turno.id_turno, id_usuario=2, monto_entregado=monto)
+
+
+@pytest.mark.parametrize("tipo_pago,datos_pago", [
+    ("efectivo", {"monto_entregado": "total"}),
+    ("digital", {"monto_entregado": 0, "id_transaccion_qr": "TRANSFERENCIA-1",
+        "billetera_virtual": "Transferencia Bancaria"}),
+])
+def test_pago_actualiza_modalidad_del_envio(db, tipo_pago, datos_pago):
+    registro = envio(db)
+    monto = registro["cotizacion"]["costo_total"]
+    turno = CajaController(db).abrir_turno(2, 0)
+    datos_pago = {campo: monto if valor == "total" else valor for campo, valor in datos_pago.items()}
+
+    EnvioController(db).registrar_pago(
+        registro["id_envio"], monto, tipo_pago=tipo_pago, id_turno=turno.id_turno,
+        id_usuario=2, **datos_pago,
+    )
+
+    with db.cursor() as cur:
+        cur.execute("SELECT modalidad_pago FROM envios WHERE id_envio=%s", (registro["id_envio"],))
+        assert cur.fetchone()["modalidad_pago"] == tipo_pago
 
 
 def test_importe_alterado_y_turno_ajeno_no_registran_pago(db):

@@ -58,7 +58,7 @@ def test_nombre_normalizado_se_persiste_sin_desbordar(db):
         assert cur.fetchone()["nombre_completo"] == "é" * 100
 
 
-@pytest.mark.parametrize("campo", ["rem_dni", "id_localidad_destino", "modalidad_pago", "solicitud_id"])
+@pytest.mark.parametrize("campo", ["rem_dni", "id_localidad_destino", "solicitud_id"])
 def test_formulario_ambiguo_rechazado_sin_escrituras(aplicacion, db, campo):
     navegador, csrf = cliente(aplicacion)
     datos = formulario()

@@ -78,7 +78,7 @@ def formulario():
     datos = MultiDict(dict(rem_dni="12345678", rem_nombre="Juan Pérez", rem_telefono="3704123456",
         dest_dni="23456789", dest_nombre="María Gómez", dest_telefono="3704654321",
         destino_latitud="-26.1848", destino_longitud="-58.1731",
-        id_localidad_destino="1", direccion_destino="Av. San Martín 123", modalidad_pago="efectivo", valor_declarado="0"))
+        id_localidad_destino="1", direccion_destino="Av. San Martín 123", valor_declarado="0"))
     datos.setlist("peso_real[]", ["2", "3", "4"])
     datos.setlist("peso_volumetrico[]", ["0", "0", "0"])
     datos.setlist("es_fragil[]", ["1"])
@@ -91,6 +91,10 @@ def test_fragilidad_del_segundo_bulto_y_listas_desparejas():
     datos.setlist("peso_volumetrico[]", ["0"])
     with pytest.raises(ValidationError):
         SolicitudRecepcion(datos)
+
+
+def test_solicitud_sin_modalidad_puede_registrarse_para_cobrar_despues():
+    assert SolicitudRecepcion(formulario()).modalidad == "efectivo"
 
 
 def test_solicitud_recepcion_acepta_pin_ventana_y_prioridad_validos():

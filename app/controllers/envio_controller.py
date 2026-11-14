@@ -328,6 +328,10 @@ class EnvioController:
                 id_transaccion_qr, billetera_virtual,
             ))
             id_pago = cursor.lastrowid
+            cursor.execute(
+                "UPDATE envios SET modalidad_pago = %s WHERE id_envio = %s",
+                (tipo_pago, id_envio),
+            )
             
             vuelto = round(max(0, monto_entregado - monto), 2) if tipo_pago == "efectivo" else 0.0
 
