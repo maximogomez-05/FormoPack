@@ -168,6 +168,15 @@ class OptimizadorRutas:
             return predeterminado
         return int(partes[0]) * 60 + int(partes[1])
 
+    @staticmethod
+    def _matriz_valida(matriz, dimension):
+        """No entregar matrices incompletas o valores inválidos al solver nativo."""
+        return (isinstance(matriz, list) and len(matriz) == dimension
+            and all(isinstance(fila, list) and len(fila) == dimension
+                and all(not isinstance(valor, bool) and isinstance(valor, (int, float))
+                    and math.isfinite(valor) and 0 <= valor <= 1_000_000_000
+                    for valor in fila) for fila in matriz))
+
     @classmethod
     def _matrices(cls, puntos: list[tuple[float, float]]) -> tuple[list[list[int]], list[list[int]], str]:
         base_url = os.getenv("FORMOPACK_OSRM_URL", "").rstrip("/")
@@ -177,7 +186,9 @@ class OptimizadorRutas:
             try:
                 with urlopen(url, timeout=8) as respuesta:
                     datos = json.loads(respuesta.read().decode("utf-8"))
-                if datos.get("code") == "Ok" and all(row and all(valor is not None for valor in row) for row in datos["durations"]):
+                if (isinstance(datos, dict) and datos.get("code") == "Ok"
+                    and cls._matriz_valida(datos.get("durations"), len(puntos))
+                    and cls._matriz_valida(datos.get("distances"), len(puntos))):
                     tiempos = [[max(0, math.ceil(segundos / 60)) for segundos in fila] for fila in datos["durations"]]
                     distancias = [[max(0, round(metros)) for metros in fila] for fila in datos["distances"]]
                     return tiempos, distancias, "OSRM privado"

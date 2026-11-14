@@ -153,7 +153,7 @@ class EnvioController:
             cursor.execute("SELECT nombre FROM localidades WHERE id_localidad=%s", (solicitud.localidad,))
             localidad = cursor.fetchone()
             if not localidad or not punto_en_localidad(
-                localidad["nombre"], solicitud.destino_latitud, solicitud.destino_longitud,
+                localidad[0], solicitud.destino_latitud, solicitud.destino_longitud,
             ):
                 raise ValidationError("destino", "El punto de entrega no corresponde a la localidad seleccionada")
 
@@ -164,7 +164,8 @@ class EnvioController:
                 datos = solicitud.clientes[rol]
                 cursor.execute("""INSERT INTO clientes (dni, nombre_completo, telefono, email)
                     VALUES (%s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente)""",
+                    ON DUPLICATE KEY UPDATE id_cliente=LAST_INSERT_ID(id_cliente),
+                        telefono=VALUES(telefono), email=VALUES(email)""",
                     (datos["dni"].strip(), datos["nombre_completo"].strip(),
                      datos["telefono"].strip(), V.email(datos["email"])))
                 clientes[rol] = cursor.lastrowid

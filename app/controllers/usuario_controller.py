@@ -12,7 +12,8 @@ class UsuarioController:
             conn = db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT id_usuario, nombre, email, tipo_usuario, activo
+                SELECT id_usuario, nombre, email, tipo_usuario, activo,
+                    EXISTS(SELECT 1 FROM fotos_perfil f WHERE f.id_usuario=usuarios.id_usuario) AS tiene_foto
                 FROM usuarios
                 ORDER BY tipo_usuario, nombre
             """)

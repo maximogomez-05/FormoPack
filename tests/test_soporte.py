@@ -14,6 +14,20 @@ from tests.test_seguridad_http import app
 
 
 class TestPoliticasSoporte:
+    def test_mensajes_soporte_ocultan_nombre_y_saludo_anterior_sin_alterar_registro(self):
+        from app.controllers.soporte_controller import SoporteController
+        original = {"remitente_tipo": "soporte", "remitente_nombre": "Empleado Privado",
+                    "mensaje": "¡Hola! Soy Empleado Privado del equipo de soporte FormoPack. ¿En qué puedo ayudarte?"}
+        visible = SoporteController.mensaje_visible(original)
+        assert visible["remitente_nombre"] == "Soporte"
+        assert visible["mensaje"] == SoporteController.SALUDO_SOPORTE
+        assert "Empleado Privado" not in str(visible)
+        assert original["remitente_nombre"] == "Empleado Privado"
+        respuesta = dict(original, mensaje="Estamos revisando tu envío.")
+        assert SoporteController.mensaje_visible(respuesta)["mensaje"] == respuesta["mensaje"]
+        cliente = dict(original, remitente_tipo="cliente", remitente_nombre="Cliente")
+        assert SoporteController.mensaje_visible(cliente) == cliente
+
     @pytest.mark.parametrize("texto", [None, [], {}, 1, "", "  ", "x" * 2001, "a\x00b"])
     def test_mensaje_invalido(self, texto):
         with pytest.raises(SoporteError):
@@ -55,6 +69,26 @@ def ctrl():
 
 
 class TestSoporteHTTP:
+    def test_api_publica_oculta_empleado_en_inicio_y_mensajes(self, app, ctrl):
+        app.config["WTF_CSRF_ENABLED"] = False
+        chat = {"id_chat": 17, "estado": "en_progreso", "id_usuario_atendiendo": 2,
+                "nombre_usuario_atendiendo": "Empleado Privado"}
+        ctrl.iniciar_chat.return_value = chat
+        ctrl.consultar_cliente.return_value = (chat, [{
+            "id_mensaje": 1, "remitente_tipo": "soporte", "remitente_nombre": "Empleado Privado",
+            "mensaje": "¡Hola! Soy Empleado Privado del equipo de soporte FormoPack. ¿En qué puedo ayudarte?",
+            "fecha_envio": datetime(2026, 10, 24, 12),
+        }])
+        client = app.test_client()
+        inicio = client.post("/soporte/api/iniciar", json={"cliente_nombre": "Cliente"})
+        mensajes = client.get("/soporte/api/mensajes")
+        for respuesta in (inicio, mensajes):
+            assert respuesta.status_code == 200
+            assert respuesta.json["agente"] == "Soporte"
+            assert "Empleado Privado" not in respuesta.get_data(as_text=True)
+            assert "id_usuario_atendiendo" not in respuesta.json
+        assert mensajes.json["mensajes"][0]["remitente_nombre"] == "Soporte"
+
     @staticmethod
     def autenticar(client, id_usuario=2, rol="recepcionista"):
         DatabaseManager.get_instance.return_value.get_connection.return_value.cursor.return_value.fetchone.return_value = {

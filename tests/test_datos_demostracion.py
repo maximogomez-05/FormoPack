@@ -24,6 +24,8 @@ def test_demo_aditiva_repetible_sin_pagos_ni_correos(aplicacion, db):
         assert cur.fetchone()["nro_guia"] == anterior["nro_guia"]
         cur.execute("SELECT COUNT(DISTINCT DATE(fecha_creacion)) AS dias FROM envios")
         assert cur.fetchone()["dias"] == 7
+        cur.execute("SELECT COUNT(*) AS total FROM envios WHERE id_envio<>%s AND destino_latitud IS NOT NULL AND destino_longitud IS NOT NULL", (anterior["id_envio"],))
+        assert cur.fetchone()["total"] == 14
         for tabla in ("pagos", "turnos_caja", "hojas_de_ruta"):
             cur.execute("SELECT COUNT(*) AS total FROM " + tabla)
             assert cur.fetchone()["total"] == 0

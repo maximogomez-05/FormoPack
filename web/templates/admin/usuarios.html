@@ -112,7 +112,12 @@
     <div class="user-card-body">
       <div class="user-avatar-wrap">
         <div class="user-avatar-initials">
-          {{ u.nombre[0]|upper }}
+          {% if u.tiene_foto %}
+          <img class="user-avatar-photo" src="{{ url_for('admin.foto_usuario', identificador=u.id_usuario) }}"
+               alt="Foto de {{ u.nombre }}" width="44" height="44" loading="lazy"
+               onerror="this.hidden=true; this.nextElementSibling.style.display='';">
+          {% endif %}
+          <span{% if u.tiene_foto %} style="display:none;"{% endif %} aria-label="Sin foto de perfil"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
         </div>
         <div class="user-id-tag mono-data">#{{ "%03d"|format(u.id_usuario) }}</div>
       </div>

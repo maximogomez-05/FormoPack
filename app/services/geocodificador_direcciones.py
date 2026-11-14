@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import unicodedata
 from urllib.error import URLError
@@ -50,7 +51,10 @@ class GeocodificadorDirecciones:
             longitud = float(longitud)
         except (TypeError, ValueError) as exc:
             raise ValidationError("direccion_destino", "La dirección no tiene coordenadas válidas") from exc
-        if (carga.get("direccion") != direccion_normalizada
+        if (not isinstance(carga, dict)
+            or not math.isfinite(latitud) or not math.isfinite(longitud)
+            or not -90 <= latitud <= 90 or not -180 <= longitud <= 180
+            or carga.get("direccion") != direccion_normalizada
             or carga.get("id_localidad") != int(id_localidad)
             or abs(carga.get("latitud", 999) - latitud) > 0.0000001
             or abs(carga.get("longitud", 999) - longitud) > 0.0000001):
@@ -105,16 +109,24 @@ class GeocodificadorDirecciones:
 
     @classmethod
     def _filtrar(cls, caracteristicas: list, localidad: str) -> list[dict]:
+        if not isinstance(caracteristicas, list):
+            raise ErrorGeocodificacion("El servicio devolvió ubicaciones inválidas")
         resultados = []
         localidad_normalizada = normalizar_nombre(localidad)
         alias_localidad = localidad_normalizada.removesuffix(" capital")
         for caracteristica in caracteristicas:
+            if not isinstance(caracteristica, dict):
+                continue
             propiedades = caracteristica.get("properties") or {}
             geometria = caracteristica.get("geometry") or {}
+            if not isinstance(propiedades, dict) or not isinstance(geometria, dict):
+                continue
             coordenadas = geometria.get("coordinates") or []
-            if len(coordenadas) < 2:
+            if not isinstance(coordenadas, (list, tuple)) or len(coordenadas) < 2:
                 continue
             longitud, latitud = coordenadas[:2]
+            if isinstance(latitud, bool) or isinstance(longitud, bool):
+                continue
             if str(propiedades.get("country") or "").lower() not in {"argentina", "argentine republic"}:
                 continue
             if not punto_en_localidad(localidad, latitud, longitud):

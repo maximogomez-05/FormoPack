@@ -39,6 +39,10 @@ const assert = require('node:assert/strict');
     assert.equal(await mensaje,'Consulta temporalmente indisponible');
     assert(await page.locator('[name="rem_nombre"]').evaluate(input => input.checkValidity()));
     await page.locator('#id_localidad_destino').selectOption('1');
+    await page.locator('[name="direccion_destino"]').fill('Av. San Martín 123');
+    await page.locator('#direccion-sugerencias button').first().click();
+    assert(await page.locator('#direccion_token').inputValue());
+    assert(await page.locator('#destino-mapa').textContent().then(t => t.includes('mapa no está disponible')));
     await page.locator('.peso-real').fill('10');
     await page.locator('button[onclick="agregarBulto()"]').click();
     await page.locator('button[onclick="agregarBulto()"]').click();
@@ -65,6 +69,10 @@ const assert = require('node:assert/strict');
     await page.locator('#rem_dni').fill('12345678');
     await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly);
     assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    assert.equal(await page.locator('#rem_telefono').evaluate(input => input.readOnly), false);
+    assert.equal(await page.locator('#rem_email').evaluate(input => input.readOnly), false);
+    await page.locator('#rem_telefono').fill('3704999999');
+    await page.locator('#rem_email').fill('actualizado@example.com');
     await page.locator('#rem_dni').fill('34567890');
     assert.equal(await page.locator('#rem_nombre').inputValue(), '');
     assert.equal(await page.locator('#rem_nombre').evaluate(input => input.readOnly), false);
@@ -87,16 +95,21 @@ const assert = require('node:assert/strict');
     await tardia;
     assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
     // El formulario rechazado restaura también la identidad bloqueada del DNI existente.
+    await page.locator('#rem_telefono').fill('3704999999');
+    await page.locator('#rem_email').fill('actualizado@example.com');
     await page.evaluate(async () => {
       const form = document.querySelector('#form-envio');
       form.noValidate = true;
     });
     const rechazoExistente = page.waitForResponse(r => r.url().endsWith('/recepcion/nuevo-envio') && r.request().method()==='POST');
-    await page.locator('#form-envio button[type="submit"]').click();
+    // Sin domicilio validado la interfaz impide el envío; forzar POST permite probar servidor.
+    await page.locator('#form-envio').evaluate(form => HTMLFormElement.prototype.submit.call(form));
     assert.equal((await rechazoExistente).status(), 400);
     await page.waitForLoadState('load');
     await page.waitForFunction(() => document.querySelector('#rem_nombre').readOnly, null, {timeout:3000});
     assert.equal(await page.locator('#rem_nombre').inputValue(), 'José Pérez');
+    assert.equal(await page.locator('#rem_telefono').inputValue(), '3704999999');
+    assert.equal(await page.locator('#rem_email').inputValue(), 'actualizado@example.com');
     assert.deepEqual(errors, []);
     console.log('recepción y validaciones verificadas');
   } finally {

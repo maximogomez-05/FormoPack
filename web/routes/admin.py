@@ -21,6 +21,7 @@ from app.services.actividad_operativa import ActividadOperativa
 from app.services.validacion_entrada import ValidacionEntrada as V
 from app.services.operaciones_logisticas import OperacionesLogisticas
 from app.services.tracking_publico import TrackingPublico
+from app.services.perfil_usuario import PerfilUsuario
 from app.controllers.liquidacion_controller import LiquidacionController
 from config.settings import EmailConfig, EstadosEnvio
 admin_bp = Blueprint("admin", __name__)
@@ -664,6 +665,16 @@ def usuarios():
     ctrl = UsuarioController()
     lista = ctrl.listar_usuarios()
     return render_template('admin/usuarios.html', usuarios=lista)
+
+@admin_bp.get('/usuarios/<int:identificador>/foto')
+@login_required
+@rol_requerido('administrador')
+def foto_usuario(identificador):
+    imagen = PerfilUsuario().foto(identificador)
+    respuesta = Response(imagen if imagen else b'', mimetype='image/png', status=200 if imagen else 404)
+    respuesta.headers['Cache-Control'] = 'private, no-store'
+    respuesta.headers['X-Content-Type-Options'] = 'nosniff'
+    return respuesta
 
 @admin_bp.route('/usuarios/nuevo', methods=['POST'])
 @login_required

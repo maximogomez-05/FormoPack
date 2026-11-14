@@ -6,7 +6,7 @@ import pytest
 from app.services.geocodificador_direcciones import GeocodificadorDirecciones
 from app.services.geografia_destino import centro_localidad, punto_en_localidad
 from app.utils.exceptions import ValidationError
-from web.app import create_app
+from tests.test_regresion_paginas import aplicacion, db
 
 
 def test_geofence_acepta_formosa_y_rechaza_otro_pais():
@@ -34,8 +34,8 @@ def test_filtrar_photon_descarta_otras_ciudades_y_puntos_fuera_del_radio():
     assert sugerencias == [{"direccion": "Avenida 25 de Mayo 123", "latitud": -26.18, "longitud": -58.17}]
 
 
-def test_endpoint_sugerencias_filtra_con_localidad_seleccionada():
-    app = create_app()
+def test_endpoint_sugerencias_filtra_con_localidad_seleccionada(aplicacion):
+    app = aplicacion
     app.config["TESTING"] = True
     cliente = app.test_client()
     with cliente.session_transaction() as sesion:
@@ -52,8 +52,8 @@ def test_endpoint_sugerencias_filtra_con_localidad_seleccionada():
     sugerir.assert_called_once_with("Calle 1", "Clorinda")
 
 
-def test_endpoint_reverse_rechaza_punto_de_otra_ciudad():
-    app = create_app()
+def test_endpoint_reverse_rechaza_punto_de_otra_ciudad(aplicacion):
+    app = aplicacion
     app.config["TESTING"] = True
     cliente = app.test_client()
     with cliente.session_transaction() as sesion:
@@ -68,8 +68,8 @@ def test_endpoint_reverse_rechaza_punto_de_otra_ciudad():
     inversa.assert_not_called()
 
 
-def test_endpoint_reverse_firma_las_coordenadas_exactas_del_click():
-    app = create_app()
+def test_endpoint_reverse_firma_las_coordenadas_exactas_del_click(aplicacion):
+    app = aplicacion
     app.config["TESTING"] = True
     cliente = app.test_client()
     with cliente.session_transaction() as sesion:
@@ -91,10 +91,10 @@ def test_endpoint_reverse_firma_las_coordenadas_exactas_del_click():
         latitud, longitud)
 
 
-def test_formulario_recibe_centros_y_urls_del_geocodificador():
+def test_formulario_recibe_centros_y_urls_del_geocodificador(aplicacion):
     from time import time
 
-    app = create_app()
+    app = aplicacion
     app.config["TESTING"] = True
     cliente = app.test_client()
     with cliente.session_transaction() as sesion:

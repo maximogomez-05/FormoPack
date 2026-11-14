@@ -27,7 +27,7 @@ const path = require('node:path');
       await admin.locator('[name=id_chofer]').selectOption('3');
       await admin.locator('[name=id_vehiculo]').selectOption(process.env.FORMOPACK_TEST_VEHICULO);
       await admin.locator(`[name=envios_ids][value="${process.env.FORMOPACK_TEST_ENVIO}"]`).check();
-      await admin.getByRole('button',{name:'Crear despacho',exact:true}).click();
+      await admin.getByRole('button',{name:'Crear despacho manual',exact:true}).click();
       await admin.waitForLoadState('load');
       await driver.goto(base+'/chofer');
       await driver.getByRole('button',{name:'Iniciar ruta',exact:true}).click();

@@ -43,8 +43,19 @@ const assert = require('node:assert/strict');
       const antigua = await new Promise(resolve => { lectura.onsuccess = () => resolve(lectura.result); });
       return [await antigua.photo.text(), (await leerPendientes()).length].join(',');
     }), 'evidencia,0');
+    // Esperar la propagación de la cookie al worker antes de cortar la red.
+    await ctx.serviceWorkers()[0].evaluate(async () => {
+      for (let intento = 0; intento < 100; intento++) {
+        const cookie = await cookieStore.get('fp_panel');
+        const panel = await (await caches.open('formopack-panel')).match('/chofer');
+        if (cookie && panel?.headers.get('X-Formopack-Panel') === cookie.value) return;
+        await new Promise(resolve => setTimeout(resolve,50));
+      }
+      throw new Error('La identidad offline no coincide con el panel guardado');
+    });
     await ctx.setOffline(true);
-    await page.reload();
+    const respuestaOffline = await page.reload();
+    assert.equal(respuestaOffline.status(),200,await page.locator('body').innerText());
     await page.getByText('DES-COMPARTIDA-A',{exact:true}).waitFor();
     await page.getByRole('button',{name:'Registrar resultado'}).click();
     await page.locator('#tipo-intento').selectOption('fallido');
