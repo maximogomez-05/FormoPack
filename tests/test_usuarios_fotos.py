@@ -1,11 +1,28 @@
 """Fotos de las tarjetas de administración, sin acceder a la base configurada."""
 from time import time
+from io import BytesIO
 from unittest.mock import patch
 
 import pytest
 
 from app.core.database import DatabaseManager
 from tests.test_seguridad_http import app
+
+
+@pytest.mark.parametrize('iniciales', ['LM', 'AC', 'SD'])
+def test_limpieza_solo_reconoce_el_avatar_sintetico_exacto(iniciales):
+    from PIL import Image, ImageDraw
+    from scripts.limpiar_avatares_muestra import es_avatar_muestra
+    avatar = Image.new('RGB', (256, 256), '#e5edf5')
+    ImageDraw.Draw(avatar).text((105, 115), iniciales, fill='#193655')
+    salida = BytesIO()
+    avatar.save(salida, format='PNG')
+    assert es_avatar_muestra(salida.getvalue(), iniciales)
+    avatar.putpixel((0, 0), (1, 2, 3))
+    salida = BytesIO()
+    avatar.save(salida, format='PNG')
+    assert not es_avatar_muestra(salida.getvalue(), iniciales)
+    assert not es_avatar_muestra(b'no es imagen', iniciales)
 
 
 def sesion(client, rol):
@@ -31,7 +48,8 @@ def test_tarjetas_muestran_foto_si_existe_e_inicial_si_no(app):
     html = respuesta.get_data(as_text=True)
     assert '/admin/usuarios/2/foto' in html
     assert '/admin/usuarios/3/foto' not in html
-    assert '<span>B</span>' in html
+    assert 'aria-label="Sin foto de perfil"' in html
+    assert 'fa-solid fa-user' in html
 
 
 @pytest.mark.parametrize('imagen,estado', [(b'contenido-png', 200), (None, 404)])

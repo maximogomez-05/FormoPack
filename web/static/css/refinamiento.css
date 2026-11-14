@@ -1681,8 +1681,8 @@ tbody tr:hover { background: #f8fbff; }
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: var(--fp-blue-primary);
-  color: #ffffff;
+  background: #e8edf2;
+  color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
