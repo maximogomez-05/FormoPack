@@ -40,8 +40,10 @@ class Bulto:
         for dato in datos:
             if not isinstance(dato, dict) or set(dato) - {"peso_real", "peso_volumetrico", "es_fragil"}:
                 raise ValidationError("bultos", "Revisá los datos de cada bulto")
-            bulto = cls(0, 0, dato.get("peso_real"), dato.get("peso_volumetrico", 0), dato.get("es_fragil", False))
-            resultado.append({"peso_real": bulto.peso_real, "peso_volumetrico": bulto.peso_volumetrico, "es_fragil": bulto.es_fragil})
+            bulto = cls(0, 0, dato.get("peso_real"), dato.get("peso_volumetrico", 0),
+                        dato.get("es_fragil", False))
+            resultado.append({"peso_real": bulto.peso_real, "peso_volumetrico": bulto.peso_volumetrico,
+                              "es_fragil": bulto.es_fragil})
         return resultado
 
     # --- Properties ---

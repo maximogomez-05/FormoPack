@@ -27,10 +27,15 @@ class SolicitudRecepcion:
             raise ValidationError("ventana", "Completá las dos horas de la ventana de entrega")
         if ventana_desde and ventana_desde >= ventana_hasta:
             raise ValidationError("ventana", "La hora final debe ser posterior a la inicial")
+        prioridad = cls.validar_prioridad(prioridad)
+        return latitud_validada, longitud_validada, ventana_desde, ventana_hasta, prioridad
+
+    @classmethod
+    def validar_prioridad(cls, prioridad):
         prioridad = str(prioridad or "normal").strip().lower()
         if prioridad not in cls.PRIORIDADES:
             raise ValidationError("prioridad", "Seleccioná una prioridad válida")
-        return latitud_validada, longitud_validada, ventana_desde, ventana_hasta, prioridad
+        return prioridad
 
     @staticmethod
     def _validar_hora(valor, campo):
@@ -51,7 +56,12 @@ class SolicitudRecepcion:
         return direccion
 
     @staticmethod
-    def validar_cotizacion(bultos, localidad, declarado=0, seguro=None):
+    def validar_cotizacion(
+        bultos: object,
+        localidad: object,
+        declarado: object = 0,
+        seguro: object = None,
+    ) -> tuple[list[dict], int, float, int | None]:
         datos = Bulto.validar_lista(bultos)
         localidad = V.entero(localidad, "id_localidad_destino")
         declarado = V.decimal(declarado, "valor_declarado")
@@ -78,11 +88,12 @@ class SolicitudRecepcion:
         if not 1 <= len(pesos) <= 100:
             raise ValidationError("bultos", "Ingresá entre 1 y 100 bultos por envío")
         if len(pesos) != len(volumenes):
-            raise ValidationError("bultos", "Faltan pesos de alguno de los bultos")
+            raise ValidationError("bultos", "Completá el peso de todos los bultos")
         fragiles = formulario.getlist("es_fragil[]")
         if len(set(fragiles)) != len(fragiles) or any(i not in {str(n) for n in range(len(pesos))} for i in fragiles):
             raise ValidationError("es_fragil", "Revisá las marcas de fragilidad de los bultos")
-        datos = [{"peso_real": peso, "peso_volumetrico": volumenes[i] or "0", "es_fragil": str(i) in fragiles}
+        datos = [{"peso_real": peso, "peso_volumetrico": volumenes[i] or "0",
+                  "es_fragil": str(i) in fragiles}
                  for i, peso in enumerate(pesos)]
         self.bultos, self.localidad, self.declarado, self.seguro = self.validar_cotizacion(
             datos, formulario.get("id_localidad_destino"), formulario.get("valor_declarado") or "0", formulario.get("id_seguro"))

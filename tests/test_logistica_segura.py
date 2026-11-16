@@ -71,6 +71,35 @@ def test_deposito_inicio_visita_y_cierre(db):
         assert cur.fetchone()["total"] == 1
 
 
+def test_asignacion_lote_rechaza_exceso_acumulado_de_peso(db):
+    ids, movil = preparar(db, 2)
+    with db.cursor() as cur:
+        cur.execute("UPDATE bultos SET peso_real=700,volumen_m3=600.000 WHERE id_envio IN (%s,%s)", tuple(ids))
+        cur.execute("UPDATE vehiculos SET capacidad_kg=1000,volumen_maximo_m3=0 WHERE id_vehiculo=%s", (movil,))
+
+    with pytest.raises(ValidationError) as error:
+        OperacionesLogisticas(db).crear("DES-CAPACIDAD-LOTE", 3, movil, ids, 1)
+
+    assert "No se puede asignar el lote" in error.value.message
+    assert "supera por 400.00 kg" in error.value.message
+    assert "m³" not in error.value.message
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM hojas_de_ruta WHERE nro_despacho='DES-CAPACIDAD-LOTE'")
+        assert cur.fetchone()["total"] == 0
+
+
+def test_asignacion_permite_envios_sin_volumen_registrado(db):
+    ids, movil = preparar(db, 2)
+    with db.cursor() as cur:
+        cur.execute("UPDATE bultos SET volumen_m3=NULL WHERE id_envio IN (%s,%s)", tuple(ids))
+        cur.execute("UPDATE vehiculos SET volumen_maximo_m3=0 WHERE id_vehiculo=%s", (movil,))
+
+    hoja = OperacionesLogisticas(db).crear("DES-SIN-VOLUMEN", 3, movil, ids, 1)
+
+    assert len(hoja.envios) == 2
+    assert {envio["id_envio"] for envio in hoja.envios} == set(ids)
+
+
 def test_tres_rutas_fallidas_conservan_historia_y_bloquean_cuarto_intento(db):
     ids, movil = preparar(db)
     s = OperacionesLogisticas(db)

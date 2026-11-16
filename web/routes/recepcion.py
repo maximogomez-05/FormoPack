@@ -40,7 +40,7 @@ from app.services.geocodificador_direcciones import ErrorGeocodificacion, Geocod
 from app.services.geografia_destino import CENTROS_LOCALIDAD, centro_localidad, punto_en_localidad
 from app.utils.exceptions import PagoExternoError
 from web.extensions import csrf, limiter
-from config.settings import MercadoPagoConfig
+from config.settings import CotizadorConfig, MercadoPagoConfig
 
 recepcion_bp = Blueprint("recepcion", __name__)
 logger = logging.getLogger(__name__)
@@ -166,6 +166,7 @@ def cotizador():
         "recepcion/cotizador.html",
         localidades=localidades,
         seguros=seguros,
+        recargos_prioridad=CotizadorConfig.RECARGOS_PRIORIDAD_PORCENTAJE,
     )
 
 
@@ -178,9 +179,11 @@ def calcular_cotizacion():
     if not isinstance(data, dict):
         return jsonify(error="Ingresá un objeto JSON válido."), 400
     try:
+        prioridad = SolicitudRecepcion.validar_prioridad(data.get("prioridad", "normal"))
         resultado = EnvioController().cotizar_envio(
             bultos_data=data.get("bultos"), id_localidad_destino=data.get("id_localidad"),
-            valor_declarado=data.get("valor_declarado", 0), id_seguro=data.get("id_seguro"))
+            valor_declarado=data.get("valor_declarado", 0), id_seguro=data.get("id_seguro"),
+            prioridad=prioridad)
         return jsonify(resultado)
     except (ValidationError, CotizacionError) as e:
         return jsonify(error=_mensaje_usuario_error(e)), 400
@@ -206,6 +209,7 @@ def nuevo_envio():
     solicitud_id = request.form.get("solicitud_id", "")
     identificador_valido = bool(re.fullmatch(r"[0-9a-f]{32}", solicitud_id))
     contexto = dict(localidades=localidades, seguros=seguros,
+                    recargos_prioridad=CotizadorConfig.RECARGOS_PRIORIDAD_PORCENTAJE,
                     centros_localidad=CENTROS_LOCALIDAD,
                     sugerencias_direccion_url=url_for("recepcion.sugerencias_direccion"),
                     direccion_inversa_url=url_for("recepcion.direccion_inversa"),
@@ -709,7 +713,12 @@ def _obtener_detalle_envio(nro_guia: str):
             detalle["seguro"] = None
             detalle["costo_seguro"] = 0.0
             costo_total = float(envio.get("costo_total", 0) or 0)
-            detalle["subtotal_flete"] = costo_total
+            detalle["prioridad"] = envio.get("prioridad", "normal")
+            detalle["porcentaje_recargo_prioridad"] = float(
+                envio.get("porcentaje_recargo_prioridad", 0) or 0
+            )
+            detalle["recargo_prioridad"] = float(envio.get("recargo_prioridad", 0) or 0)
+            detalle["subtotal_flete"] = round(costo_total - detalle["recargo_prioridad"], 2)
 
             if envio.get("id_seguro"):
                 cursor.execute("SELECT * FROM seguros WHERE id_seguro = %s LIMIT 1", (envio["id_seguro"],))
@@ -723,7 +732,9 @@ def _obtener_detalle_envio(nro_guia: str):
                         detalle["costo_seguro"] = round((vd - cobertura) * (pct / 100.0), 2)
                     else:
                         detalle["costo_seguro"] = 0.0
-                    detalle["subtotal_flete"] = round(costo_total - detalle["costo_seguro"], 2)
+            detalle["subtotal_flete"] = round(
+                costo_total - detalle["recargo_prioridad"] - detalle["costo_seguro"], 2
+            )
 
         return envio, detalle
     finally:

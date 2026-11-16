@@ -36,6 +36,16 @@ Se corrigió la URL de cotización en vivo en el alta de envío. Cuando el cálc
 es rechazado o falla, la interfaz informa el error y deja de presentar el
 resultado anterior como si fuera la nueva cotización.
 
+## Recargo por prioridad
+
+La prioridad normal no agrega recargo; alta aplica 10% y urgente 15% sobre el
+subtotal del flete (ya aplicado el descuento multibulto y la fragilidad). El
+seguro se calcula aparte y se suma después. El servidor valida la prioridad,
+calcula el total definitivo y guarda el porcentaje y el importe aplicados para
+que el detalle de cobro y el comprobante mantengan el desglose histórico. La
+migración `020_recargo_prioridad.sql` agrega ambos importes con valor 0 para
+guías existentes, sin modificar sus totales.
+
 ## Caja y cobros
 
 `CajaController` bloquea la fila del usuario durante apertura y cierre y
@@ -81,8 +91,9 @@ La selección acumulada aprobó 273 pruebas, con dos deseleccionadas. Usa la mis
 instancia exclusiva y variables de ejecución descritas en [soporte](SOPORTE.md).
 Incluye los recorridos existentes de soporte y permisos de páginas. No se
 ejecutaron cobros ni correos reales, ni pruebas antiguas que alteran la base
-de trabajo. Este bloque no necesita migración ni corrección automática de datos
-históricos. No certifica que todos los módulos restantes estén terminados.
+de trabajo. La validación de formularios no necesita migración; el recargo por
+prioridad sí usa la migración 020, que conserva los totales históricos. No
+certifica que todos los módulos restantes estén terminados.
 
 ## Diagramas pendientes
 

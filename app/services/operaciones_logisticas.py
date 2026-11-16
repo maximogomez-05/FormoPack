@@ -134,15 +134,20 @@ class OperacionesLogisticas:
                     raise ValidationError("envio", "La ruta anterior todavía no terminó. Confirmá su cierre antes de reprogramar")
                 cur.execute("SELECT peso_real FROM bultos WHERE id_envio=%s FOR UPDATE", (id_envio,))
                 bultos = cur.fetchall()
-                if not bultos or any(b["peso_real"] <= 0 for b in bultos):
-                    raise ValidationError("bultos", "El envío tiene pesos incompletos o inválidos")
+                if not bultos or any(b["peso_real"] is None or b["peso_real"] <= 0 for b in bultos):
+                    raise ValidationError("bultos", "El envío tiene peso incompleto o inválido")
                 envio["peso"] = sum(b["peso_real"] for b in bultos)
                 cur.execute("SELECT nombre AS localidad_destino,distancia_km FROM localidades WHERE id_localidad=%s", (envio["id_localidad_destino"],))
                 envio.update(cur.fetchone())
                 seleccion_por_id[id_envio] = envio
             seleccion = [seleccion_por_id[id_envio] for id_envio in orden_ids]
-            if sum(e["peso"] for e in seleccion) > movil["capacidad_kg"]:
-                raise ValidationError("capacidad", "La carga supera la capacidad del vehículo")
+            peso_total = sum(e["peso"] for e in seleccion)
+            excedentes = []
+            if peso_total > movil["capacidad_kg"]:
+                exceso_kg = float(peso_total - movil["capacidad_kg"])
+                excedentes.append(f"el peso total supera por {exceso_kg:.2f} kg la capacidad del camión")
+            if excedentes:
+                raise ValidationError("capacidad", "No se puede asignar el lote: " + "; ".join(excedentes))
             cur.execute("INSERT INTO hojas_de_ruta (nro_despacho,id_chofer,id_vehiculo) VALUES (%s,%s,%s)", (despacho, chofer, vehiculo))
             id_ruta = cur.lastrowid
             cur.execute("SELECT fecha_emision FROM hojas_de_ruta WHERE id_hoja_ruta=%s", (id_ruta,))

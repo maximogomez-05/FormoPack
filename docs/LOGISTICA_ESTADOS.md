@@ -10,7 +10,10 @@ Incremento del 26 de octubre de 2026. Reglas encapsuladas en `EstadoEnvio` y
 - Se admiten envíos recibidos/en planta sin asignación actual y reintentos tras
   uno o dos fallos. La ruta anterior debe estar cerrada antes de reprogramar.
 - La selección se valida nuevamente en servidor: cuenta activa, chofer correcto,
-  vehículo disponible, envíos distintos, bultos con peso y capacidad por kg.
+  vehículo disponible, envíos distintos, pesos de bultos y capacidad acumulada
+  en kg. Si se supera el peso máximo, no se crea la hoja de ruta.
+- La capacidad en kg se registra al dar de alta el vehículo y se muestra como
+  dato informativo; no se puede alterar desde la pantalla de flota.
 - Un despacho reserva el vehículo; el inicio explícito del chofer registra
   `fecha_inicio`, pasa sus visitas pendientes a `en_ruta` y habilita el GPS.
   Repetir el inicio no duplica eventos. Un siniestro previo no se reactiva.
@@ -44,14 +47,19 @@ con ausentes pueda finalizar sin inventar una entrega ni bloquear indefinidament
 el vehículo. Esta distinción debe incorporarse a la redacción de RF 6.1 y a sus
 diagramas; no se declara equivalencia literal con la formulación original.
 
-## Migración 009 y actualización local
+## Migraciones 009 y 019
 
-Agrega `hojas_ruta_envios` (PK hoja/envío, resolución y fecha), inicio de ruta,
-actor del historial e índices únicos mediante columnas generadas para recursos
-activos. Recupera asociaciones desde el puntero actual y los intentos existentes.
-No puede recuperar asignaciones antiguas que no dejaron ninguna de esas evidencias.
-El inicio histórico inferido desde un intento es una aproximación, no una hora
-de salida verificada. El script permite reejecución.
+La 009 agrega `hojas_ruta_envios` (PK hoja/envío, resolución y fecha), inicio de
+ruta, actor del historial e índices únicos mediante columnas generadas para
+recursos activos. Recupera asociaciones desde el puntero actual y los intentos
+existentes. No puede recuperar asignaciones antiguas que no dejaron ninguna de
+esas evidencias. El inicio histórico inferido desde un intento es una
+aproximación, no una hora de salida verificada.
+
+La 019 agregó columnas de volumen a vehículos y bultos. Se conservan por
+compatibilidad con bases existentes, pero el despacho y el optimizador ya no las
+consultan ni exigen registrarlas: la asignación de vehículos se valida solo por
+peso. La migración no necesita revertirse ni eliminar columnas.
 
 Antes de modificar el esquema, el gestor rechaza recursos con varias rutas
 abiertas. La instalación local tenía rutas 1 y 3 abiertas con el mismo chofer
@@ -88,8 +96,8 @@ la base local actualizada: HTTP 200 sin errores de persistencia registrados.
 Quedan retiro en sucursal con identidad/evidencia, devolución física y seguro;
 control profundo de POD, coordenadas y cola offline con identidad persistente;
 cobro en destino del RF 5.2 (pendiente de resolver con el alcance académico),
-control de volumen si se conserva esa promesa, pruebas móviles reales y despliegue.
-El orden por kilómetros existente no es un optimizador vial de múltiples paradas.
+pruebas móviles reales y despliegue. El orden por kilómetros existente no es un
+optimizador vial de múltiples paradas.
 
 Al editar los diagramas: agregar la entidad de asignación histórica y sus
 cardinalidades, `fecha_inicio`, actor e índices; incluir las clases de estados y

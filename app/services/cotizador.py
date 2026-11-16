@@ -35,9 +35,14 @@ class Cotizador:
         localidad: Localidad,
         valor_declarado: float = 0.0,
         seguro: Optional[Seguro] = None,
+        prioridad: str = "normal",
     ) -> dict:
         if not bultos:
             raise CotizacionError("El envio debe tener al menos un bulto para cotizar.")
+
+        prioridad = str(prioridad or "normal").strip().lower()
+        if prioridad not in CotizadorConfig.RECARGOS_PRIORIDAD_PORCENTAJE:
+            raise CotizacionError("Seleccioná una prioridad válida.")
 
         valor_declarado = V.decimal(valor_declarado, "valor_declarado")
         factor_zona = self._calcular_factor_zona(localidad)
@@ -89,13 +94,19 @@ class Cotizador:
             })
 
         subtotal_flete = _redondear_moneda(sum(_d(t) for t in tarifas_por_bulto))
+        porcentaje_recargo_prioridad = CotizadorConfig.RECARGOS_PRIORIDAD_PORCENTAJE[prioridad]
+        recargo_prioridad = _redondear_moneda(
+            _d(subtotal_flete) * _d(porcentaje_recargo_prioridad) / _d(100)
+        )
 
         # Cálculo de seguro
         costo_seguro = 0.0
         if seguro and valor_declarado > 0:
             costo_seguro = _redondear_moneda(seguro.calcular_costo_cobertura(valor_declarado))
 
-        costo_total = _redondear_moneda(_d(subtotal_flete) + _d(costo_seguro))
+        costo_total = _redondear_moneda(
+            _d(subtotal_flete) + _d(recargo_prioridad) + _d(costo_seguro)
+        )
 
         V.decimal(costo_total, "costo_total", 0.01)
         resultado = {
@@ -103,8 +114,11 @@ class Cotizador:
             "distancia_km": localidad.distancia_km,
             "factor_zona": factor_zona,
             "cantidad_bultos": len(bultos),
+            "prioridad": prioridad,
             "tarifas_por_bulto": tarifas_por_bulto,
             "subtotal_flete": subtotal_flete,
+            "porcentaje_recargo_prioridad": porcentaje_recargo_prioridad,
+            "recargo_prioridad": recargo_prioridad,
             "valor_declarado": valor_declarado,
             "costo_seguro": costo_seguro,
             "costo_total": costo_total,

@@ -80,6 +80,12 @@
         <span>Subtotal Flete</span>
         <span>${{ "%.2f"|format(detalle.subtotal_flete) }}</span>
       </div>
+      {% if detalle.recargo_prioridad > 0 %}
+      <div class="desglose-row">
+        <span>Prioridad {{ detalle.prioridad|capitalize }} (+{{ "%.0f"|format(detalle.porcentaje_recargo_prioridad) }}%)</span>
+        <span>+${{ "%.2f"|format(detalle.recargo_prioridad) }}</span>
+      </div>
+      {% endif %}
       {% if detalle.seguro %}
         <div class="desglose-row">
           <span>

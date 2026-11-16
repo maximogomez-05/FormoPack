@@ -93,6 +93,12 @@ def test_fragilidad_del_segundo_bulto_y_listas_desparejas():
         SolicitudRecepcion(datos)
 
 
+def test_solicitud_recepcion_no_requiere_volumen_por_bulto():
+    datos = formulario()
+    solicitud = SolicitudRecepcion(datos)
+    assert len(solicitud.bultos) == 3
+
+
 def test_solicitud_sin_modalidad_puede_registrarse_para_cobrar_despues():
     assert SolicitudRecepcion(formulario()).modalidad == "efectivo"
 

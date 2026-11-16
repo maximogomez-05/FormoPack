@@ -47,6 +47,7 @@ def test_vrp_marca_ordenes_que_exceden_capacidad_como_no_asignadas():
     assert plan["sin_asignar"][0]["envio"]["id_envio"] == 1
 
 
+
 def test_vrp_marca_ventana_vencida_sin_romper_el_solver():
     envios = [{"id_envio": 1, "destino_latitud": -26.20, "destino_longitud": -58.20,
         "peso_total_kg": 1, "ventana_desde": "08:00", "ventana_hasta": "09:00"}]
@@ -56,3 +57,15 @@ def test_vrp_marca_ventana_vencida_sin_romper_el_solver():
 
     assert plan["rutas"] == []
     assert "venció" in plan["sin_asignar"][0]["motivo"]
+
+
+def test_vrp_ignora_volumen_y_solo_valida_el_peso():
+    envios = [{"id_envio": 1, "destino_latitud": -26.20, "destino_longitud": -58.20,
+               "peso_total_kg": 1, "volumen_total_m3": 500, "bultos_sin_volumen": 1}]
+    vehiculos = [{"id_vehiculo": 3, "patente": "AAA123", "capacidad_kg": 10, "volumen_maximo_m3": 0}]
+
+    plan = OptimizadorRutas.planificar(envios, vehiculos, datetime(2026, 11, 10, 8, 0))
+
+    assert len(plan["rutas"]) == 1
+    assert plan["rutas"][0]["paradas"][0]["id_envio"] == 1
+    assert plan["sin_asignar"] == []

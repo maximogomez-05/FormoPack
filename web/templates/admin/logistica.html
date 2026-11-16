@@ -100,19 +100,24 @@
       </div>
       <div class="form-group">
         <label class="form-label">Vehículo disponible</label>
-        <select name="id_vehiculo" class="form-control" required>
+        <select name="id_vehiculo" id="vehiculo-carga" class="form-control" required>
           <option value="">Seleccionar...</option>
-          {% for vehiculo in vehiculos if vehiculo.disponible %}<option value="{{ vehiculo.id_vehiculo }}">{{ vehiculo.patente }} ({{ vehiculo.capacidad_kg }} kg)</option>{% endfor %}
+          {% for vehiculo in vehiculos if vehiculo.disponible %}
+          <option value="{{ vehiculo.id_vehiculo }}" data-capacidad-kg="{{ vehiculo.capacidad_kg }}">{{ vehiculo.patente }} ({{ vehiculo.capacidad_kg }} kg)</option>
+          {% endfor %}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Envíos a despachar</label>
+        <div id="resumen-carga" role="status" aria-live="polite" style="padding:10px 12px;margin:6px 0 10px;border-radius:6px;background:#f1f5f9;color:#334155;">
+          Seleccioná un vehículo y los envíos para consultar la capacidad ocupada.
+        </div>
         {% for envio in entregas %}
-        <label style="display:block;margin:6px 0;"><input type="checkbox" name="envios_ids" value="{{ envio.id_envio }}"> {{ envio.nro_guia }} - {{ envio.localidad_destino }} ({{ envio.peso_total_kg|round(2) }} kg)</label>
+        <label style="display:block;margin:6px 0;"><input type="checkbox" class="chk-envio" name="envios_ids" value="{{ envio.id_envio }}" data-peso-kg="{{ envio.peso_total_kg }}"> {{ envio.nro_guia }} - {{ envio.localidad_destino }} ({{ envio.peso_total_kg|round(2) }} kg)</label>
         {% endfor %}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        <button type="submit" name="accion" value="crear" class="btn btn-primary"><i class="fa-solid fa-truck-fast"></i> Crear despacho manual</button>
+        <button type="submit" name="accion" value="crear" class="btn btn-primary" data-capacity-submit><i class="fa-solid fa-truck-fast"></i> Crear despacho manual</button>
         <button type="submit" name="accion" value="optimizar" class="btn btn-secondary" formnovalidate><i class="fa-solid fa-wand-magic-sparkles"></i> Optimizar selección con toda la flota</button>
       </div>
     </form>
@@ -155,11 +160,11 @@
 <div class="card" style="margin-top: 22px;" data-aos="fade-up">
   <div class="card-header">
     <span class="card-title"><i class="fa-solid fa-map-location-dot"></i> Mapa de Operaciones (Formosa)</span>
-    <small style="color: var(--text-muted); font-weight: normal;">Seguimiento global de envíos, rutas y planta</small>
+    <small style="color: var(--text-muted); font-weight: normal;">Estado de los envíos y ubicación GPS de los vehículos cuando está disponible</small>
   </div>
   <div class="card-body" style="padding: 16px;">
     <div class="logistica-map-toolbar">
-      <label for="mapa-envio-select"><i class="fa-solid fa-magnifying-glass-location"></i> Seguir envío</label>
+      <label for="mapa-envio-select"><i class="fa-solid fa-magnifying-glass-location"></i> Buscar por guía</label>
       <select id="mapa-envio-select" class="form-control">
         <option value="">Ver todos los envíos</option>
         {% for envio in mapa_envios %}
@@ -172,7 +177,14 @@
     <div class="logistica-map-grid">
       <div class="logistica-map-shell">
         <div id="mapa-rutas"></div>
-        <div class="logistica-map-disclaimer">Los puntos de destino son referencias geográficas. Solo el marcador GPS indica una posición reportada por un chofer.</div>
+        <div class="logistica-map-legend" aria-label="Referencias del mapa">
+          <strong>Cómo leer el mapa</strong>
+          <span><i class="logistica-legend-dot logistica-legend-dot--plant"></i> Planta central</span>
+          <span><i class="logistica-legend-dot logistica-legend-dot--gps"></i> GPS en vivo del vehículo</span>
+          <span><i class="logistica-legend-dot logistica-legend-dot--destination"></i> Localidad aproximada; el color indica el estado</span>
+          <small>La línea punteada solo une puntos de referencia; no representa el camino real. Envíos de una misma localidad pueden aparecer juntos.</small>
+        </div>
+        <div class="logistica-map-disclaimer">La ubicación GPS se actualiza cuando el chofer comparte su posición. Sin una señal reciente, el punto indica una ubicación conocida o aproximada.</div>
       </div>
 
       <div class="logistica-map-side">
@@ -203,7 +215,7 @@
           <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
             <i class="fa-solid fa-location-crosshairs"></i> Envío seleccionado
           </div>
-          <div id="mapa-envio-detalle" style="font-size: 13px; color: var(--text-muted);">Seleccioná una guía para centrar el mapa y ver su ubicación registrada.</div>
+          <div id="mapa-envio-detalle" style="font-size: 13px; color: var(--text-muted);">Elegí una guía para ver dónde está o dónde se espera encontrar el envío.</div>
         </div>
 
         <div class="logistica-side-panel logistica-side-panel--legend">
@@ -314,7 +326,7 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
       <thead>
         <tr>
           <th>Patente</th>
-          <th>Capacidad</th>
+          <th>Capacidad de carga</th>
           <th>Estado</th>
           <th>Disponibilidad</th>
         </tr>
@@ -415,8 +427,8 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
 
   .logistica-map-shell {
     min-height: 540px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
     overflow: hidden;
     background: #f8fafc;
     position: relative;
@@ -428,6 +440,56 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
     min-height: 540px;
     display: block;
   }
+
+  .logistica-map-legend {
+    position: absolute;
+    z-index: 500;
+    top: 12px;
+    left: 58px;
+    display: grid;
+    gap: 7px;
+    width: min(290px, calc(100% - 76px));
+    padding: 12px 14px;
+    border: 1px solid rgba(203, 213, 225, .9);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+    color: #334e68;
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+  }
+
+  .logistica-map-legend strong {
+    color: #183b5b;
+    font-size: 12px;
+  }
+
+  .logistica-map-legend span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logistica-map-legend small {
+    padding-top: 6px;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+  }
+
+  .logistica-legend-dot {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    background: var(--legend-color);
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, .2);
+  }
+
+  .logistica-legend-dot--plant { --legend-color: #2563eb; }
+  .logistica-legend-dot--gps { --legend-color: #d94841; }
+  .logistica-legend-dot--destination { --legend-color: #64748b; }
 
   .logistica-map-side {
     display: flex;
@@ -468,7 +530,8 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
   .logistica-map-disclaimer {
     padding: 8px 10px;
     color: var(--text-muted);
-    background: #f8fafc;
+    background: #ffffff;
+    border-top: 1px solid var(--border);
     font-size: 11px;
     line-height: 1.45;
   }
@@ -511,6 +574,7 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
     .logistica-map-toolbar label { grid-column: 1 / -1; }
     #mapa-envio-select { grid-column: 1; }
     #mapa-live-status { grid-column: 1 / -1; }
+  }
 
   @media (max-width: 980px) {
     .logistica-map-grid {
@@ -599,7 +663,7 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     // Identificar el sitio ante OSM sin revelar la ruta ni los parámetros.
     referrerPolicy: 'strict-origin-when-cross-origin',
-    maxZoom: 19,
+    maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
@@ -619,13 +683,6 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
 
   L.marker(plantaCoords, { icon: plantaIcon }).addTo(map)
     .bindPopup('<b>Planta Central FormoPack</b><br>Formosa Capital');
-
-  L.circle(plantaCoords, {
-    color: '#2563eb',
-    fillColor: '#2563eb',
-    fillOpacity: 0.1,
-    radius: 45000
-  }).addTo(map);
 
   const envioSeleccionado = document.getElementById('mapa-envio-select');
   const estadoMapa = document.getElementById('mapa-live-status');
@@ -690,13 +747,14 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
 
   function actualizarDetalle(envio) {
     if (!envio) {
-      detalleMapa.textContent = `${enviosVisibles().length} de ${mapaDatos.length} envío(s) visibles. Seleccioná una guía para consultar su estado y ubicación.`;
+      detalleMapa.textContent = `${enviosVisibles().length} de ${mapaDatos.length} envío(s) visibles. Elegí una guía para ver su estado, vehículo y ubicación más reciente.`;
       return;
     }
     const etiquetaEstado = String(envio.estado_actual || 'sin estado').replaceAll('_', ' ');
+    const estadoFormateado = etiquetaEstado.charAt(0).toUpperCase() + etiquetaEstado.slice(1);
     const coordenadas = obtenerPosicion(envio);
     detalleMapa.innerHTML = `<strong style="color:var(--primary);">${escaparHtml(envio.nro_guia)}</strong><br>`
-      + `${escaparHtml(etiquetaEstado)} · ${escaparHtml(envio.localidad_destino)}<br>`
+      + `${escaparHtml(estadoFormateado)} · ${escaparHtml(envio.localidad_destino)}<br>`
       + `${escaparHtml(etiquetaUbicacion(envio))}<br>`
       + `${envio.nro_despacho ? `Despacho ${escaparHtml(envio.nro_despacho)} · ` : ''}`
       + `${envio.patente ? `Vehículo ${escaparHtml(envio.patente)}` : 'Sin vehículo asignado'}`;
@@ -756,8 +814,19 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
       const posicion = obtenerPosicion(envioActual);
       const marcador = marcadoresPorEnvio.get(seleccionadoId);
       if (marcador && posicion) {
-        map.setView(posicion, Math.max(map.getZoom(), envioActual.gps_en_vivo ? 13 : 10));
-        marcador.openPopup();
+        lineaSeleccionada = L.polyline([plantaCoords, posicion], {
+          color: '#2563eb',
+          weight: 3,
+          opacity: 0.8,
+          dashArray: '7 8',
+          interactive: false
+        }).addTo(map);
+        if (ajustarVista) {
+          map.fitBounds(L.latLngBounds([plantaCoords, posicion]).pad(0.18), {
+            maxZoom: envioActual.gps_en_vivo ? 12 : 10
+          });
+          marcador.openPopup();
+        }
       }
     } else if (ajustarVista && limites.length > 1) {
       const zoomMaximo = envios.length <= 2 ? 13 : (envios.length <= 4 ? 10 : 8);
@@ -787,11 +856,11 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
     forzarProximaVista = false;
     const envios = enviosVisibles();
     const activos = envios.filter(e => e.gps_en_vivo && FormoPackMapas.reciente(e.gps_fecha)).length;
-    estadoMapa.textContent = `${envios.length}/${mapaDatos.length} envío(s) visibles · ${activos} GPS reciente(s) · actualizado ${new Date().toLocaleTimeString()}`;
+    estadoMapa.textContent = `Actualizado ${new Date().toLocaleTimeString()} · ${envios.length}/${mapaDatos.length} envío(s) visibles · ${activos} GPS en vivo`;
   }, () => {
     actualizarMarcadores(false);
     estadoMapa.textContent = 'Conexión interrumpida. Se muestran los últimos datos conocidos; se reintentará automáticamente.';
-  }, 30000);
+  }, 10000);
   function refrescarEnvios(forzarVista = false) {
     forzarProximaVista = forzarProximaVista || forzarVista;
     return consultaMapa.iniciar();
@@ -800,7 +869,7 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
   actualizarConteosFiltros();
   actualizarOpciones();
   actualizarMarcadores(true);
-  envioSeleccionado.addEventListener('change', () => actualizarMarcadores());
+  envioSeleccionado.addEventListener('change', () => actualizarMarcadores(true));
   filtrosEstado.forEach(input => input.addEventListener('change', () => {
     actualizarOpciones();
     actualizarMarcadores(true);
@@ -820,6 +889,39 @@ document.querySelectorAll('[data-vrp-driver]').forEach(select => {
   function toggleAll(source) {
     const checkboxes = document.querySelectorAll('.chk-envio');
     checkboxes.forEach(chk => chk.checked = source.checked);
+    if (typeof actualizarResumenCarga === 'function') actualizarResumenCarga();
   }
+</script>
+<script>
+  const selectorVehiculoCarga = document.getElementById('vehiculo-carga');
+  const resumenCarga = document.getElementById('resumen-carga');
+  const botonCrearDespacho = document.querySelector('[data-capacity-submit]');
+
+  function actualizarResumenCarga() {
+    if (!selectorVehiculoCarga || !resumenCarga) return;
+    const opcion = selectorVehiculoCarga.selectedOptions[0];
+    if (!opcion || !opcion.value) {
+      resumenCarga.textContent = 'Seleccioná un vehículo y los envíos para consultar la capacidad ocupada.';
+      resumenCarga.style.background = '#f1f5f9';
+      resumenCarga.style.color = '#334155';
+      if (botonCrearDespacho) botonCrearDespacho.disabled = false;
+      return;
+    }
+
+    const pesoTotal = [...document.querySelectorAll('.chk-envio:checked')]
+      .reduce((total, input) => total + (Number(input.dataset.pesoKg) || 0), 0);
+    const pesoMaximo = Number(opcion.dataset.capacidadKg) || 0;
+    const pesoPorcentaje = pesoMaximo ? pesoTotal / pesoMaximo * 100 : 0;
+    const sobrecarga = pesoPorcentaje > 100;
+
+    resumenCarga.textContent = `Peso: ${pesoTotal.toFixed(2)} / ${pesoMaximo.toFixed(2)} kg (${pesoPorcentaje.toFixed(1)}%)${sobrecarga ? ' — La selección supera la capacidad del vehículo.' : ''}`;
+    resumenCarga.style.background = sobrecarga ? '#fef2f2' : '#f0fdf4';
+    resumenCarga.style.color = sobrecarga ? '#b91c1c' : '#166534';
+    if (botonCrearDespacho) botonCrearDespacho.disabled = sobrecarga;
+  }
+
+  selectorVehiculoCarga?.addEventListener('change', actualizarResumenCarga);
+  document.querySelectorAll('.chk-envio').forEach(input => input.addEventListener('change', actualizarResumenCarga));
+  actualizarResumenCarga();
 </script>
 {% endblock %}

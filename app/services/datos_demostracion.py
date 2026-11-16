@@ -45,6 +45,7 @@ class DatosDemostracion:
                     "id_localidad_destino": str(localidad[0]),
                     "destino_latitud": str(centro[0]), "destino_longitud": str(centro[1]),
                     "peso_real[]": str(indice % 8 + 1), "peso_volumetrico[]": "0",
+                    "prioridad": "normal",
                     "modalidad_pago": "efectivo",
                 }))
                 clientes = []
@@ -61,7 +62,9 @@ class DatosDemostracion:
                         cur.execute("INSERT INTO clientes (dni,nombre_completo,telefono) VALUES (%s,%s,%s)",
                                     (datos["dni"], datos["nombre_completo"], datos["telefono"]))
                         clientes.append(cur.lastrowid)
-                cotizacion = servicio.cotizar_envio(solicitud.bultos, solicitud.localidad)
+                cotizacion = servicio.cotizar_envio(
+                    solicitud.bultos, solicitud.localidad, prioridad=solicitud.prioridad
+                )
                 resultado = servicio._insertar_envio(cur, *clientes, solicitud.localidad, solicitud.direccion,
                     solicitud.bultos, solicitud.modalidad, solicitud.declarado, solicitud.seguro, cotizacion,
                     destino_latitud=solicitud.destino_latitud, destino_longitud=solicitud.destino_longitud)

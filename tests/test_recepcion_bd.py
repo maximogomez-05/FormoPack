@@ -32,6 +32,7 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     formulario_nuevo = client.get("/recepcion/nuevo-envio").get_data(as_text=True)
     assert 'name="modalidad_pago"' not in formulario_nuevo
     datos = formulario()
+    datos["prioridad"] = "alta"
     datos["csrf_token"] = token
     datos["solicitud_id"] = "a" * 32
     from app.services.geocodificador_direcciones import GeocodificadorDirecciones
@@ -54,6 +55,7 @@ def test_registro_completo_cotizacion_y_fragilidad(aplicacion, db):
     assert "Modalidad de Pago" not in html_cobro
     assert "Transferencia manual" in html_cobro
     assert "Mercado Pago" in html_cobro
+    assert "Prioridad Alta (+10%)" in html_cobro
 
 
 def test_alta_concurrente_y_reintento_tras_fallo(db):

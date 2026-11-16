@@ -46,7 +46,7 @@ class Vehiculo:
         return self._estado
 
     @staticmethod
-    def validar_datos(patente: str, capacidad_kg: float) -> None:
+    def validar_datos(patente: str, capacidad_kg: str | float) -> None:
         """Valida patente y capacidad del vehículo."""
         from app.services.validacion_entrada import ValidacionEntrada as V
         import re

@@ -117,10 +117,10 @@
       </div>
       <div class="form-group">
         <label for="prioridad" class="form-label">Prioridad de entrega</label>
-        <select name="prioridad" id="prioridad" class="form-control">
-          <option value="normal" selected>Normal</option>
-          <option value="alta">Alta</option>
-          <option value="urgente">Urgente</option>
+        <select name="prioridad" id="prioridad" class="form-control" onchange="recalcularCotizacionEnVivo();">
+          <option value="normal" {% if (request.form.get('prioridad') or request.args.get('prioridad', 'normal')) == 'normal' %}selected{% endif %}>Normal (sin recargo)</option>
+          <option value="alta" {% if (request.form.get('prioridad') or request.args.get('prioridad')) == 'alta' %}selected{% endif %}>Alta (+{{ "%.0f"|format(recargos_prioridad.alta) }}%)</option>
+          <option value="urgente" {% if (request.form.get('prioridad') or request.args.get('prioridad')) == 'urgente' %}selected{% endif %}>Urgente (+{{ "%.0f"|format(recargos_prioridad.urgente) }}%)</option>
         </select>
       </div>
       <div class="form-group">
@@ -560,6 +560,7 @@ function recalcularCotizacionEnVivo() {
 
     const idSeguro = document.getElementById('id_seguro').value || null;
     const valDec = parseFloat(document.getElementById('valor_declarado').value || 0);
+    const prioridad = document.getElementById('prioridad').value;
 
     try {
       const resp = await fetch('{{ url_for("recepcion.calcular_cotizacion") }}', {
@@ -570,6 +571,7 @@ function recalcularCotizacionEnVivo() {
           id_localidad: parseInt(idLocalidad),
           valor_declarado: valDec,
           id_seguro: idSeguro ? parseInt(idSeguro) : null,
+          prioridad: prioridad,
         }),
       });
 
@@ -595,6 +597,14 @@ function recalcularCotizacionEnVivo() {
           <span>Subtotal Flete</span>
           <span>$${data.subtotal_flete.toFixed(2)}</span>
         </div>`;
+
+      if (data.recargo_prioridad > 0) {
+        html += `
+          <div class="desglose-row" style="font-size:12px;">
+            <span>Prioridad ${data.prioridad} (+${data.porcentaje_recargo_prioridad.toFixed(0)}%)</span>
+            <span>+$${data.recargo_prioridad.toFixed(2)}</span>
+          </div>`;
+      }
 
       if (data.costo_seguro > 0) {
         html += `
@@ -693,6 +703,10 @@ for (const prefix of ['rem', 'dest']) {
 
   const seg = document.querySelector('[name="id_seguro"]');
   if (seg && p.get('id_seguro')) seg.value = p.get('id_seguro');
+  const prioridad = document.querySelector('[name="prioridad"]');
+  if (prioridad && ['normal', 'alta', 'urgente'].includes(p.get('prioridad'))) {
+    prioridad.value = p.get('prioridad');
+  }
 
   // Bultos (pueden ser varios)
   const pesosReales = p.getAll('peso_real');

@@ -227,12 +227,20 @@ def generar_comprobante_pdf(envio: dict, detalle: dict) -> bytes:
     tipo_pago = (pago.get("tipo_pago", "efectivo")).upper() if pago else "—"
 
     subtotal_flete = float(detalle.get("subtotal_flete", costo_total))
+    recargo_prioridad = float(detalle.get("recargo_prioridad", 0.0))
+    porcentaje_recargo_prioridad = float(detalle.get("porcentaje_recargo_prioridad", 0.0))
+    prioridad = str(detalle.get("prioridad", "normal")).capitalize()
     costo_seguro = float(detalle.get("costo_seguro", 0.0))
     valor_declarado = float(envio.get("valor_declarado", 0.0) or 0.0)
 
     datos_total = [
         ["Subtotal Flete:", f"${subtotal_flete:.2f}"],
     ]
+    if recargo_prioridad > 0:
+        datos_total.append([
+            f"Prioridad {prioridad} ({porcentaje_recargo_prioridad:.0f}%):",
+            f"+${recargo_prioridad:.2f}",
+        ])
     if costo_seguro > 0:
         datos_total.append([f"Seguro (Val. Dec. ${valor_declarado:.2f}):", f"+${costo_seguro:.2f}"])
     elif envio.get("id_seguro"):

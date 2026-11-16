@@ -117,7 +117,6 @@ def test_bulto_aforo():
     # Pesos iguales
     b3 = Bulto(id_bulto=3, id_envio=1, peso_real=5.0, peso_volumetrico=5.0)
     assert b3.calcular_aforo() == 5.0
-
     print("  [OK] Bulto: Cálculo de aforo (max real vs volumétrico)")
 
 

@@ -71,15 +71,17 @@ class LogisticaController:
             if conn:
                 conn.close()
 
-    def registrar_vehiculo(self, patente: str, capacidad_kg: float) -> Vehiculo:
+    def registrar_vehiculo(self, patente: str, capacidad_kg: str | float) -> Vehiculo:
         """Registra un nuevo vehículo en la flota."""
+        capacidad_kg = V.decimal(capacidad_kg, "capacidad_kg", 0.01, 99999999.99)
         Vehiculo.validar_datos(patente, capacidad_kg)
         conn = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO vehiculos (patente, capacidad_kg, estado) VALUES (%s, %s, 'disponible')",
+                """INSERT INTO vehiculos (patente, capacidad_kg, estado)
+                   VALUES (%s, %s, 'disponible')""",
                 (patente.strip().upper(), float(capacidad_kg))
             )
             conn.commit()
@@ -322,7 +324,7 @@ class LogisticaController:
                     e.ventana_desde,
                     e.ventana_hasta,
                     e.prioridad,
-                    SUM(b.peso_real) as peso_total_kg
+                    COALESCE(SUM(b.peso_real), 0) as peso_total_kg
                 FROM envios e
                 JOIN localidades l ON e.id_localidad_destino = l.id_localidad
                 LEFT JOIN bultos b ON e.id_envio = b.id_envio

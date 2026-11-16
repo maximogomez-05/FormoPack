@@ -44,10 +44,11 @@ class EnvioController:
 
     def cotizar_envio(
         self,
-        bultos_data: list[dict],
-        id_localidad_destino: int,
-        valor_declarado: float = 0.0,
-        id_seguro: Optional[int] = None,
+        bultos_data: object,
+        id_localidad_destino: object,
+        valor_declarado: object = 0.0,
+        id_seguro: object = None,
+        prioridad: str = "normal",
     ) -> dict:
         """Cotiza un envío sin registrarlo (solo cálculo de tarifa).
 
@@ -76,7 +77,7 @@ class EnvioController:
             for b in bultos_data
         ]
 
-        return self._cotizador.calcular_tarifa(bultos, localidad, valor_declarado, seguro)
+        return self._cotizador.calcular_tarifa(bultos, localidad, valor_declarado, seguro, prioridad)
 
     def crear_envio(
         self,
@@ -119,7 +120,9 @@ class EnvioController:
             bultos_data, id_localidad_destino, valor_declarado, id_seguro)
 
         # Cotizar
-        cotizacion = self.cotizar_envio(bultos_data, id_localidad_destino, valor_declarado, id_seguro)
+        cotizacion = self.cotizar_envio(
+            bultos_data, id_localidad_destino, valor_declarado, id_seguro, planificacion[-1]
+        )
 
         V.decimal(cotizacion["costo_total"], "costo_total", 0.01)
         try:
@@ -136,7 +139,9 @@ class EnvioController:
 
     def registrar_en_mostrador(self, solicitud: SolicitudRecepcion, usuario: int, solicitud_id: str) -> dict:
         """Confirma una sola guía por formulario y operador, incluso ante reenvíos."""
-        cotizacion = self.cotizar_envio(solicitud.bultos, solicitud.localidad, solicitud.declarado, solicitud.seguro)
+        cotizacion = self.cotizar_envio(
+            solicitud.bultos, solicitud.localidad, solicitud.declarado, solicitud.seguro, solicitud.prioridad
+        )
         V.decimal(cotizacion["costo_total"], "costo_total", 0.01)
         with self._db.cursor(dictionary=False) as cursor:
             # El bloqueo de esta fila serializa dos envíos del mismo formulario.
@@ -198,14 +203,15 @@ class EnvioController:
                 (nro_guia, id_remitente, id_destinatario, id_localidad_destino,
                  id_seguro, direccion_destino, valor_declarado, modalidad_pago,
                   costo_total, estado_actual, es_devolucion, destino_latitud, destino_longitud,
-                  ventana_desde, ventana_hasta, prioridad)
-              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                  ventana_desde, ventana_hasta, prioridad, porcentaje_recargo_prioridad, recargo_prioridad)
+              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         cursor.execute(sql_envio, (
             nro_guia, id_remitente, id_destinatario, id_localidad_destino,
             id_seguro, direccion_destino.strip(), valor_declarado, modalidad_pago,
             cotizacion["costo_total"], EstadosEnvio.RECIBIDO, False,
             destino_latitud, destino_longitud, ventana_desde, ventana_hasta, prioridad,
+            cotizacion["porcentaje_recargo_prioridad"], cotizacion["recargo_prioridad"],
         ))
         id_envio = cursor.lastrowid
 

@@ -42,6 +42,15 @@
       </div>
     </div>
 
+    <div class="form-group">
+      <label class="form-label" for="prioridad">Prioridad de entrega</label>
+      <select id="prioridad" class="form-control" onchange="calcularCotizacion()">
+        <option value="normal">Normal (sin recargo)</option>
+        <option value="alta">Alta (+{{ "%.0f"|format(recargos_prioridad.alta) }}%)</option>
+        <option value="urgente">Urgente (+{{ "%.0f"|format(recargos_prioridad.urgente) }}%)</option>
+      </select>
+    </div>
+
     <hr class="divider">
 
     <div class="form-section-title"><i class="fa-solid fa-boxes-stacked"></i> Detalle de Bultos</div>
@@ -154,6 +163,7 @@ async function calcularCotizacion() {
   const idLocalidad = parseInt(document.getElementById('id_localidad').value);
   const valorDeclarado = parseFloat(document.getElementById('valor_declarado').value) || 0;
   const idSeguro = document.getElementById('id_seguro').value || null;
+  const prioridad = document.getElementById('prioridad').value;
 
   const items = document.querySelectorAll('.bulto-item');
   const bultos = [];
@@ -176,7 +186,7 @@ async function calcularCotizacion() {
     const resp = await fetch('{{ url_for("recepcion.calcular_cotizacion") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bultos, id_localidad: idLocalidad, valor_declarado: valorDeclarado, id_seguro: idSeguro }),
+      body: JSON.stringify({ bultos, id_localidad: idLocalidad, valor_declarado: valorDeclarado, id_seguro: idSeguro, prioridad }),
     });
     const data = await resp.json();
     if (!resp.ok || data.error) {
@@ -199,6 +209,9 @@ async function calcularCotizacion() {
           <span>$${b.tarifa_final.toFixed(2)}</span>
         </div>`;
     });
+    if (data.recargo_prioridad > 0) {
+      html += `<div class="desglose-row"><span>Prioridad ${data.prioridad} (+${data.porcentaje_recargo_prioridad.toFixed(0)}%)</span><span>+$${data.recargo_prioridad.toFixed(2)}</span></div>`;
+    }
     if (data.costo_seguro > 0) {
       html += `<div class="desglose-row"><span><i class="fa-solid fa-shield-halved"></i> Cobertura Seguro</span><span>$${data.costo_seguro.toFixed(2)}</span></div>`;
     }
@@ -216,6 +229,7 @@ function procederARegistro() {
   const idLocalidad = document.getElementById('id_localidad').value;
   const valorDeclarado = document.getElementById('valor_declarado').value || '0';
   const idSeguro = document.getElementById('id_seguro').value || '';
+  const prioridad = document.getElementById('prioridad').value;
 
   const bultoItems = document.querySelectorAll('.bulto-item');
   const pesosReales = [];
@@ -232,6 +246,7 @@ function procederARegistro() {
   params.set('id_localidad', idLocalidad);
   params.set('valor_declarado', valorDeclarado);
   params.set('id_seguro', idSeguro);
+  params.set('prioridad', prioridad);
   pesosReales.forEach(v => params.append('peso_real', v));
   pesosVol.forEach(v => params.append('peso_vol', v));
   fragiles.forEach(v => params.append('es_fragil', v));

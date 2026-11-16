@@ -71,6 +71,11 @@ class CotizadorConfig:
     DESCUENTO_MULTIBULTO: float = 0.50  # 50% de descuento al 2do bulto en adelante
     TARIFA_MINIMA: float = float(os.getenv("TARIFA_MINIMA", "500.0"))
     RECARGO_FRAGIL: float = float(os.getenv("RECARGO_FRAGIL", "0.10"))  # 10% adicional
+    RECARGOS_PRIORIDAD_PORCENTAJE: dict[str, float] = {
+        "normal": 0.0,
+        "alta": 10.0,
+        "urgente": 15.0,
+    }
 
 
 class EstadosEnvio:

@@ -82,8 +82,8 @@ def seed_vehiculos(cur):
     """Carga la flota de vehículos."""
     vehiculos = [
         (1, "AF-123-CD", Decimal("800.00"), "en_ruta"),       # Renault Kangoo (en viaje a Clorinda)
-        (2, "AE-982-ZZ", Decimal("1500.00"), "disponible"),    # Mercedes Sprinter (disponible en base)
-        (3, "AD-456-XY", Decimal("3500.00"), "disponible"),    # Iveco Daily (disponible en base)
+        (2, "AE-982-ZZ", Decimal("1500.00"), "disponible"),  # Mercedes Sprinter (disponible en base)
+        (3, "AD-456-XY", Decimal("3500.00"), "disponible"),  # Iveco Daily (disponible en base)
         (4, "AC-789-JK", Decimal("1000.00"), "mantenimiento"), # Toyota Hilux (en taller)
     ]
     for vid, pat, cap, est in vehiculos:
@@ -275,6 +275,7 @@ def seed_hojas_y_envios(cur):
         cur.execute(f"INSERT INTO pagos (id_pago, id_envio, id_turno, monto, fecha, tipo_pago, monto_entregado) VALUES ({idx}, {idx}, 1, {c}, %s, 'efectivo', {c});", (f,))
         cur.execute(f"INSERT INTO historial_estados (id_envio, fecha_hora, estado, ubicacion, observacion) VALUES ({idx}, %s, 'entregado', 'Destino', 'Entregado en fecha histórica');", (f,))
 
+    cur.execute("UPDATE bultos SET volumen_m3=ROUND(peso_volumetrico / 200, 3) WHERE volumen_m3 IS NULL AND peso_volumetrico > 0")
     print("  [OK] Envíos de prueba, bultos, pagos y comprobantes cargados.")
 
 

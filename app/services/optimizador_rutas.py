@@ -28,9 +28,12 @@ class OptimizadorRutas:
         ahora = ahora or datetime.now()
         minuto_actual = ahora.hour * 60 + ahora.minute
         plan = {"rutas": [], "sin_asignar": [], "fuente_distancias": "geográfica aproximada"}
-        disponibles = [v for v in vehiculos if float(v.get("capacidad_kg") or 0) > 0]
+        disponibles = [
+            v for v in vehiculos
+            if float(v.get("capacidad_kg") or 0) > 0
+        ]
         if not disponibles:
-            plan["sin_asignar"] = [{"envio": e, "motivo": "No hay vehículos disponibles"} for e in envios]
+            plan["sin_asignar"] = [{"envio": e, "motivo": "No hay vehículos con capacidad de peso configurada"} for e in envios]
             return plan
 
         ubicados = []

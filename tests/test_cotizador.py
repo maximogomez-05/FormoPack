@@ -2,6 +2,7 @@
 
 import sys
 import os
+from decimal import Decimal, ROUND_HALF_UP
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -144,6 +145,43 @@ def test_recargo_fragil():
     print("  [OK] Recargo: Bulto frágil cuesta más que normal")
 
 
+def test_recargos_por_prioridad():
+    cotizador = Cotizador()
+    localidad = Localidad(id_localidad=1, nombre="Test", distancia_km=80)
+    bulto = Bulto(id_bulto=1, id_envio=1, peso_real=7.0, peso_volumetrico=4.0)
+    seguro = Seguro(id_seguro=1, cobertura_estandar=50000, porcentaje_excedente=2.0)
+
+    normal = cotizador.calcular_tarifa([bulto], localidad)
+    alta = cotizador.calcular_tarifa([bulto], localidad, prioridad="alta")
+    urgente = cotizador.calcular_tarifa(
+        [bulto], localidad, valor_declarado=60000, seguro=seguro, prioridad="urgente"
+    )
+
+    expected_alta = (
+        Decimal(str(normal["subtotal_flete"])) * Decimal("0.10")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    expected_urgente = (
+        Decimal(str(normal["subtotal_flete"])) * Decimal("0.15")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    assert normal["recargo_prioridad"] == 0.0
+    assert alta["porcentaje_recargo_prioridad"] == 10.0
+    assert Decimal(str(alta["recargo_prioridad"])) == expected_alta
+    assert urgente["porcentaje_recargo_prioridad"] == 15.0
+    assert Decimal(str(urgente["recargo_prioridad"])) == expected_urgente
+    assert urgente["costo_total"] == (
+        urgente["subtotal_flete"] + urgente["recargo_prioridad"] + urgente["costo_seguro"]
+    )
+
+    try:
+        cotizador.calcular_tarifa([bulto], localidad, prioridad="desconocida")
+        assert False, "Debería rechazar una prioridad desconocida"
+    except CotizacionError:
+        pass
+
+    print("  [OK] Prioridad: normal 0%, alta 10%, urgente 15%, seguro independiente")
+
+
 def test_sin_bultos_error():
     """Prueba que cotizar sin bultos lance error."""
     cotizador = Cotizador()
@@ -201,6 +239,7 @@ def main():
     test_factor_zona()
     test_seguro_excedente()
     test_recargo_fragil()
+    test_recargos_por_prioridad()
     test_sin_bultos_error()
     test_cotizacion_completa_ejemplo_real()
     print("--- Todas las pruebas del cotizador pasaron ---\n")
